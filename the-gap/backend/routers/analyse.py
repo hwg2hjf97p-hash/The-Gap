@@ -98,7 +98,17 @@ async def analyse(
         )
 
     # ── 4. Clean ───────────────────────────────────────────────────────────
-    df = clean_dataframe(df)
+    try:
+        df = clean_dataframe(df)
+    except Exception as exc:
+        logger.exception("Data cleaning failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_code": "CLEAN_FAILED",
+                "message": f"Data cleaning error: {type(exc).__name__}: {exc}",
+            },
+        )
 
     data_period_days = len(df)
     logger.info("Parsed %d days from %s in %.1fs", data_period_days, data_source, time.perf_counter() - t0)

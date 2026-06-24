@@ -1,21 +1,43 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from routers import analyse
+from fastapi.responses import JSONResponse
+import traceback
+import os
 
 app = FastAPI(
     title="The Gap API",
-    description="Personal Causal Intelligence Layer",
+    description="Personal Causal Intelligence Layer — analyses wearable data to find verified cause-and-effect insights",
     version="1.0.0"
 )
 
+# Allow all origins — tighten after launch
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "*",
+        "https://the-gap-15e7.vercel.app",
+        "https://causalme.com",
+        "https://www.causalme.com",
+        "http://localhost:3000",
+    ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
+# Global exception handler — returns JSON instead of HTML 500
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": type(exc).__name__,
+            "detail": str(exc),
+            "traceback": traceback.format_exc()
+        }
+    )
+
+from routers import analyse
 app.include_router(analyse.router)
 
 @app.get("/health")
@@ -25,3 +47,16 @@ def health_check():
 @app.get("/")
 def root():
     return {"message": "The Gap API is running. POST /analyse to begin."}
+
+@app.get("/debug-imports")
+def debug_imports():
+    """Check which packages are available on this server."""
+    results = {}
+    packages = ["pandas", "numpy", "scipy", "econml", "sklearn", "supabase"]
+    for pkg in packages:
+        try:
+            mod = __import__(pkg)
+            results[pkg] = getattr(mod, "__version__", "installed")
+        except ImportError as e:
+            results[pkg] = f"MISSING: {e}"
+    return results
