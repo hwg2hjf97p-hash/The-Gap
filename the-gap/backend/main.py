@@ -11,7 +11,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
+    allow_origins=["*",
         "https://causalme.com",
         "https://www.causalme.com",
         "https://the-gap.vercel.app",
