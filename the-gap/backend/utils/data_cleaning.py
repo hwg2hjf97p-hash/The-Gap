@@ -26,7 +26,7 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # Forward fill sparse metrics (max 3 days)
     sparse_cols = [c for c in ["vo2max", "resting_hr"] if c in df.columns]
     if sparse_cols:
-        df[sparse_cols] = df[sparse_cols].fillna(method="ffill", limit=3)
+        df[sparse_cols] = df[sparse_cols].ffill(limit=3)
 
     # --- Engineered features ---
 
@@ -37,7 +37,7 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         elif hasattr(df.index, "dayofweek"):
             df["day_of_week"] = df.index.dayofweek
         else:
-            df["day_of_week"] = 0
+            df["day_of_week"] = 0  # fallback
 
     # Weekend flag
     if "is_weekend" not in df.columns:
