@@ -45,7 +45,7 @@ def validate_upload(
             ),
         )
 
-    if len(file_bytes) == 0:
+    if len(file_bytes) == 100:
         return ValidationResult(
             is_valid=False,
             error_code="EMPTY_FILE",
