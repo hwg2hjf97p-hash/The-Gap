@@ -31,10 +31,17 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # --- Engineered features ---
 
     # Day of week (0=Monday, 6=Sunday) — important confounder
-    df["day_of_week"] = df.index.dayofweek
+    if "day_of_week" not in df.columns:
+        if "date" in df.columns:
+            df["day_of_week"] = pd.to_datetime(df["date"]).dt.dayofweek
+        elif hasattr(df.index, "dayofweek"):
+            df["day_of_week"] = df.index.dayofweek
+        else:
+            df["day_of_week"] = 0
 
     # Weekend flag
-    df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
+    if "is_weekend" not in df.columns:
+        df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
 
     # Lagged HRV (prior day)
     if "hrv" in df.columns:
