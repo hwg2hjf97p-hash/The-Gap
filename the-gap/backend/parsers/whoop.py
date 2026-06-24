@@ -1,133 +1,126 @@
-import pandas as pd
-import zipfile
+"""
+Whoop CSV parser.
+Handles both:
+  1. Single combined CSV (test data / simplified export)
+  2. Multi-file Whoop export ZIP (physiological, sleeps, workouts, journal)
+"""
+
+from __future__ import annotations
+
 import io
+import zipfile
+import logging
+
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+COLUMN_MAP = {
+    "hrv last night (ms)":      "hrv",
+    "hrv_rmssd_milli":          "hrv",
+    "resting heart rate (bpm)": "resting_hr",
+    "resting_heart_rate_bpm":   "resting_hr",
+    "recovery score %":         "recovery_score",
+    "recovery_score":           "recovery_score",
+    "sleep duration":           "sleep_total_min",
+    "sleep_duration_minutes":   "sleep_total_min",
+    "time in deep":             "sleep_deep_min",
+    "deep_sleep_minutes":       "sleep_deep_min",
+    "sleep consistency %":      "sleep_consistency",
+    "strain":                   "active_energy",
+    "strain_score":             "active_energy",
+    "active calories":          "active_energy_kcal",
+    "active_calories":          "active_energy_kcal",
+    "alcohol":                  "alcohol_flag",
+    "alcohol_flag":             "alcohol_flag",
+    "day_of_week":              "day_of_week",
+    "is_weekend":               "is_weekend",
+}
 
 
 def parse_whoop(file_bytes: bytes) -> pd.DataFrame:
-    """
-    Parse Whoop data export zip.
-    Returns a cleaned daily DataFrame with standardised column names.
-    """
-    csv_files = _extract_csvs(file_bytes)
-    daily = _merge_whoop_data(csv_files)
-    return daily
+    if file_bytes[:2] == b'PK':
+        return _parse_zip(file_bytes)
+    else:
+        return _parse_single_csv(file_bytes)
 
 
-def _extract_csvs(file_bytes: bytes) -> dict:
-    """Extract all CSVs from the Whoop zip export."""
-    csvs = {}
-    try:
-        with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
-            for name in z.namelist():
-                if name.endswith(".csv"):
-                    key = name.split("/")[-1].replace(".csv", "").lower()
-                    csvs[key] = pd.read_csv(io.BytesIO(z.read(name)))
-    except zipfile.BadZipFile:
-        raise ValueError("Whoop export must be a zip file")
-    return csvs
+def _parse_single_csv(file_bytes: bytes) -> pd.DataFrame:
+    df = pd.read_csv(io.BytesIO(file_bytes))
+    df.columns = [c.lower().strip() for c in df.columns]
+    df = df.rename(columns=COLUMN_MAP)
+
+    if "date" not in df.columns:
+        raise ValueError("CSV must have a 'date' column")
+
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.set_index("date").sort_index()
+
+    for col in ["sleep_total_min", "sleep_deep_min"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if "day_of_week" not in df.columns:
+        df["day_of_week"] = df.index.dayofweek
+    if "is_weekend" not in df.columns:
+        df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
+
+    if "hrv" in df.columns:
+        df["hrv_next"] = df["hrv"].shift(-1)
+        df["hrv_lag1"] = df["hrv"].shift(1)
+    if "resting_hr" in df.columns:
+        df["resting_hr_next"] = df["resting_hr"].shift(-1)
+    if "sleep_total_min" in df.columns:
+        df["sleep_lag1"] = df["sleep_total_min"].shift(1)
+        mean_bedtime = df["sleep_total_min"].mean()
+        df["sleep_deviation"] = (df["sleep_total_min"] - mean_bedtime).abs()
+
+    if "active_energy" in df.columns and "steps" not in df.columns:
+        df["steps"] = df["active_energy"] * 950
+
+    return df.reset_index()
 
 
-def _merge_whoop_data(csvs: dict) -> pd.DataFrame:
-    """Merge Whoop CSVs into a single daily DataFrame with standardised column names."""
-    frames = []
-
-    # Physiological cycles (primary recovery metrics)
-    if "physiological_cycles" in csvs:
-        df = csvs["physiological_cycles"].copy()
-        df.columns = [c.lower().strip() for c in df.columns]
-        df = df.rename(columns={
-            "cycle start time": "date",
-            "recovery score %": "recovery_score",
-            "hrv last night (ms)": "hrv",
-            "resting heart rate (bpm)": "resting_hr",
-            "respiratory rate (rpm)": "respiratory_rate",
-        })
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"]).dt.date
-            df = df[["date"] + [c for c in ["hrv", "resting_hr", "recovery_score", "respiratory_rate"] if c in df.columns]]
-            frames.append(df.set_index("date"))
-
-    # Sleep data
-    if "sleeps" in csvs:
-        df = csvs["sleeps"].copy()
-        df.columns = [c.lower().strip() for c in df.columns]
-        df = df.rename(columns={
-            "cycle start time": "date",
-            "sleep duration": "sleep_total_min",
-            "sleep performance %": "sleep_performance",
-            "time in rem": "sleep_rem_min",
-            "time in deep": "sleep_deep_min",
-            "sleep consistency %": "sleep_consistency",
-        })
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"]).dt.date
-            sleep_cols = [c for c in ["sleep_total_min", "sleep_rem_min", "sleep_deep_min", "sleep_performance", "sleep_consistency"] if c in df.columns]
-            df = df[["date"] + sleep_cols]
-            # Convert durations from hh:mm:ss to minutes if needed
-            for col in ["sleep_total_min", "sleep_rem_min", "sleep_deep_min"]:
-                if col in df.columns and df[col].dtype == object:
-                    df[col] = df[col].apply(_duration_to_minutes)
-            frames.append(df.set_index("date"))
-
-    # Workouts
-    if "workouts" in csvs:
-        df = csvs["workouts"].copy()
-        df.columns = [c.lower().strip() for c in df.columns]
-        df = df.rename(columns={
-            "cycle start time": "date",
-            "duration (min)": "workout_duration_min",
-            "strain": "workout_strain",
-            "average heart rate (bpm)": "workout_avg_hr",
-        })
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"]).dt.date
-            workout_cols = [c for c in ["workout_duration_min", "workout_strain", "workout_avg_hr"] if c in df.columns]
-            if workout_cols:
-                daily_workouts = df.groupby("date")[workout_cols].max()
-                frames.append(daily_workouts)
-
-    # Journal entries (alcohol, caffeine, stress flags)
-    if "journal_entries" in csvs:
-        df = csvs["journal_entries"].copy()
-        df.columns = [c.lower().strip() for c in df.columns]
-        if "answer text" in df.columns and "question text" in df.columns:
-            # Pivot to wide format
-            df["date"] = pd.to_datetime(df.get("cycle start time", df.iloc[:, 0])).dt.date
-            alcohol_rows = df[df["question text"].str.contains("alcohol|drink", case=False, na=False)]
-            if not alcohol_rows.empty:
-                alcohol_flag = alcohol_rows.groupby("date")["answer text"].apply(
-                    lambda x: int(any(str(v).lower() in ["yes", "true", "1"] for v in x))
-                ).rename("alcohol_flag")
-                frames.append(alcohol_flag.to_frame())
+def _parse_zip(file_bytes: bytes) -> pd.DataFrame:
+    frames = {}
+    with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+        for name in zf.namelist():
+            if not name.endswith(".csv"):
+                continue
+            key = name.lower().split("/")[-1].replace(".csv", "")
+            try:
+                df = pd.read_csv(zf.open(name))
+                df.columns = [c.lower().strip() for c in df.columns]
+                df = df.rename(columns=COLUMN_MAP)
+                if "date" in df.columns:
+                    df["date"] = pd.to_datetime(df["date"])
+                    frames[key] = df
+            except Exception as e:
+                logger.warning("Could not parse %s: %s", name, e)
 
     if not frames:
-        return pd.DataFrame()
+        raise ValueError("No valid CSV files found in Whoop ZIP")
 
-    result = frames[0]
-    for f in frames[1:]:
-        result = result.join(f, how="outer")
+    merged = None
+    for key, df in frames.items():
+        df = df.set_index("date")
+        merged = df if merged is None else merged.join(df, how="outer", rsuffix=f"_{key}")
 
-    result.index = pd.to_datetime(result.index)
-    result = result.sort_index()
+    merged = merged.sort_index()
 
-    # Reindex to fill date gaps with NaN
-    if len(result) > 1:
-        full_range = pd.date_range(result.index.min(), result.index.max(), freq="D")
-        result = result.reindex(full_range)
+    if "hrv" in merged.columns:
+        merged["hrv_next"] = merged["hrv"].shift(-1)
+        merged["hrv_lag1"] = merged["hrv"].shift(1)
+    if "resting_hr" in merged.columns:
+        merged["resting_hr_next"] = merged["resting_hr"].shift(-1)
+    if "sleep_total_min" in merged.columns:
+        merged["sleep_lag1"] = merged["sleep_total_min"].shift(1)
+        merged["sleep_deviation"] = (merged["sleep_total_min"] - merged["sleep_total_min"].mean()).abs()
+    if "day_of_week" not in merged.columns:
+        merged["day_of_week"] = merged.index.dayofweek
+    if "is_weekend" not in merged.columns:
+        merged["is_weekend"] = (merged["day_of_week"] >= 5).astype(int)
+    if "active_energy" in merged.columns and "steps" not in merged.columns:
+        merged["steps"] = merged["active_energy"] * 950
 
-    return result
-
-
-def _duration_to_minutes(val) -> float:
-    """Convert hh:mm:ss string to float minutes."""
-    if pd.isna(val):
-        return float("nan")
-    try:
-        parts = str(val).split(":")
-        if len(parts) == 3:
-            return int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 60
-        elif len(parts) == 2:
-            return int(parts[0]) * 60 + int(parts[1])
-        return float(val)
-    except (ValueError, AttributeError):
-        return float("nan")
+    return merged.reset_index()
