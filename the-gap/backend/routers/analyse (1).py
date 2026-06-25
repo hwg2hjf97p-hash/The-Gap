@@ -154,12 +154,9 @@ async def analyse(
     insights_dicts = [i.to_dict() for i in insights]
 
     # ── 7. Persist ────────────────────────────────────────────────────────
-    session_id = save_results(
-        data_source=data_source,
-        data_period_days=data_period_days,
-        insights=insights_dicts,
-    )
-
+    # NOTE: Supabase save temporarily disabled — insights returned directly
+    from uuid import uuid4
+    session_id = str(uuid4())
     share_url = f"https://causalme.com/results/{session_id}"
 
     elapsed = time.perf_counter() - t0
