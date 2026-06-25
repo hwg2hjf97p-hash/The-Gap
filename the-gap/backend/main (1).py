@@ -51,6 +51,7 @@ def root():
 @app.get("/debug-imports")
 def debug_imports():
     """Check which packages are available on this server."""
+    import os
     results = {}
     packages = ["pandas", "numpy", "scipy", "econml", "sklearn", "supabase"]
     for pkg in packages:
@@ -59,4 +60,12 @@ def debug_imports():
             results[pkg] = getattr(mod, "__version__", "installed")
         except ImportError as e:
             results[pkg] = f"MISSING: {e}"
+    # Show env var status (not the actual values)
+    supabase_url = os.getenv("SUPABASE_URL", "")
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+    results["SUPABASE_URL_set"] = bool(supabase_url)
+    results["SUPABASE_URL_starts_https"] = supabase_url.startswith("https://")
+    results["SUPABASE_URL_preview"] = supabase_url[:40] if supabase_url else "(empty)"
+    results["SUPABASE_KEY_set"] = bool(supabase_key)
+    results["SUPABASE_KEY_length"] = len(supabase_key)
     return results
