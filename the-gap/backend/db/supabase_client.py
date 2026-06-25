@@ -43,7 +43,11 @@ def _get_client() -> Optional["SupabaseClient"]:
         logger.warning("SUPABASE_URL / SUPABASE_SERVICE_KEY not set — DB operations skipped")
         return None
 
-    return create_client(url, key)
+    try:
+        return create_client(url, key)
+    except Exception as exc:
+        logger.warning("Supabase client init failed (%s) — DB operations skipped", exc)
+        return None
 
 
 def save_results(
