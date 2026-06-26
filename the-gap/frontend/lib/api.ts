@@ -20,11 +20,15 @@ export class AnalysisError extends Error {
 export async function analyseFile(
   file: File,
   dataSource: DataSource,
+  calendarFile?: File,
   onProgress?: (pct: number) => void,
 ): Promise<AnalysisResponse> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("data_source", dataSource);
+  if (calendarFile) {
+    formData.append("calendar_file", calendarFile);
+  }
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();

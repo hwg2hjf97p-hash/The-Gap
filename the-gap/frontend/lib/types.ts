@@ -1,4 +1,4 @@
-export type DataSource = "apple_health" | "whoop";
+export type DataSource = "apple_health" | "whoop" | "oura";
 export type ConfidenceLevel = "strong" | "moderate" | "weak";
 export type MetricDirection = "positive" | "negative";
 
