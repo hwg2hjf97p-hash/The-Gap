@@ -38,7 +38,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 from routers import analyse
+from routers import connect
+from sync import daily_sync
 app.include_router(analyse.router)
+app.include_router(connect.router)
+app.include_router(daily_sync.router)
 
 @app.get("/health")
 def health_check():
