@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-production.up.railway.app";
@@ -42,7 +42,7 @@ function getUserId(): string {
   return id;
 }
 
-export default function ConnectPage() {
+function ConnectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [connected, setConnected] = useState<string[]>([]);
@@ -258,5 +258,17 @@ export default function ConnectPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function ConnectPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
+      </div>
+    }>
+      <ConnectContent />
+    </Suspense>
   );
 }
