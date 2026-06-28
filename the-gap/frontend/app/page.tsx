@@ -327,9 +327,35 @@ export default function HomePage() {
         </button>
       </div>
 
+      {/* Passive mode CTA */}
+      <div className="w-full max-w-lg mt-4">
+        <a
+          href="/connect"
+          className="flex items-center justify-between px-5 py-4 rounded-xl transition-all"
+          style={{
+            background: "#132c1f",
+            border: "1px solid #1a3d2b",
+            textDecoration: "none",
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="text-xl">⚡</div>
+            <div>
+              <p className="text-sm font-medium" style={{ color: "#eef3f0" }}>
+                Have a Whoop or Oura?
+              </p>
+              <p className="text-xs" style={{ color: "#a2bcaf" }}>
+                Connect once — insights update automatically every day
+              </p>
+            </div>
+          </div>
+          <span style={{ color: "#34d399", fontSize: "1.1rem" }}>→</span>
+        </a>
+      </div>
+
       {/* Trust signals */}
       <div
-        className="mt-8 flex flex-wrap justify-center gap-6 text-xs"
+        className="mt-6 flex flex-wrap justify-center gap-6 text-xs"
         style={{ color: "#a2bcaf" }}
       >
         <span>🔒 Your data never leaves our servers</span>
