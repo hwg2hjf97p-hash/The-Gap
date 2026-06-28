@@ -134,6 +134,10 @@ async def start_oauth(
         params["access_type"] = "offline"
         params["prompt"] = "consent"
 
+    # Strava needs approval_prompt
+    if provider == "strava":
+        params["approval_prompt"] = "auto"
+
     auth_url = cfg["auth_url"] + "?" + urlencode(params)
     logger.info("OAuth start: provider=%s user=%s", provider, user_id)
     return RedirectResponse(url=auth_url)
@@ -163,6 +167,8 @@ async def oauth_callback(
 
     # Exchange code for tokens
     try:
+        # Strava uses integer client_id
+        cid = int(client_id) if provider == "strava" else client_id
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 cfg["token_url"],
@@ -170,7 +176,7 @@ async def oauth_callback(
                     "grant_type": "authorization_code",
                     "code": code,
                     "redirect_uri": _redirect_uri(provider),
-                    "client_id": client_id,
+                    "client_id": cid,
                     "client_secret": client_secret,
                 },
                 headers={"Accept": "application/json"},

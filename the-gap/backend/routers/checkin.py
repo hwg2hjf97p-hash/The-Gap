@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field, validator
 from db.supabase_client import _get_client
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/checkin")
+router = APIRouter(prefix="/checkin", tags=["checkin"])
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -65,7 +65,7 @@ class CheckInResponse(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.post("")
+@router.post("/")
 async def submit_checkin(body: CheckInRequest) -> JSONResponse:
     """Submit or update a daily check-in."""
     client = _get_client()
