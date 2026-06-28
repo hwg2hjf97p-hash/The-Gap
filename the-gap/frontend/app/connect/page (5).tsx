@@ -23,6 +23,14 @@ const PROVIDERS = [
     dataPoints: ["Readiness Score", "HRV", "Sleep Efficiency", "Body Temperature"],
   },
   {
+    id: "strava",
+    name: "Strava",
+    icon: "🏃",
+    description: "Training load, workout intensity, activity type",
+    color: "#fc4c02",
+    dataPoints: ["Training Load", "Hard Sessions", "Weekly Volume", "Activity Type"],
+  },
+  {
     id: "google",
     name: "Google Calendar",
     icon: "📅",

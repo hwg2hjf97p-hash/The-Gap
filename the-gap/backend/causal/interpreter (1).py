@@ -347,6 +347,62 @@ def interpret_result(
             else "Your activity doesn't closely track your recovery — you may be overriding your body's signals."
         )
 
+    # STRAVA / TRAINING
+    elif hid == "training_load_hrv":
+        title = "Training Load & Recovery"
+        headline = (
+            f"Higher training load causally {direction_word} "
+            f"your next-day HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Your body needs more recovery time after big training days. "
+            "Build in a low-intensity day after any session with a suffer score over 50."
+            if not is_positive
+            else "Your body adapts well to training load — your HRV recovers quickly after hard sessions."
+        )
+
+    elif hid == "hard_day_hrv":
+        title = "Hard Sessions & HRV"
+        headline = (
+            f"After a hard training day, your HRV "
+            f"{'improves' if is_positive else 'drops'} by {abs_effect} ms the next morning"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Hard sessions are suppressing your recovery signal. "
+            "Follow every hard day with a genuine easy day — not just a shorter workout."
+            if not is_positive
+            else "Surprisingly, hard sessions don't seem to hurt your HRV — your recovery is strong."
+        )
+
+    elif hid == "training_load_sleep":
+        title = "Training & Sleep"
+        headline = (
+            f"Higher training load causally {direction_word} "
+            f"your sleep that night by {abs_effect} minutes"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Active days are helping you sleep longer — keep the momentum."
+            if is_positive
+            else "Very hard training days may be disrupting your sleep. Try finishing intense sessions before 6 pm."
+        )
+
+    elif hid == "weekly_load_rhr":
+        title = "Weekly Load & Heart Rate"
+        headline = (
+            f"Heavier training weeks causally {direction_word} "
+            f"your resting heart rate by {abs_effect} bpm"
+        )
+        metric_unit = "bpm"
+        tip = (
+            "Cumulative training fatigue is showing up in your resting HR. "
+            "Build in a deload week every 3-4 weeks to let your cardiovascular system recover."
+            if not is_positive
+            else "Your resting HR improves as your weekly training load increases — solid aerobic adaptation."
+        )
+
     # Fallback for any future hypotheses
     else:
         title = hypothesis.treatment_label

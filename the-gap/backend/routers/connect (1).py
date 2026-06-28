@@ -30,6 +30,13 @@ router = APIRouter(prefix="/connect")
 # ── Provider config ───────────────────────────────────────────────────────────
 
 PROVIDERS = {
+    "strava": {
+        "auth_url": "https://www.strava.com/oauth/authorize",
+        "token_url": "https://www.strava.com/oauth/token",
+        "scopes": "read,activity:read_all",
+        "client_id_env": "STRAVA_CLIENT_ID",
+        "client_secret_env": "STRAVA_CLIENT_SECRET",
+    },
     "whoop": {
         "auth_url": "https://api.prod.whoop.com/oauth/oauth2/auth",
         "token_url": "https://api.prod.whoop.com/oauth/oauth2/token",

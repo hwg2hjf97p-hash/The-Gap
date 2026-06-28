@@ -21,6 +21,7 @@ from db.supabase_client import _get_client, save_results
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.google_sync import fetch_google_calendar_data, refresh_google_token
+from sync.strava_sync import fetch_strava_data, refresh_strava_token
 from parsers.google_calendar import merge_calendar_into_health
 from utils.data_cleaning import clean_dataframe
 from causal.engine import run_all_hypotheses
@@ -34,22 +35,26 @@ REFRESH_FUNCS = {
     "whoop": refresh_whoop_token,
     "oura": refresh_oura_token,
     "google": refresh_google_token,
+    "strava": refresh_strava_token,
 }
 
 FETCH_FUNCS = {
     "whoop": fetch_whoop_data,
     "oura": fetch_oura_data,
+    "strava": fetch_strava_data,
 }
 
 CLIENT_ID_ENVS = {
     "whoop": "WHOOP_CLIENT_ID",
     "oura": "OURA_CLIENT_ID",
     "google": "GOOGLE_CLIENT_ID",
+    "strava": "STRAVA_CLIENT_ID",
 }
 CLIENT_SECRET_ENVS = {
     "whoop": "WHOOP_CLIENT_SECRET",
     "oura": "OURA_CLIENT_SECRET",
     "google": "GOOGLE_CLIENT_SECRET",
+    "strava": "STRAVA_CLIENT_SECRET",
 }
 
 

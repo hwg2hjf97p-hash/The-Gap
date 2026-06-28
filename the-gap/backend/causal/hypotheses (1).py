@@ -312,4 +312,63 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_label="Steps taken that day",
         category="recovery",
     ),
+
+    # ── STRAVA / TRAINING ────────────────────────────────────────────────────
+
+    # 23. Training load → Next-day HRV
+    Hypothesis(
+        id="training_load_hrv",
+        treatment_col="training_load",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Daily training load",
+        outcome_label="Next-day HRV (ms)",
+        category="health",
+    ),
+
+    # 24. Hard training day → Next-day HRV (binary)
+    Hypothesis(
+        id="hard_day_hrv",
+        treatment_col="is_hard_day",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=8,
+        treatment_label="Hard training day (yes/no)",
+        outcome_label="Next-day HRV (ms)",
+        category="health",
+    ),
+
+    # 25. Training load → Sleep duration
+    Hypothesis(
+        id="training_load_sleep",
+        treatment_col="training_load",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Daily training load",
+        outcome_label="Total sleep (minutes)",
+        category="health",
+    ),
+
+    # 26. 7-day training load → Resting HR
+    Hypothesis(
+        id="weekly_load_rhr",
+        treatment_col="training_load_7d",
+        outcome_col="resting_hr",
+        covariate_cols=["sleep_total_min", "hrv_lag1", "day_of_week"],
+        min_rows=30,
+        treatment_label="7-day cumulative training load",
+        outcome_label="Resting heart rate (bpm)",
+        category="health",
+    ),
+
+    # ── MANUAL CHECK-IN ───────────────────────────────────────────────────
+
+    # 27. Daily stress score → Next-day HRV (already exists as stress_hrv)
+    # 28. Afternoon caffeine → Deep sleep (already exists as caffeine_sleep)
+    # 29. Alcohol flag → HRV (already exists as alcohol_hrv)
+    # These reuse existing hypotheses when check-in data is merged in
 ]
