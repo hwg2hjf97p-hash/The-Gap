@@ -37,19 +37,19 @@ def interpret_result(
         confidence = ConfidenceLevel.STRONG
         confidence_label = "High confidence"
         confidence_description = (
-            "This pattern held consistently across 9 out of 10 statistical tests on your data."
+            "Seen consistently across your data. Strong enough to act on."
         )
     elif ci_excludes_zero and n_obs >= 30:
         confidence = ConfidenceLevel.MODERATE
         confidence_label = "Moderate confidence"
         confidence_description = (
-            "This pattern appeared consistently — more data over time would sharpen the picture."
+            "A consistent pattern in your data. More days will sharpen it further."
         )
     else:
         confidence = ConfidenceLevel.WEAK
         confidence_label = "Early signal"
         confidence_description = (
-            "There's a hint of this pattern in your data — another month would help confirm it."
+            "A hint of this pattern exists. Track another 30 days to confirm."
         )
 
     # ── Per-hypothesis copy ────────────────────────────────────────────────
@@ -415,10 +415,9 @@ def interpret_result(
 
     # ── Body copy ──────────────────────────────────────────────────────────
     body = (
-        f"Analysed across {n_obs} days of your data, this pattern held consistently — "
-        f"even after accounting for day-of-week effects, your sleep history, "
-        f"and other factors that could explain it away. "
-        f"This is not a correlation. The analysis is designed to isolate cause from coincidence."
+        f"Based on {n_obs} days of your data. "
+        f"Unlike a simple correlation, this analysis controls for other factors "
+        f"— so what you're seeing is the isolated effect of this one behaviour on your body."
     )
 
     share_text = (

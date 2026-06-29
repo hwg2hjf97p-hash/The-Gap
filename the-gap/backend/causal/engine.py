@@ -17,12 +17,23 @@ from models.insight import Insight, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
+# Minimum meaningful effect sizes — below these the result is noise, not signal.
+# Values are in the natural unit of each outcome column.
+MIN_EFFECT = {
+    "hrv_next":           0.8,   # ms  — less than 0.8ms HRV change is not meaningful
+    "sleep_deep_min":     1.5,   # min — less than 1.5 min deep sleep change is noise
+    "sleep_total_min":    3.0,   # min — less than 3 min total sleep change is noise
+    "resting_hr_next":    0.3,   # bpm — less than 0.3 bpm RHR change is noise
+    "steps":            200.0,   # steps
+}
+DEFAULT_MIN_EFFECT = 0.5
+
 
 def run_all_hypotheses(df: pd.DataFrame) -> list[Insight]:
     """
     Iterate over every pre-defined hypothesis.
-    Skip those with insufficient data.
-    Return a list of Insight objects (max 7, typically 3–5 will pass).
+    Skip those with insufficient data or near-zero effects.
+    Return a sorted list of Insight objects.
     """
     insights: list[Insight] = []
 
@@ -44,7 +55,7 @@ def run_all_hypotheses(df: pd.DataFrame) -> list[Insight]:
 
 def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
     """
-    Run a single hypothesis.  Returns None if data is insufficient.
+    Run a single hypothesis. Returns None if data is insufficient or effect is trivially small.
     """
     # ── 1. Check required columns exist ───────────────────────────────────
     required = [hyp.treatment_col, hyp.outcome_col] + (hyp.covariate_cols or [])
@@ -54,7 +65,7 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
         return None
 
     # ── 2. Build working sub-frame ─────────────────────────────────────────
-    cols = list({hyp.treatment_col, hyp.outcome_col, *( hyp.covariate_cols or [])})
+    cols = list({hyp.treatment_col, hyp.outcome_col, *(hyp.covariate_cols or [])})
     sub = df[cols].dropna()
 
     # ── 3. Check minimum row count ─────────────────────────────────────────
@@ -88,7 +99,16 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
     if result is None:
         return None
 
-    # ── 6. Interpret → Insight ─────────────────────────────────────────────
+    # ── 6. Filter out near-zero / trivially small effects ─────────────────
+    min_effect = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)
+    if abs(result["effect"]) < min_effect:
+        logger.debug(
+            "Skipping %s — effect too small (%.4f < %.4f threshold)",
+            hyp.id, abs(result["effect"]), min_effect,
+        )
+        return None
+
+    # ── 7. Interpret → Insight ─────────────────────────────────────────────
     return interpret_result(
         hypothesis=hyp,
         effect=result["effect"],

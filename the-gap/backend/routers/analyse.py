@@ -165,15 +165,36 @@ async def analyse(
             },
         )
 
+    # ── 6b. Build data coverage summary ───────────────────────────────────
+    TRACKED_COLS = {
+        "hrv":              "Heart rate variability (HRV)",
+        "sleep_deep_min":   "Deep sleep",
+        "sleep_total_min":  "Total sleep duration",
+        "resting_hr":       "Resting heart rate",
+        "steps":            "Daily steps",
+        "active_energy":    "Active calories",
+        "alcohol_flag":     "Alcohol tracking",
+        "mindful_minutes":  "Mindfulness",
+        "recovery_score":   "Recovery score",
+        "strain":           "Strain / training load",
+    }
+    found_cols  = [label for col, label in TRACKED_COLS.items() if col in df.columns]
+    missing_cols = [label for col, label in TRACKED_COLS.items() if col not in df.columns]
+
     if not insights:
         raise HTTPException(
             status_code=422,
             detail={
                 "error_code": "NO_INSIGHTS",
                 "message": (
-                    "We couldn't find any significant patterns in your data yet. "
-                    "This usually means you need more varied data — try again after 60+ days of tracking."
+                    "We found your data but couldn't detect any meaningful patterns yet. "
+                    "This usually means some key metrics are missing from your export "
+                    "(HRV and sleep stages make the biggest difference), "
+                    "or you need 60+ days of data for patterns to emerge. "
+                    "Try connecting Whoop or Oura for richer data."
                 ),
+                "data_found": found_cols,
+                "data_missing": missing_cols,
             },
         )
 
@@ -210,6 +231,8 @@ async def analyse(
                 "days": data_period_days,
                 "source": data_source,
                 "has_calendar": has_calendar,
+                "data_found": found_cols,
+                "data_missing": missing_cols,
             },
             "insights": insights_dicts,
         }

@@ -27,6 +27,9 @@ export interface Insight {
 export interface DataSummary {
   days: number;
   source: DataSource;
+  has_calendar?: boolean;
+  data_found?: string[];
+  data_missing?: string[];
 }
 
 export interface AnalysisResponse {

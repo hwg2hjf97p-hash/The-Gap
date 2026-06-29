@@ -82,7 +82,15 @@ export default function ResultsPage() {
   }
 
   const { data_summary, insights } = data;
-  const sourceName = data_summary.source === "apple_health" ? "Apple Health" : "Whoop";
+
+  const sourceName =
+    data_summary.source === "apple_health"
+      ? "Apple Health"
+      : data_summary.source === "oura"
+      ? "Oura"
+      : "Whoop";
+
+  const fewResults = insights.length < 3;
 
   return (
     <div className="min-h-screen px-4 py-16">
@@ -118,6 +126,57 @@ export default function ResultsPage() {
           ))}
         </div>
 
+        {/* Low results explainer — shown when fewer than 3 insights */}
+        {fewResults && (
+          <div
+            className="mt-8 rounded-xl p-6"
+            style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+          >
+            <p className="font-semibold mb-2" style={{ color: "#c9a84c" }}>
+              Why so few results?
+            </p>
+            <p className="text-sm mb-4" style={{ color: "#a2bcaf" }}>
+              The analysis needs a range of health metrics to find patterns. Your{" "}
+              {sourceName} export only included some of them — so most hypotheses
+              were skipped automatically.
+            </p>
+
+            {data_summary.data_found && data_summary.data_found.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-medium mb-1" style={{ color: "#34d399" }}>
+                  ✓ Found in your data
+                </p>
+                <p className="text-xs" style={{ color: "#a2bcaf" }}>
+                  {data_summary.data_found.join(" · ")}
+                </p>
+              </div>
+            )}
+
+            {data_summary.data_missing && data_summary.data_missing.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-medium mb-1" style={{ color: "#a2bcaf" }}>
+                  ✗ Not in your export
+                </p>
+                <p className="text-xs" style={{ color: "#a2bcaf" }}>
+                  {data_summary.data_missing.join(" · ")}
+                </p>
+              </div>
+            )}
+
+            <p className="text-sm font-medium" style={{ color: "#eef3f0" }}>
+              Connect Whoop or Oura for HRV, deep sleep, and recovery score —
+              these unlock the most powerful insights.
+            </p>
+            <button
+              onClick={() => router.push("/connect")}
+              className="mt-4 px-5 py-2 rounded-lg text-sm font-medium"
+              style={{ background: "#c9a84c", color: "#0a1710" }}
+            >
+              Connect a device →
+            </button>
+          </div>
+        )}
+
         {/* Share + CTA */}
         <div className="mt-12 text-center space-y-4">
           <ShareButton shareUrl={data.share_url} />
@@ -149,8 +208,8 @@ export default function ResultsPage() {
         >
           <p className="font-medium mb-2" style={{ color: "#eef3f0" }}>About these results</p>
           <p>
-            The Gap uses Double Machine Learning (LinearDML) from Microsoft&apos;s EconML library — the
-            same causal inference framework used by researchers at Microsoft, Uber, and Stanford.
+            The Gap uses Double Machine Learning (LinearDML) from Microsoft&apos;s EconML library —
+            the same causal inference framework used by researchers at Microsoft, Uber, and Stanford.
             It controls for confounders (day of week, sleep history, activity levels) to isolate
             genuine cause-and-effect relationships from coincidence.{" "}
             <a
@@ -164,7 +223,7 @@ export default function ResultsPage() {
           </p>
         </div>
 
-        {/* Footer CTA */}
+        {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-xs" style={{ color: "#a2bcaf" }}>
             causalme.com · Built by Samuel Roberts
