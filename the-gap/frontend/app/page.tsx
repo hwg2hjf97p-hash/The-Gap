@@ -19,25 +19,103 @@ const ACCEPTED_CALENDAR: Record<string, string[]> = {
   "application/octet-stream": [".ics"],
 };
 
+// ── Custom SVG icons — brand-matched, no emoji ────────────────────────────────
+
+function IconAppleHealth({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Heart with ECG pulse line */}
+      <path
+        d="M12 21C12 21 3 15.5 3 9a4.5 4.5 0 0 1 9-0.75A4.5 4.5 0 0 1 21 9c0 6.5-9 12-9 12z"
+        fill="#34d399"
+        opacity="0.18"
+        stroke="#34d399"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <polyline
+        points="5,11 7.5,11 9,8.5 11,13.5 13,9.5 14.5,11 16,11 18,11"
+        stroke="#34d399"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
+function IconWhoop({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Bold lightning bolt — Whoop's signature */}
+      <path
+        d="M13 3L5 13.5h6L9 21l10-10.5h-6L13 3z"
+        fill="#c9a84c"
+        stroke="#c9a84c"
+        strokeWidth="0.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconOura({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Clean geometric ring — thick circle with inner highlight */}
+      <circle cx="12" cy="12" r="7.5" stroke="#c9a84c" strokeWidth="2.8" fill="none" />
+      <circle cx="12" cy="12" r="4" stroke="#c9a84c" strokeWidth="1" fill="none" opacity="0.35" />
+      <circle cx="9.5" cy="8.5" r="1.2" fill="#c9a84c" opacity="0.7" />
+    </svg>
+  );
+}
+
+function IconCalendar({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="5" width="18" height="16" rx="2" stroke="#a2bcaf" strokeWidth="1.6" fill="none" />
+      <path d="M3 10h18" stroke="#a2bcaf" strokeWidth="1.4" />
+      <path d="M8 3v4M16 3v4" stroke="#a2bcaf" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="7" y="13" width="3" height="3" rx="0.5" fill="#34d399" opacity="0.7" />
+      <rect x="14" y="13" width="3" height="3" rx="0.5" fill="#a2bcaf" opacity="0.4" />
+    </svg>
+  );
+}
+
+function IconFile({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"
+        stroke="#c9a84c" strokeWidth="1.6" fill="none" strokeLinejoin="round"
+      />
+      <path d="M14 2v6h6" stroke="#c9a84c" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M8 13h8M8 17h5" stroke="#c9a84c" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── Source definitions ────────────────────────────────────────────────────────
 const SOURCES = [
   {
     id: "apple_health" as DataSource,
     label: "Apple Health",
-    icon: "🍎",
+    Icon: IconAppleHealth,
     hint: "Health app → profile photo → Export All Health Data",
     accept: ".xml or .zip",
   },
   {
     id: "whoop" as DataSource,
     label: "Whoop",
-    icon: "⚡",
+    Icon: IconWhoop,
     hint: "Whoop app → More → App Settings → Export Data",
     accept: ".csv export",
   },
   {
     id: "oura" as DataSource,
     label: "Oura",
-    icon: "💍",
+    Icon: IconOura,
     hint: "Oura app → Profile → Data Export → Export to CSV",
     accept: ".csv or .json export",
   },
@@ -155,7 +233,7 @@ export default function HomePage() {
           <br />for your health?
         </h1>
         <p className="text-lg leading-relaxed" style={{ color: "#a2bcaf" }}>
-          Upload your health data. The Gap runs causal inference across 22 hypotheses
+          Upload your health data. The Gap runs causal inference across 26 hypotheses
           and tells you what genuinely causes what — not just what correlates.
         </p>
       </div>
@@ -175,14 +253,15 @@ export default function HomePage() {
             <button
               key={src.id}
               onClick={() => { setDataSource(src.id); setFile(null); setErrorMsg(""); }}
-              className="flex-1 py-2.5 text-sm font-medium transition-all"
+              className="flex-1 py-2.5 text-sm font-medium transition-all flex items-center justify-center gap-1.5"
               style={{
                 background: dataSource === src.id ? "#1a3d2b" : "transparent",
                 color: dataSource === src.id ? "#eef3f0" : "#a2bcaf",
                 borderRadius: "0.75rem",
               }}
             >
-              {src.icon} {src.label}
+              <src.Icon size={16} />
+              {src.label}
             </button>
           ))}
         </div>
@@ -198,16 +277,16 @@ export default function HomePage() {
         >
           <input {...getInputProps()} />
           {file ? (
-            <div>
-              <div className="text-2xl mb-2">📄</div>
+            <div className="flex flex-col items-center">
+              <div className="mb-2"><IconFile size={28} /></div>
               <p className="font-medium" style={{ color: "#eef3f0" }}>{file.name}</p>
               <p className="text-sm mt-1" style={{ color: "#a2bcaf" }}>
                 {(file.size / (1024 * 1024)).toFixed(1)} MB · Click to change
               </p>
             </div>
           ) : (
-            <div>
-              <div className="text-3xl mb-3">{currentSource.icon}</div>
+            <div className="flex flex-col items-center">
+              <div className="mb-3"><currentSource.Icon size={36} /></div>
               <p className="font-medium mb-1" style={{ color: "#eef3f0" }}>
                 {isDragActive ? "Drop it here" : `Drop your ${currentSource.label} export`}
               </p>
@@ -235,12 +314,13 @@ export default function HomePage() {
             }}
           >
             <span className="flex items-center gap-2">
-              📅 <span>Add Google Calendar</span>
+              <IconCalendar size={16} />
+              <span>Add Google Calendar</span>
               <span
                 className="text-xs px-2 py-0.5 rounded-full"
                 style={{ background: "#c9a84c22", color: "#c9a84c" }}
               >
-                New — unlocks 5 more insights
+                Unlocks 5 more insights
               </span>
             </span>
             <span style={{ color: "#a2bcaf" }}>{showCalendar ? "▲" : "▼"}</span>
@@ -260,7 +340,7 @@ export default function HomePage() {
                 {calendarFile ? (
                   <div>
                     <p className="font-medium text-sm" style={{ color: "#eef3f0" }}>
-                      📅 {calendarFile.name}
+                      {calendarFile.name}
                     </p>
                     <p className="text-xs mt-1" style={{ color: "#34d399" }}>
                       Calendar data will be merged · Click to change
@@ -339,10 +419,10 @@ export default function HomePage() {
           }}
         >
           <div className="flex items-center gap-3">
-            <div className="text-xl">⚡</div>
+            <IconWhoop size={20} />
             <div>
               <p className="text-sm font-medium" style={{ color: "#eef3f0" }}>
-                Have a Whoop or Oura?
+                Have a Whoop, Oura, or Strava?
               </p>
               <p className="text-xs" style={{ color: "#a2bcaf" }}>
                 Connect once — insights update automatically every day
@@ -360,7 +440,7 @@ export default function HomePage() {
       >
         <span>🔒 Your data never leaves our servers</span>
         <span>⚡ Results in under 60 seconds</span>
-        <span>🧬 22 causal hypotheses · Microsoft EconML</span>
+        <span>🧬 26 causal hypotheses · Microsoft EconML</span>
       </div>
     </div>
   );
