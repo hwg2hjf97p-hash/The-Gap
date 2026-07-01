@@ -86,25 +86,58 @@ def _redirect_uri(provider: str) -> str:
     return f"{APP_BASE_URL}/connect/{provider}/callback"
 
 
-# ── Simple in-memory state store (replace with Redis in production) ───────────
-_oauth_states: dict[str, dict] = {}
+# ── Supabase-backed state store ───────────────────────────────────────────────
+# Stores OAuth state tokens in Supabase so they survive across Railway
+# instances and restarts. Falls back to in-memory if Supabase is unavailable.
+_oauth_states_fallback: dict[str, dict] = {}
 
 
 def _store_state(state: str, user_id: str, provider: str) -> None:
-    _oauth_states[state] = {
+    client = _get_client()
+    expires_at = int(time.time()) + 600  # 10 minutes
+    if client is not None:
+        try:
+            client.table("oauth_states").insert({
+                "state": state,
+                "user_id": user_id,
+                "provider": provider,
+                "expires_at": expires_at,
+            }).execute()
+            return
+        except Exception as exc:
+            logger.warning("Could not store state in Supabase, using memory: %s", exc)
+    # Fallback to in-memory
+    _oauth_states_fallback[state] = {
         "user_id": user_id,
         "provider": provider,
         "created_at": time.time(),
     }
-    # Prune old states
-    cutoff = time.time() - 600  # 10 minutes
-    expired = [k for k, v in _oauth_states.items() if v["created_at"] < cutoff]
-    for k in expired:
-        del _oauth_states[k]
 
 
 def _consume_state(state: str) -> Optional[dict]:
-    return _oauth_states.pop(state, None)
+    client = _get_client()
+    if client is not None:
+        try:
+            resp = (
+                client.table("oauth_states")
+                .select("user_id, provider, expires_at")
+                .eq("state", state)
+                .execute()
+            )
+            if not resp.data:
+                # Try fallback in case it was stored in memory
+                return _oauth_states_fallback.pop(state, None)
+            row = resp.data[0]
+            # Delete it so it can't be reused
+            client.table("oauth_states").delete().eq("state", state).execute()
+            # Check expiry
+            if int(time.time()) > row["expires_at"]:
+                logger.warning("OAuth state expired for provider %s", row["provider"])
+                return None
+            return {"user_id": row["user_id"], "provider": row["provider"]}
+        except Exception as exc:
+            logger.warning("Could not read state from Supabase, trying memory: %s", exc)
+    return _oauth_states_fallback.pop(state, None)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
