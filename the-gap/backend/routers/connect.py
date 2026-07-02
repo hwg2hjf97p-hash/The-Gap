@@ -216,8 +216,17 @@ async def oauth_callback(
             )
             resp.raise_for_status()
             token_data = resp.json()
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text if exc.response is not None else "no response"
+        logger.error(
+            "Token exchange failed for %s: status=%s body=%s",
+            provider, exc.response.status_code if exc.response is not None else "?", body
+        )
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}&detail={exc.response.status_code if exc.response is not None else 0}"
+        )
     except httpx.HTTPError as exc:
-        logger.error("Token exchange failed for %s: %s", provider, exc)
+        logger.error("Token exchange network error for %s: %s", provider, exc)
         return RedirectResponse(
             url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}"
         )
