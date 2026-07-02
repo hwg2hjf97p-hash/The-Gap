@@ -54,6 +54,42 @@ def health_check():
 def root():
     return {"message": "The Gap API is running. POST /analyse to begin."}
 
+@app.get("/debug-oauth")
+async def debug_oauth():
+    """Debug OAuth env vars and test Whoop token endpoint reachability."""
+    import httpx, os
+    whoop_client_id = os.getenv("WHOOP_CLIENT_ID", "")
+    whoop_secret = os.getenv("WHOOP_CLIENT_SECRET", "")
+    oura_client_id = os.getenv("OURA_CLIENT_ID", "")
+    app_base = os.getenv("APP_BASE_URL", "")
+    frontend = os.getenv("FRONTEND_URL", "")
+    result = {
+        "WHOOP_CLIENT_ID_set": bool(whoop_client_id),
+        "WHOOP_CLIENT_ID_preview": whoop_client_id[:8] + "..." if whoop_client_id else "(empty)",
+        "WHOOP_CLIENT_SECRET_set": bool(whoop_secret),
+        "WHOOP_CLIENT_SECRET_length": len(whoop_secret),
+        "OURA_CLIENT_ID_set": bool(oura_client_id),
+        "APP_BASE_URL": app_base,
+        "FRONTEND_URL": frontend,
+        "redirect_uri_would_be": f"{app_base}/connect/whoop/callback",
+    }
+    # Test reachability of Whoop token endpoint
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.post(
+                "https://api.prod.whoop.com/oauth/oauth2/token",
+                data={"grant_type": "authorization_code", "code": "test",
+                      "redirect_uri": f"{app_base}/connect/whoop/callback",
+                      "client_id": whoop_client_id, "client_secret": whoop_secret},
+                headers={"Accept": "application/json"},
+            )
+            result["whoop_token_endpoint_status"] = resp.status_code
+            result["whoop_token_endpoint_response"] = resp.json()
+    except Exception as e:
+        result["whoop_token_endpoint_error"] = str(e)
+    return result
+
+
 @app.get("/debug-imports")
 def debug_imports():
     """Check which packages are available on this server."""
