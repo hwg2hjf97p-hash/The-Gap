@@ -115,21 +115,21 @@ def _store_state(state: str, user_id: str, provider: str) -> None:
 
 
 def _consume_state(state: str) -> Optional[dict]:
+    """Fetch and immediately delete the state in one pass to minimise latency."""
     client = _get_client()
     if client is not None:
         try:
+            # Delete and return in a single round-trip using DELETE ... RETURNING *
             resp = (
                 client.table("oauth_states")
-                .select("user_id, provider, expires_at")
+                .delete()
                 .eq("state", state)
                 .execute()
             )
             if not resp.data:
-                # Try fallback in case it was stored in memory
+                # Not in Supabase — try in-memory fallback
                 return _oauth_states_fallback.pop(state, None)
             row = resp.data[0]
-            # Delete it so it can't be reused
-            client.table("oauth_states").delete().eq("state", state).execute()
             # Check expiry
             if int(time.time()) > row["expires_at"]:
                 logger.warning("OAuth state expired for provider %s", row["provider"])
