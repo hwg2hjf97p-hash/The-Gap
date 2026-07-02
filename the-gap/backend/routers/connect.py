@@ -86,58 +86,50 @@ def _redirect_uri(provider: str) -> str:
     return f"{APP_BASE_URL}/connect/{provider}/callback"
 
 
-# ── Supabase-backed state store ───────────────────────────────────────────────
-# Stores OAuth state tokens in Supabase so they survive across Railway
-# instances and restarts. Falls back to in-memory if Supabase is unavailable.
-_oauth_states_fallback: dict[str, dict] = {}
+# ── Stateless signed state tokens ─────────────────────────────────────────────
+# Encodes user_id + provider + expiry into the state string using HMAC-SHA256.
+# No database or memory store needed — works across all Railway instances.
+import hashlib
+import hmac
+import base64
+import json as _json
+
+_STATE_SECRET = (os.getenv("SYNC_SECRET") or "thegap-sync-2026").encode()
 
 
-def _store_state(state: str, user_id: str, provider: str) -> None:
-    client = _get_client()
-    expires_at = int(time.time()) + 600  # 10 minutes
-    if client is not None:
-        try:
-            client.table("oauth_states").insert({
-                "state": state,
-                "user_id": user_id,
-                "provider": provider,
-                "expires_at": expires_at,
-            }).execute()
-            return
-        except Exception as exc:
-            logger.warning("Could not store state in Supabase, using memory: %s", exc)
-    # Fallback to in-memory
-    _oauth_states_fallback[state] = {
-        "user_id": user_id,
-        "provider": provider,
-        "created_at": time.time(),
-    }
+def _store_state(state_unused: str, user_id: str, provider: str) -> str:
+    """Create a signed state token. Returns the token (ignore state_unused)."""
+    # This function signature is kept for compatibility but now returns the token
+    payload = _json.dumps({
+        "u": user_id,
+        "p": provider,
+        "e": int(time.time()) + 600,  # expires in 10 min
+    }, separators=(",", ":")).encode()
+    b64 = base64.urlsafe_b64encode(payload).rstrip(b"=").decode()
+    sig = hmac.new(_STATE_SECRET, b64.encode(), hashlib.sha256).hexdigest()[:16]
+    return f"{b64}.{sig}"
 
 
 def _consume_state(state: str) -> Optional[dict]:
-    """Fetch and immediately delete the state in one pass to minimise latency."""
-    client = _get_client()
-    if client is not None:
-        try:
-            # Delete and return in a single round-trip using DELETE ... RETURNING *
-            resp = (
-                client.table("oauth_states")
-                .delete()
-                .eq("state", state)
-                .execute()
-            )
-            if not resp.data:
-                # Not in Supabase — try in-memory fallback
-                return _oauth_states_fallback.pop(state, None)
-            row = resp.data[0]
-            # Check expiry
-            if int(time.time()) > row["expires_at"]:
-                logger.warning("OAuth state expired for provider %s", row["provider"])
-                return None
-            return {"user_id": row["user_id"], "provider": row["provider"]}
-        except Exception as exc:
-            logger.warning("Could not read state from Supabase, trying memory: %s", exc)
-    return _oauth_states_fallback.pop(state, None)
+    """Verify and decode the signed state token. Returns None if invalid/expired."""
+    try:
+        parts = state.rsplit(".", 1)
+        if len(parts) != 2:
+            return None
+        b64, sig = parts
+        expected_sig = hmac.new(_STATE_SECRET, b64.encode(), hashlib.sha256).hexdigest()[:16]
+        if not hmac.compare_digest(sig, expected_sig):
+            logger.warning("OAuth state signature mismatch")
+            return None
+        padding = 4 - len(b64) % 4
+        payload = _json.loads(base64.urlsafe_b64decode(b64 + "=" * padding))
+        if int(time.time()) > payload["e"]:
+            logger.warning("OAuth state expired")
+            return None
+        return {"user_id": payload["u"], "provider": payload["p"]}
+    except Exception as exc:
+        logger.warning("Could not decode OAuth state: %s", exc)
+        return None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -151,8 +143,7 @@ async def start_oauth(
     cfg = _get_provider_config(provider)
     client_id, _ = _get_client_credentials(provider)
 
-    state = secrets.token_urlsafe(32)
-    _store_state(state, user_id, provider)
+    state = _store_state("", user_id, provider)  # stateless signed token
 
     params = {
         "client_id": client_id,
