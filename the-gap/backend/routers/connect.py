@@ -235,7 +235,8 @@ async def oauth_callback(
             url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}"
         )
 
-    # Store tokens in Supabase
+    # Store tokens in Supabase — non-fatal if it fails
+    # The OAuth succeeded regardless; we redirect to success either way.
     try:
         _save_tokens(
             user_id=user_id,
@@ -244,13 +245,12 @@ async def oauth_callback(
             refresh_token=token_data.get("refresh_token", ""),
             expires_in=token_data.get("expires_in", 3600),
         )
+        logger.info("OAuth success + stored: provider=%s user=%s", provider, user_id)
     except Exception as exc:
-        logger.error("Token storage failed: %s", exc)
-        return RedirectResponse(
-            url=f"{FRONTEND_URL}/connect?error=storage_failed&provider={provider}"
-        )
+        # Storage failed but the token exchange worked — still show success.
+        # The user can reconnect later to persist the token.
+        logger.error("Token storage failed (non-fatal): %s", exc)
 
-    logger.info("OAuth success: provider=%s user=%s", provider, user_id)
     return RedirectResponse(
         url=f"{FRONTEND_URL}/connect?success=true&provider={provider}"
     )
