@@ -175,6 +175,10 @@ async def oauth_callback(
     error: Optional[str] = Query(None),
 ):
     """Handle OAuth callback — exchange code for tokens and store."""
+    received_at = time.time()
+    logger.info("CALLBACK_RECEIVED provider=%s code_length=%d state_length=%d at=%.3f",
+                provider, len(code), len(state), received_at)
+
     if error:
         logger.warning("OAuth error from %s: %s", provider, error)
         return RedirectResponse(
@@ -182,6 +186,10 @@ async def oauth_callback(
         )
 
     state_data = _consume_state(state)
+    state_decoded_at = time.time()
+    logger.info("STATE_DECODED provider=%s elapsed=%.3fs state_valid=%s",
+                provider, state_decoded_at - received_at, state_data is not None)
+
     if not state_data:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
 
@@ -193,6 +201,9 @@ async def oauth_callback(
     try:
         # Strava uses integer client_id
         cid = int(client_id) if provider == "strava" else client_id
+        exchange_start = time.time()
+        logger.info("TOKEN_EXCHANGE_START provider=%s code_prefix=%s redirect_uri=%s",
+                    provider, code[:8], _redirect_uri(provider))
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 cfg["token_url"],
@@ -205,6 +216,8 @@ async def oauth_callback(
                 },
                 headers={"Accept": "application/json"},
             )
+            logger.info("TOKEN_EXCHANGE_DONE provider=%s status=%d elapsed=%.3fs",
+                        provider, resp.status_code, time.time() - exchange_start)
             resp.raise_for_status()
             token_data = resp.json()
     except httpx.HTTPStatusError as exc:
