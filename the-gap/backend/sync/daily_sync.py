@@ -231,3 +231,54 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     except Exception as exc:
         logger.error("Engine failed for %s: %s", user_id, exc)
         return {"user_id": user_id, "status": "engine_error", "error": str(exc)}
+
+
+@router.post("/user/{user_id}")
+async def sync_single_user(user_id: str):
+    """
+    Immediately fetch data + run causal engine for one user.
+    Called by the frontend "Run analysis now" button right after OAuth connect.
+    No auth required — user_id is a random UUID from localStorage (not sensitive).
+    """
+    logger.info("Manual sync triggered for user: %s", user_id)
+
+    # Fetch all active connections for this user
+    try:
+        connections = await _supabase_get(
+            "user_connections",
+            {
+                "user_id": f"eq.{user_id}",
+                "is_active": "eq.true",
+                "select": "*",
+            },
+        )
+    except Exception as exc:
+        logger.error("Could not fetch connections for %s: %s", user_id, exc)
+        raise HTTPException(status_code=503, detail="Database unavailable — please try again.")
+
+    if not connections:
+        raise HTTPException(
+            status_code=404,
+            detail="No connected devices found. Please connect Whoop or Oura first.",
+        )
+
+    result = await _sync_user(user_id, connections)
+
+    if result.get("status") == "no_data":
+        raise HTTPException(
+            status_code=422,
+            detail="Connected but no data retrieved yet. Your device may need a sync — open Whoop/Oura app and wait a minute, then try again.",
+        )
+
+    if result.get("status") == "engine_error":
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis failed: {result.get('error', 'unknown error')}",
+        )
+
+    return JSONResponse(content={
+        "session_id": result.get("session_id"),
+        "insights": result.get("insights", 0),
+        "days": result.get("days", 0),
+        "status": result.get("status"),
+    })
