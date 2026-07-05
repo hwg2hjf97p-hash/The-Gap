@@ -11,18 +11,20 @@ Flow:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import base64
+import json as _json
 import logging
 import os
 import secrets
 import time
 from typing import Optional
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-
-from db.supabase_client import _get_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/connect")
@@ -86,20 +88,32 @@ def _redirect_uri(provider: str) -> str:
     return f"{APP_BASE_URL}/connect/{provider}/callback"
 
 
+# ── Supabase REST helpers (bypasses supabase-py DNS issues) ───────────────────
+
+def _supabase_headers() -> dict:
+    key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    }
+
+
+def _supabase_rest_url(table: str) -> str:
+    url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    return f"{url}/rest/v1/{table}"
+
+
 # ── Stateless signed state tokens ─────────────────────────────────────────────
 # Encodes user_id + provider + expiry into the state string using HMAC-SHA256.
 # No database or memory store needed — works across all Railway instances.
-import hashlib
-import hmac
-import base64
-import json as _json
 
 _STATE_SECRET = (os.getenv("SYNC_SECRET") or "thegap-sync-2026").encode()
 
 
 def _store_state(state_unused: str, user_id: str, provider: str) -> str:
     """Create a signed state token. Returns the token (ignore state_unused)."""
-    # This function signature is kept for compatibility but now returns the token
     payload = _json.dumps({
         "u": user_id,
         "p": provider,
@@ -235,20 +249,18 @@ async def oauth_callback(
             url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}"
         )
 
-    # Store tokens in Supabase — non-fatal if it fails
-    # The OAuth succeeded regardless; we redirect to success either way.
+    # Store tokens via direct REST API (bypasses supabase-py DNS issues)
     try:
-        _save_tokens(
+        await _save_tokens_rest(
             user_id=user_id,
             provider=provider,
             access_token=token_data.get("access_token", ""),
             refresh_token=token_data.get("refresh_token", ""),
             expires_in=token_data.get("expires_in", 3600),
         )
-        logger.info("OAuth success + stored: provider=%s user=%s", provider, user_id)
+        logger.info("TOKEN_SAVED_OK provider=%s user=%s", provider, user_id)
     except Exception as exc:
-        # Storage failed but the token exchange worked — still show success.
-        # The user can reconnect later to persist the token.
+        # Storage failed but token exchange worked — still show success
         logger.error("Token storage failed (non-fatal): %s", exc)
 
     return RedirectResponse(
@@ -259,19 +271,21 @@ async def oauth_callback(
 @router.get("/status/{user_id}")
 async def connection_status(user_id: str):
     """Return which providers are connected for a user."""
-    client = _get_client()
-    if client is None:
-        return JSONResponse(content={"connected": []})
+    url = _supabase_rest_url("user_connections")
+    headers = _supabase_headers()
+    headers.pop("Prefer", None)  # not needed for SELECT
+
+    params = {
+        "user_id": f"eq.{user_id}",
+        "is_active": "eq.true",
+        "select": "provider,connected_at,last_synced_at",
+    }
 
     try:
-        resp = (
-            client.table("user_connections")
-            .select("provider, connected_at, last_synced_at")
-            .eq("user_id", user_id)
-            .eq("is_active", True)
-            .execute()
-        )
-        return JSONResponse(content={"connected": resp.data or []})
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+            return JSONResponse(content={"connected": resp.json() or []})
     except Exception as exc:
         logger.error("Status check failed: %s", exc)
         return JSONResponse(content={"connected": []})
@@ -280,45 +294,93 @@ async def connection_status(user_id: str):
 @router.delete("/{provider}/{user_id}")
 async def disconnect(provider: str, user_id: str):
     """Disconnect a provider for a user."""
-    client = _get_client()
-    if client is None:
-        raise HTTPException(status_code=503, detail="Database unavailable.")
+    url = _supabase_rest_url("user_connections")
+    headers = _supabase_headers()
+    headers["Prefer"] = "return=minimal"
+
+    params = {
+        "user_id": f"eq.{user_id}",
+        "provider": f"eq.{provider}",
+    }
 
     try:
-        client.table("user_connections").update(
-            {"is_active": False}
-        ).eq("user_id", user_id).eq("provider", provider).execute()
-        return JSONResponse(content={"success": True})
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.patch(
+                url,
+                headers=headers,
+                params=params,
+                json={"is_active": False},
+            )
+            resp.raise_for_status()
+            return JSONResponse(content={"success": True})
     except Exception as exc:
         logger.error("Disconnect failed: %s", exc)
         raise HTTPException(status_code=500, detail="Could not disconnect.")
 
 
-# ── Token storage helpers ─────────────────────────────────────────────────────
+# ── Token storage via direct REST (no supabase-py) ────────────────────────────
 
-def _save_tokens(
+async def _save_tokens_rest(
     user_id: str,
     provider: str,
     access_token: str,
     refresh_token: str,
     expires_in: int,
 ) -> None:
-    """Upsert OAuth tokens into Supabase user_connections table."""
-    client = _get_client()
-    if client is None:
-        raise RuntimeError("Supabase unavailable — cannot store tokens.")
+    """
+    Upsert OAuth tokens into Supabase via direct REST API.
+    Uses httpx instead of supabase-py to avoid DNS resolution issues on Railway.
+    """
+    url = _supabase_rest_url("user_connections")
+    headers = _supabase_headers()
 
     expires_at = int(time.time()) + expires_in
 
-    client.table("user_connections").upsert(
-        {
-            "user_id": user_id,
-            "provider": provider,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_at": expires_at,
-            "is_active": True,
-            "connected_at": "now()",
-        },
-        on_conflict="user_id,provider",
-    ).execute()
+    payload = {
+        "user_id": user_id,
+        "provider": provider,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expires_at": expires_at,
+        "is_active": True,
+        "connected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+    logger.info("SAVE_TOKENS_ATTEMPT provider=%s user=%s url=%s", provider, user_id, url)
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        logger.info("SAVE_TOKENS_RESPONSE status=%d body=%s", resp.status_code, resp.text[:200])
+        resp.raise_for_status()
+
+
+# ── Sync helper used by whoop_sync, oura_sync etc. ────────────────────────────
+
+def get_user_tokens(user_id: str, provider: str) -> Optional[dict]:
+    """
+    Synchronous helper to fetch stored tokens for a user+provider.
+    Used by sync modules.
+    Returns dict with access_token, refresh_token, expires_at or None.
+    """
+    import httpx as _httpx
+
+    url = _supabase_rest_url("user_connections")
+    headers = _supabase_headers()
+    headers.pop("Prefer", None)
+
+    params = {
+        "user_id": f"eq.{user_id}",
+        "provider": f"eq.{provider}",
+        "is_active": "eq.true",
+        "select": "access_token,refresh_token,expires_at",
+        "limit": "1",
+    }
+
+    try:
+        resp = _httpx.get(url, headers=headers, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+    except Exception as exc:
+        logger.error("get_user_tokens failed for %s/%s: %s", user_id, provider, exc)
+        return None

@@ -25,17 +25,36 @@ Table DDL:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 
-from db.supabase_client import _get_client
-
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/checkin", tags=["checkin"])
+
+
+# ── Supabase REST helpers ─────────────────────────────────────────────────────
+
+def _sb_url(table: str) -> str:
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    return f"{base}/rest/v1/{table}"
+
+
+def _sb_headers(prefer: str = "") -> dict:
+    key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    h = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        h["Prefer"] = prefer
+    return h
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -68,27 +87,28 @@ class CheckInResponse(BaseModel):
 @router.post("/")
 async def submit_checkin(body: CheckInRequest) -> JSONResponse:
     """Submit or update a daily check-in."""
-    client = _get_client()
-    if client is None:
-        raise HTTPException(status_code=503, detail="Database unavailable.")
+    payload = {
+        "user_id": body.user_id,
+        "date": body.date,
+        "alcohol": body.alcohol,
+        "afternoon_caffeine": body.afternoon_caffeine,
+        "stress_score": body.stress_score,
+        "notes": body.notes,
+    }
 
     try:
-        client.table("daily_checkins").upsert(
-            {
-                "user_id": body.user_id,
-                "date": body.date,
-                "alcohol": body.alcohol,
-                "afternoon_caffeine": body.afternoon_caffeine,
-                "stress_score": body.stress_score,
-                "notes": body.notes,
-            },
-            on_conflict="user_id,date",
-        ).execute()
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                _sb_url("daily_checkins"),
+                headers=_sb_headers(prefer="resolution=merge-duplicates,return=minimal"),
+                json=payload,
+            )
+            resp.raise_for_status()
     except Exception as exc:
         logger.error("Check-in save failed: %s", exc)
         raise HTTPException(status_code=500, detail="Could not save check-in.")
 
-    streak = await _get_streak(body.user_id, client)
+    streak = await _get_streak(body.user_id)
 
     return JSONResponse(content={
         "success": True,
@@ -100,21 +120,21 @@ async def submit_checkin(body: CheckInRequest) -> JSONResponse:
 @router.get("/{user_id}/recent")
 async def get_recent_checkins(user_id: str, days: int = 30) -> JSONResponse:
     """Get recent check-ins for a user — used to pre-fill today's form."""
-    client = _get_client()
-    if client is None:
-        return JSONResponse(content={"checkins": []})
-
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
-        resp = (
-            client.table("daily_checkins")
-            .select("date, alcohol, afternoon_caffeine, stress_score, notes")
-            .eq("user_id", user_id)
-            .gte("date", since)
-            .order("date", desc=True)
-            .execute()
-        )
-        return JSONResponse(content={"checkins": resp.data or []})
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("daily_checkins"),
+                headers=_sb_headers(),
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "date": f"gte.{since}",
+                    "select": "date,alcohol,afternoon_caffeine,stress_score,notes",
+                    "order": "date.desc",
+                },
+            )
+            resp.raise_for_status()
+            return JSONResponse(content={"checkins": resp.json() or []})
     except Exception as exc:
         logger.error("Check-in fetch failed: %s", exc)
         return JSONResponse(content={"checkins": []})
@@ -123,39 +143,46 @@ async def get_recent_checkins(user_id: str, days: int = 30) -> JSONResponse:
 @router.get("/{user_id}/today")
 async def get_today_checkin(user_id: str) -> JSONResponse:
     """Get today's check-in if it exists."""
-    client = _get_client()
-    if client is None:
-        return JSONResponse(content={"checkin": None})
-
     today = date.today().isoformat()
     try:
-        resp = (
-            client.table("daily_checkins")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("date", today)
-            .execute()
-        )
-        data = resp.data
-        return JSONResponse(content={"checkin": data[0] if data else None})
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("daily_checkins"),
+                headers=_sb_headers(),
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "date": f"eq.{today}",
+                    "select": "*",
+                    "limit": "1",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return JSONResponse(content={"checkin": data[0] if data else None})
     except Exception as exc:
         logger.error("Today check-in fetch failed: %s", exc)
         return JSONResponse(content={"checkin": None})
 
 
-async def _get_streak(user_id: str, client) -> int:
+async def _get_streak(user_id: str) -> int:
     """Calculate current consecutive check-in streak."""
     try:
-        resp = (
-            client.table("daily_checkins")
-            .select("date")
-            .eq("user_id", user_id)
-            .order("date", desc=True)
-            .limit(90)
-            .execute()
-        )
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("daily_checkins"),
+                headers=_sb_headers(),
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "select": "date",
+                    "order": "date.desc",
+                    "limit": "90",
+                },
+            )
+            resp.raise_for_status()
+            rows = resp.json() or []
+
         dates = sorted(
-            [datetime.strptime(r["date"], "%Y-%m-%d").date() for r in (resp.data or [])],
+            [datetime.strptime(r["date"], "%Y-%m-%d").date() for r in rows],
             reverse=True,
         )
         if not dates:
@@ -185,20 +212,20 @@ def get_checkin_dataframe(user_id: str, days: int = 90):
     """
     import pandas as pd
 
-    client = _get_client()
-    if client is None:
-        return pd.DataFrame()
-
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
-        resp = (
-            client.table("daily_checkins")
-            .select("date, alcohol, afternoon_caffeine, stress_score")
-            .eq("user_id", user_id)
-            .gte("date", since)
-            .execute()
+        resp = httpx.get(
+            _sb_url("daily_checkins"),
+            headers=_sb_headers(),
+            params={
+                "user_id": f"eq.{user_id}",
+                "date": f"gte.{since}",
+                "select": "date,alcohol,afternoon_caffeine,stress_score",
+            },
+            timeout=10,
         )
-        rows = resp.data or []
+        resp.raise_for_status()
+        rows = resp.json() or []
         if not rows:
             return pd.DataFrame()
 

@@ -13,11 +13,12 @@ import os
 import time
 from datetime import datetime, timezone
 
+import httpx
 import pandas as pd
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 
-from db.supabase_client import _get_client, save_results
+from db.supabase_client import save_results
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.google_sync import fetch_google_calendar_data, refresh_google_token
@@ -58,6 +59,51 @@ CLIENT_SECRET_ENVS = {
 }
 
 
+# ── Supabase REST helpers ─────────────────────────────────────────────────────
+
+def _supabase_url(table: str) -> str:
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    return f"{base}/rest/v1/{table}"
+
+
+def _supabase_headers(prefer: str = "") -> dict:
+    key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    h = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        h["Prefer"] = prefer
+    return h
+
+
+async def _supabase_get(table: str, params: dict) -> list[dict]:
+    """Generic async GET for Supabase REST."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            _supabase_url(table),
+            headers=_supabase_headers(),
+            params=params,
+        )
+        resp.raise_for_status()
+        return resp.json() or []
+
+
+async def _supabase_patch(table: str, params: dict, payload: dict) -> None:
+    """Generic async PATCH for Supabase REST."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.patch(
+            _supabase_url(table),
+            headers=_supabase_headers(prefer="return=minimal"),
+            params=params,
+            json=payload,
+        )
+        resp.raise_for_status()
+
+
+# ── Sync routes ───────────────────────────────────────────────────────────────
+
 @router.post("/run")
 async def run_sync(x_sync_secret: str = Header(default="")):
     """
@@ -67,18 +113,16 @@ async def run_sync(x_sync_secret: str = Header(default="")):
     if SYNC_SECRET and x_sync_secret != SYNC_SECRET:
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
 
-    client = _get_client()
-    if client is None:
-        raise HTTPException(status_code=503, detail="Database unavailable.")
+    # Get all active connections via REST (not supabase-py)
+    try:
+        connections = await _supabase_get(
+            "user_connections",
+            {"is_active": "eq.true", "select": "*"},
+        )
+    except Exception as exc:
+        logger.error("Failed to fetch connections: %s", exc)
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}")
 
-    # Get all active connections
-    connections_resp = (
-        client.table("user_connections")
-        .select("*")
-        .eq("is_active", True)
-        .execute()
-    )
-    connections = connections_resp.data or []
     logger.info("Daily sync: %d active connections", len(connections))
 
     results = []
@@ -88,7 +132,7 @@ async def run_sync(x_sync_secret: str = Header(default="")):
         users.setdefault(conn["user_id"], []).append(conn)
 
     for user_id, user_connections in users.items():
-        result = await _sync_user(user_id, user_connections, client)
+        result = await _sync_user(user_id, user_connections)
         results.append(result)
 
     return JSONResponse(content={
@@ -98,7 +142,7 @@ async def run_sync(x_sync_secret: str = Header(default="")):
     })
 
 
-async def _sync_user(user_id: str, connections: list[dict], db_client) -> dict:
+async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     """Sync one user — fetch all their data, run causal engine, save results."""
     t0 = time.perf_counter()
     health_df = None
@@ -111,7 +155,7 @@ async def _sync_user(user_id: str, connections: list[dict], db_client) -> dict:
         refresh_token = conn.get("refresh_token", "")
         expires_at = conn.get("expires_at", 0)
 
-        # Refresh token if expired
+        # Refresh token if expired or expiring soon
         if time.time() > (expires_at - 300):  # refresh 5 min early
             try:
                 client_id = os.getenv(CLIENT_ID_ENVS.get(provider, ""), "")
@@ -120,11 +164,16 @@ async def _sync_user(user_id: str, connections: list[dict], db_client) -> dict:
                     refresh_token, client_id, client_secret
                 )
                 access_token = new_tokens.get("access_token", access_token)
-                # Update stored token
-                db_client.table("user_connections").update({
-                    "access_token": access_token,
-                    "expires_at": int(time.time()) + new_tokens.get("expires_in", 3600),
-                }).eq("user_id", user_id).eq("provider", provider).execute()
+                # Update stored token via REST
+                await _supabase_patch(
+                    "user_connections",
+                    {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
+                    {
+                        "access_token": access_token,
+                        "expires_at": int(time.time()) + new_tokens.get("expires_in", 3600),
+                    },
+                )
+                logger.info("Token refreshed for %s/%s", user_id, provider)
             except Exception as exc:
                 logger.error("Token refresh failed for %s/%s: %s", user_id, provider, exc)
                 continue
@@ -142,10 +191,12 @@ async def _sync_user(user_id: str, connections: list[dict], db_client) -> dict:
                     health_df = health_df.combine_first(fetched)
                 providers_synced.append(provider)
 
-            # Update last_synced_at
-            db_client.table("user_connections").update({
-                "last_synced_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("user_id", user_id).eq("provider", provider).execute()
+            # Update last_synced_at via REST
+            await _supabase_patch(
+                "user_connections",
+                {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
+                {"last_synced_at": datetime.now(timezone.utc).isoformat()},
+            )
 
         except Exception as exc:
             logger.error("Fetch failed for %s/%s: %s", user_id, provider, exc)
