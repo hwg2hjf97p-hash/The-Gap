@@ -90,6 +90,54 @@ async def debug_oauth():
     return result
 
 
+@app.get("/debug-network")
+async def debug_network():
+    """Test DNS and network connectivity from Railway."""
+    import httpx, socket, os
+    supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_host = supabase_url.replace("https://", "").replace("http://", "").split("/")[0]
+    results = {
+        "supabase_url": supabase_url,
+        "supabase_host": supabase_host,
+    }
+
+    # Test DNS resolution
+    try:
+        ip = socket.gethostbyname(supabase_host)
+        results["dns_resolved"] = True
+        results["dns_ip"] = ip
+    except Exception as e:
+        results["dns_resolved"] = False
+        results["dns_error"] = str(e)
+
+    # Test HTTP GET to Supabase REST
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{supabase_url}/rest/v1/results",
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                },
+                params={"limit": "1"},
+            )
+            results["supabase_http_status"] = resp.status_code
+            results["supabase_http_ok"] = resp.status_code < 400
+    except Exception as e:
+        results["supabase_http_error"] = str(e)
+
+    # Test a known public URL to confirm general outbound internet works
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get("https://httpbin.org/get")
+            results["internet_ok"] = resp.status_code == 200
+    except Exception as e:
+        results["internet_error"] = str(e)
+
+    return results
+
+
 @app.get("/debug-imports")
 def debug_imports():
     """Check which packages are available on this server."""
