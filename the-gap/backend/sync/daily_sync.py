@@ -21,11 +21,26 @@ from fastapi.responses import JSONResponse
 from db.supabase_client import save_results
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
-from sync.google_sync import fetch_google_calendar_data, refresh_google_token
-from sync.strava_sync import fetch_strava_data, refresh_strava_token
-from parsers.google_calendar import merge_calendar_into_health
 from utils.data_cleaning import clean_dataframe
 from causal.engine import run_all_hypotheses
+
+# Optional imports — don't crash if these aren't ready yet
+try:
+    from sync.google_sync import fetch_google_calendar_data, refresh_google_token
+except ImportError:
+    fetch_google_calendar_data = None  # type: ignore
+    refresh_google_token = None  # type: ignore
+
+try:
+    from sync.strava_sync import fetch_strava_data, refresh_strava_token
+except ImportError:
+    fetch_strava_data = None  # type: ignore
+    refresh_strava_token = None  # type: ignore
+
+try:
+    from parsers.google_calendar import merge_calendar_into_health
+except ImportError:
+    merge_calendar_into_health = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sync")
@@ -151,47 +166,66 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
 
     for conn in connections:
         provider = conn["provider"]
-        access_token = conn.get("access_token", "")
-        refresh_token = conn.get("refresh_token", "")
-        expires_at = conn.get("expires_at", 0)
+        access_token = conn.get("access_token", "").strip()
+        refresh_token = conn.get("refresh_token", "").strip()
+        expires_at = conn.get("expires_at") or 0
 
-        # Refresh token if expired or expiring soon
-        if time.time() > (expires_at - 300):  # refresh 5 min early
-            try:
-                client_id = os.getenv(CLIENT_ID_ENVS.get(provider, ""), "")
-                client_secret = os.getenv(CLIENT_SECRET_ENVS.get(provider, ""), "")
-                new_tokens = await REFRESH_FUNCS[provider](
-                    refresh_token, client_id, client_secret
-                )
-                access_token = new_tokens.get("access_token", access_token)
-                # Update stored token via REST
-                await _supabase_patch(
-                    "user_connections",
-                    {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
-                    {
-                        "access_token": access_token,
-                        "expires_at": int(time.time()) + new_tokens.get("expires_in", 3600),
-                    },
-                )
-                logger.info("Token refreshed for %s/%s", user_id, provider)
-            except Exception as exc:
-                logger.error("Token refresh failed for %s/%s: %s", user_id, provider, exc)
-                continue
+        logger.info("SYNC_USER provider=%s user=%s token_len=%d expires_at=%s",
+                    provider, user_id[:8], len(access_token), expires_at)
+
+        # Only refresh if token is actually expired (not just 0)
+        # expires_at=0 means we don't know — try with existing token first
+        token_expired = expires_at > 0 and time.time() > (expires_at - 300)
+        if token_expired:
+            logger.info("TOKEN_EXPIRED refreshing %s/%s", user_id[:8], provider)
+            refresh_func = REFRESH_FUNCS.get(provider)
+            if refresh_func and refresh_token:
+                try:
+                    client_id = os.getenv(CLIENT_ID_ENVS.get(provider, ""), "")
+                    client_secret = os.getenv(CLIENT_SECRET_ENVS.get(provider, ""), "")
+                    new_tokens = await refresh_func(refresh_token, client_id, client_secret)
+                    access_token = new_tokens.get("access_token", access_token)
+                    await _supabase_patch(
+                        "user_connections",
+                        {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
+                        {
+                            "access_token": access_token,
+                            "expires_at": int(time.time()) + new_tokens.get("expires_in", 3600),
+                        },
+                    )
+                    logger.info("TOKEN_REFRESHED %s/%s", user_id[:8], provider)
+                except Exception as exc:
+                    logger.error("TOKEN_REFRESH_FAILED %s/%s: %s — continuing with old token",
+                                 user_id[:8], provider, exc)
+                    # Don't skip — try with the existing token anyway
 
         # Fetch data
         try:
-            if provider == "google":
+            logger.info("FETCH_START provider=%s user=%s", provider, user_id[:8])
+            if provider == "google" and fetch_google_calendar_data is not None:
                 calendar_df = await fetch_google_calendar_data(access_token)
-            elif provider in FETCH_FUNCS:
-                fetched = await FETCH_FUNCS[provider](access_token)
-                if health_df is None:
-                    health_df = fetched
-                else:
-                    # Merge multiple health sources
-                    health_df = health_df.combine_first(fetched)
-                providers_synced.append(provider)
+                logger.info("FETCH_DONE provider=google rows=%s",
+                            len(calendar_df) if calendar_df is not None else 0)
+            elif provider == "whoop":
+                fetched = await fetch_whoop_data(access_token)
+                logger.info("FETCH_DONE provider=whoop rows=%d", len(fetched) if fetched is not None else 0)
+                if fetched is not None and not fetched.empty:
+                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    providers_synced.append(provider)
+            elif provider == "oura":
+                fetched = await fetch_oura_data(access_token)
+                logger.info("FETCH_DONE provider=oura rows=%d", len(fetched) if fetched is not None else 0)
+                if fetched is not None and not fetched.empty:
+                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    providers_synced.append(provider)
+            elif provider == "strava" and fetch_strava_data is not None:
+                fetched = await fetch_strava_data(access_token)
+                logger.info("FETCH_DONE provider=strava rows=%d", len(fetched) if fetched is not None else 0)
+                if fetched is not None and not fetched.empty:
+                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    providers_synced.append(provider)
 
-            # Update last_synced_at via REST
+            # Update last_synced_at
             await _supabase_patch(
                 "user_connections",
                 {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
@@ -199,20 +233,29 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             )
 
         except Exception as exc:
-            logger.error("Fetch failed for %s/%s: %s", user_id, provider, exc)
+            logger.error("FETCH_FAILED provider=%s user=%s error=%s", provider, user_id[:8], exc)
+
+    logger.info("SYNC_DATA_COLLECTED user=%s health_df_rows=%s providers=%s elapsed=%.1fs",
+                user_id[:8],
+                len(health_df) if health_df is not None else 0,
+                providers_synced,
+                time.perf_counter() - t0)
 
     if health_df is None or health_df.empty:
         return {"user_id": user_id, "status": "no_data", "elapsed": round(time.perf_counter() - t0, 1)}
 
     # Merge calendar if available
-    if calendar_df is not None and not calendar_df.empty:
+    if calendar_df is not None and not calendar_df.empty and merge_calendar_into_health is not None:
         health_df = merge_calendar_into_health(health_df, calendar_df)
 
     # Run causal engine
     try:
+        logger.info("ENGINE_START user=%s days=%d", user_id[:8], len(health_df))
         df = clean_dataframe(health_df)
         insights = run_all_hypotheses(df)
         insights_dicts = [i.to_dict() for i in insights]
+        logger.info("ENGINE_DONE user=%s insights=%d elapsed=%.1fs",
+                    user_id[:8], len(insights_dicts), time.perf_counter() - t0)
 
         session_id = save_results(
             data_source=",".join(providers_synced),
@@ -229,7 +272,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             "elapsed": round(time.perf_counter() - t0, 1),
         }
     except Exception as exc:
-        logger.error("Engine failed for %s: %s", user_id, exc)
+        logger.error("ENGINE_FAILED user=%s error=%s", user_id[:8], exc)
         return {"user_id": user_id, "status": "engine_error", "error": str(exc)}
 
 

@@ -49,11 +49,18 @@ function LiveSyncContent() {
     hasRun.current = true;
 
     async function runSync() {
+      // AbortController for 90s timeout — Railway can take a while on cold start
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
+
       try {
         const resp = await fetch(`${API_URL}/sync/user/${userId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (!resp.ok) {
           const data = await resp.json().catch(() => ({}));
@@ -72,11 +79,19 @@ function LiveSyncContent() {
           return;
         }
 
+        // Navigate to results — replace so back button goes to connect, not here
         router.replace(`/results/${sessionId}`);
-      } catch (err) {
-        setError(
-          "Could not reach the server. Check your internet connection and try again."
-        );
+      } catch (err: unknown) {
+        clearTimeout(timeoutId);
+        if (err instanceof Error && err.name === "AbortError") {
+          setError(
+            "Analysis is taking longer than expected. Your data is being processed — please try again in a moment."
+          );
+        } else {
+          setError(
+            "Could not reach the server. Check your internet connection and try again."
+          );
+        }
       }
     }
 
@@ -85,7 +100,10 @@ function LiveSyncContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: "#0a1710" }}
+      >
         <div
           className="max-w-md w-full rounded-2xl p-8 text-center"
           style={{ background: "#0f1f17", border: "1px solid #1a3d2b" }}
@@ -106,9 +124,6 @@ function LiveSyncContent() {
                 hasRun.current = false;
                 setError(null);
                 setStepIndex(0);
-                // Re-trigger sync
-                const event = new Event("retry");
-                window.dispatchEvent(event);
               }}
               className="px-5 py-2 rounded-xl text-sm font-medium"
               style={{ background: "#34d399", color: "#0a1710" }}
@@ -116,7 +131,7 @@ function LiveSyncContent() {
               Try again
             </button>
             <button
-              onClick={() => router.push("/connect")}
+              onClick={() => router.push("/")}
               className="px-5 py-2 rounded-xl text-sm"
               style={{
                 background: "transparent",
@@ -124,7 +139,7 @@ function LiveSyncContent() {
                 border: "1px solid #1a3d2b",
               }}
             >
-              Back to connect
+              Go home
             </button>
           </div>
         </div>
@@ -133,7 +148,10 @@ function LiveSyncContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: "#0a1710" }}
+    >
       <div className="max-w-sm w-full text-center">
         {/* Spinner */}
         <div className="flex justify-center mb-8">
@@ -147,10 +165,7 @@ function LiveSyncContent() {
         </div>
 
         {/* Heading */}
-        <h2
-          className="text-2xl font-bold mb-2"
-          style={{ color: "#eef3f0" }}
-        >
+        <h2 className="text-2xl font-bold mb-2" style={{ color: "#eef3f0" }}>
           Analysing your data
         </h2>
 
@@ -189,7 +204,10 @@ export default function LiveResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a1710" }}>
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: "#0a1710" }}
+        >
           <div
             className="w-8 h-8 border-2 rounded-full animate-spin"
             style={{
