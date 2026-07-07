@@ -1,7 +1,7 @@
 import type { AnalysisResponse, ApiError, DataSource } from "./types";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL ?? "https://the-gap-backend.onrender.com";
 
 export class AnalysisError extends Error {
   constructor(
