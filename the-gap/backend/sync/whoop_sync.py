@@ -15,7 +15,9 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-WHOOP_API_BASE = "https://api.prod.whoop.com/developer/v1"
+WHOOP_API_BASE = "https://api.prod.whoop.com/developer/v2"
+# NOTE: Whoop fully deprecated the v1 data API (Oct 2025) — v1 endpoints now 404.
+# v2 uses the same general shape but with a few renamed fields (noted below).
 
 
 async def refresh_whoop_token(
@@ -82,32 +84,45 @@ async def fetch_whoop_data(
     # Build daily rows
     rows: dict[str, dict] = {}
 
+    # score_state can be "SCORED" / "PENDING_SCORE" / "UNSCORABLE" in v2 —
+    # only "SCORED" records are guaranteed to have a populated `score` object.
     for r in recovery_records:
+        if r.get("score_state") != "SCORED":
+            continue
         date = r.get("created_at", "")[:10]
         score = r.get("score", {}) or {}
-        rows.setdefault(date, {})["hrv"] = score.get("hrv_rmssd_on_wakeup")
+        # v2 renamed hrv_rmssd_on_wakeup -> hrv_rmssd_milli (units unchanged: ms)
+        rows.setdefault(date, {})["hrv"] = score.get("hrv_rmssd_milli")
         rows[date]["resting_hr"] = score.get("resting_heart_rate")
         rows[date]["recovery_score"] = score.get("recovery_score")
 
     for s in sleep_records:
+        if s.get("score_state") != "SCORED":
+            continue
         date = s.get("start", "")[:10]
         score = s.get("score", {}) or {}
         stage_summary = score.get("stage_summary", {}) or {}
         rows.setdefault(date, {})
         total_ms = stage_summary.get("total_in_bed_time_milli", 0) or 0
-        deep_ms = stage_summary.get("slow_wave_sleep_duration_milli", 0) or 0
+        # v2 renamed slow_wave_sleep_duration_milli -> total_slow_wave_sleep_time_milli
+        deep_ms = stage_summary.get("total_slow_wave_sleep_time_milli", 0) or 0
         rows[date]["sleep_total_min"] = total_ms / 60000
         rows[date]["sleep_deep_min"] = deep_ms / 60000
         rows[date]["sleep_score"] = score.get("sleep_performance_percentage")
 
     for c in cycle_records:
+        if c.get("score_state") != "SCORED":
+            continue
         date = c.get("start", "")[:10]
         score = c.get("score", {}) or {}
         rows.setdefault(date, {})
-        rows[date]["steps"] = score.get("step_count")
-        rows[date]["active_energy"] = score.get("kilojoule_active") or 0
-        if rows[date]["active_energy"]:
-            rows[date]["active_energy"] *= 0.239  # kJ → kcal
+        # Whoop's Cycle score has never included step_count in either v1 or v2 —
+        # it only exposes strain/kilojoule/heart-rate. Deliberately NOT setting a
+        # "steps" key here (rather than None/0) so that parsers/whoop.py's
+        # existing active_energy-based estimate still fires — that fallback only
+        # triggers when "steps" isn't already a column.
+        active_kj = score.get("kilojoule") or 0
+        rows[date]["active_energy"] = active_kj * 0.239 if active_kj else 0  # kJ → kcal
 
     if not rows:
         return pd.DataFrame()
