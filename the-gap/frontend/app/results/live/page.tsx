@@ -50,12 +50,37 @@ function getUserId(): string {
   return id;
 }
 
+type Insight = {
+  hypothesis_id: string;
+  title: string;
+  headline: string;
+  body: string;
+  metric_delta: string;
+  metric_unit: string;
+  metric_direction: "positive" | "negative";
+  treatment_label: string;
+  outcome_label: string;
+  confidence: string;
+  confidence_label: string;
+  confidence_description: string;
+  actionable_tip?: string;
+};
+
+type ResultsData = {
+  insights: Insight[];
+  data_source?: string;
+  data_period_days?: number;
+};
+
 function ConnectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [connected, setConnected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [results, setResults] = useState<ResultsData | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const userId = typeof window !== "undefined" ? getUserId() : "";
 
@@ -67,11 +92,11 @@ function ConnectContent() {
 
     if (success && provider) {
       setToast({ msg: `${provider.charAt(0).toUpperCase() + provider.slice(1)} connected successfully.`, type: "success" });
-      // Auto-redirect to analysis after short delay
+      // Clean the success/provider params out of the URL, then auto-run analysis
+      router.replace(`/results/live?user_id=${getUserId()}`);
       setTimeout(() => {
-        const uid = getUserId();
-        router.push(`/results/live?user_id=${uid}`);
-      }, 1500);
+        handleRunAnalysis();
+      }, 1200);
     } else if (error) {
       setToast({ msg: `Connection failed: ${error}. Please try again.`, type: "error" });
     }
@@ -110,7 +135,45 @@ function ConnectContent() {
   }
 
   async function handleRunAnalysis() {
-    router.push(`/results/live?user_id=${userId}`);
+    if (!userId) return;
+    setAnalyzing(true);
+    setAnalysisError(null);
+    setResults(null);
+    try {
+      const syncRes = await fetch(`${API_URL}/sync/user/${userId}`, { method: "POST" });
+      const syncData = await syncRes.json();
+
+      if (!syncRes.ok) {
+        const msg =
+          (typeof syncData?.detail === "string" && syncData.detail) ||
+          syncData?.detail?.message ||
+          "Analysis failed. Please try again.";
+        setAnalysisError(msg);
+        setAnalyzing(false);
+        return;
+      }
+
+      const sessionId = syncData.session_id;
+      if (!sessionId) {
+        setAnalysisError("Analysis completed but no results were returned. Please try again.");
+        setAnalyzing(false);
+        return;
+      }
+
+      const resultsRes = await fetch(`${API_URL}/results/${sessionId}`);
+      const resultsData = await resultsRes.json();
+      if (!resultsRes.ok) {
+        setAnalysisError("Analysis completed, but we couldn't load your results. Please try again.");
+        setAnalyzing(false);
+        return;
+      }
+
+      setResults(resultsData);
+    } catch {
+      setAnalysisError("Couldn't reach the server. Please check your connection and try again.");
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   const hasAnyConnected = connected.length > 0;
@@ -235,27 +298,140 @@ function ConnectContent() {
           })}
         </div>
 
-        {/* Run analysis CTA */}
-        {hasHealthSource && (
+        {/* Run analysis CTA / loading / error / results */}
+        {hasHealthSource && !results && (
           <div
             className="rounded-2xl p-6 text-center"
             style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
           >
-            <p className="font-medium mb-1" style={{ color: "#eef3f0" }}>
-              Ready to analyse
-            </p>
-            <p className="text-sm mb-4" style={{ color: "#a2bcaf" }}>
-              {connected.length} source{connected.length !== 1 ? "s" : ""} connected
-              {connected.includes("google") ? " including calendar" : ""} —
-              your insights update automatically every morning.
-            </p>
-            <button
-              onClick={handleRunAnalysis}
-              className="px-8 py-3 rounded-xl font-semibold text-sm"
-              style={{ background: "#34d399", color: "#0a1710" }}
-            >
-              Run analysis now →
-            </button>
+            {analyzing ? (
+              <>
+                <div
+                  className="w-6 h-6 mx-auto mb-3 border-2 rounded-full animate-spin"
+                  style={{ borderColor: "#34d399", borderTopColor: "transparent" }}
+                />
+                <p className="font-medium mb-1" style={{ color: "#eef3f0" }}>
+                  Running your analysis…
+                </p>
+                <p className="text-sm" style={{ color: "#a2bcaf" }}>
+                  Pulling your data and testing it against known patterns. This can take up to a minute.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium mb-1" style={{ color: "#eef3f0" }}>
+                  Ready to analyse
+                </p>
+                <p className="text-sm mb-4" style={{ color: "#a2bcaf" }}>
+                  {connected.length} source{connected.length !== 1 ? "s" : ""} connected
+                  {connected.includes("google") ? " including calendar" : ""} —
+                  your insights update automatically every morning.
+                </p>
+                {analysisError && (
+                  <p className="text-sm mb-4" style={{ color: "#f87171" }}>
+                    {analysisError}
+                  </p>
+                )}
+                <button
+                  onClick={handleRunAnalysis}
+                  className="px-8 py-3 rounded-xl font-semibold text-sm"
+                  style={{ background: "#34d399", color: "#0a1710" }}
+                >
+                  {analysisError ? "Try again →" : "Run analysis now →"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Results */}
+        {results && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+                  Your insights
+                </h2>
+                {results.data_period_days ? (
+                  <p className="text-sm mt-1" style={{ color: "#a2bcaf" }}>
+                    Based on {results.data_period_days} days of data
+                  </p>
+                ) : null}
+              </div>
+              <button
+                onClick={handleRunAnalysis}
+                disabled={analyzing}
+                className="px-4 py-2 rounded-lg text-sm transition-all flex-shrink-0"
+                style={{ background: "transparent", color: "#a2bcaf", border: "1px solid #1a3d2b" }}
+              >
+                {analyzing ? "Refreshing…" : "Re-run analysis"}
+              </button>
+            </div>
+
+            {results.insights.length === 0 ? (
+              <div
+                className="rounded-2xl p-6 text-center"
+                style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+              >
+                <p style={{ color: "#a2bcaf" }}>
+                  We found your data but couldn&apos;t detect any strong patterns yet.
+                  This usually resolves itself as more days of data come in.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {results.insights.map((insight) => (
+                  <div
+                    key={insight.hypothesis_id}
+                    className="rounded-2xl p-6"
+                    style={{ background: "#0f1f17", border: "1px solid #1a3d2b" }}
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <h3 className="font-semibold" style={{ color: "#eef3f0" }}>
+                        {insight.title}
+                      </h3>
+                      <span
+                        className="text-xs px-2 py-1 rounded-full flex-shrink-0"
+                        style={{
+                          background:
+                            insight.metric_direction === "positive"
+                              ? "rgba(52,211,153,0.1)"
+                              : "rgba(248,113,113,0.1)",
+                          color: insight.metric_direction === "positive" ? "#34d399" : "#f87171",
+                        }}
+                      >
+                        {insight.metric_direction === "positive" ? "▲" : "▼"} {insight.metric_delta} {insight.metric_unit}
+                      </span>
+                    </div>
+                    <p className="text-sm mb-2" style={{ color: "#eef3f0" }}>
+                      {insight.headline}
+                    </p>
+                    <p className="text-sm mb-3" style={{ color: "#a2bcaf" }}>
+                      {insight.body}
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="text-xs px-2 py-1 rounded-lg"
+                        style={{ background: "#0a1710", color: "#a2bcaf" }}
+                      >
+                        {insight.confidence_label}
+                      </span>
+                      <span
+                        className="text-xs px-2 py-1 rounded-lg"
+                        style={{ background: "#0a1710", color: "#a2bcaf" }}
+                      >
+                        {insight.treatment_label} → {insight.outcome_label}
+                      </span>
+                    </div>
+                    {insight.actionable_tip && (
+                      <p className="text-sm mt-3" style={{ color: "#c9a84c" }}>
+                        💡 {insight.actionable_tip}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

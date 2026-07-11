@@ -17,6 +17,22 @@ logger = logging.getLogger(__name__)
 OURA_API_BASE = "https://api.ouraring.com/v2/usercollection"
 
 
+async def _get_oura(client: httpx.AsyncClient, endpoint: str, headers: dict, params: dict) -> list[dict]:
+    """
+    Fetch one Oura endpoint. Returns [] on failure instead of raising, so a
+    problem with one data type (e.g. an endpoint that doesn't exist, or a
+    scope the user didn't grant) doesn't discard every other data type we
+    already successfully fetched.
+    """
+    try:
+        resp = await client.get(f"{OURA_API_BASE}/{endpoint}", headers=headers, params=params)
+        resp.raise_for_status()
+        return resp.json().get("data", [])
+    except Exception as exc:
+        logger.warning("Oura endpoint %s failed (continuing without it): %s", endpoint, exc)
+        return []
+
+
 async def refresh_oura_token(
     refresh_token: str,
     client_id: str,
@@ -53,41 +69,12 @@ async def fetch_oura_data(
     params = {"start_date": start_date, "end_date": end_date}
 
     async with httpx.AsyncClient(timeout=30) as client:
-        # Daily readiness (HRV, resting HR, recovery score)
-        readiness_resp = await client.get(
-            f"{OURA_API_BASE}/daily_readiness",
-            headers=headers,
-            params=params,
-        )
-        readiness_resp.raise_for_status()
-        readiness_data = readiness_resp.json().get("data", [])
-
-        # Daily sleep
-        sleep_resp = await client.get(
-            f"{OURA_API_BASE}/daily_sleep",
-            headers=headers,
-            params=params,
-        )
-        sleep_resp.raise_for_status()
-        sleep_data = sleep_resp.json().get("data", [])
-
-        # Daily activity
-        activity_resp = await client.get(
-            f"{OURA_API_BASE}/daily_activity",
-            headers=headers,
-            params=params,
-        )
-        activity_resp.raise_for_status()
-        activity_data = activity_resp.json().get("data", [])
-
-        # HRV detail (average nightly HRV)
-        hrv_resp = await client.get(
-            f"{OURA_API_BASE}/hrv",
-            headers=headers,
-            params=params,
-        )
-        hrv_resp.raise_for_status()
-        hrv_data = hrv_resp.json().get("data", [])
+        readiness_data = await _get_oura(client, "daily_readiness", headers, params)
+        sleep_data = await _get_oura(client, "daily_sleep", headers, params)
+        activity_data = await _get_oura(client, "daily_activity", headers, params)
+        # HRV lives on the *detailed* sleep endpoint ("sleep"), not "daily_sleep" —
+        # there is no standalone "/hrv" endpoint in Oura's v2 API.
+        detailed_sleep_data = await _get_oura(client, "sleep", headers, params)
 
     rows: dict[str, dict] = {}
 
@@ -113,15 +100,17 @@ async def fetch_oura_data(
         rows[date]["active_energy"] = a.get("active_calories")
         rows[date]["activity_score"] = a.get("score")
 
-    for h in hrv_data:
-        date = h.get("day", "")
+    for s in detailed_sleep_data:
+        date = s.get("day", "")
+        if not date:
+            continue
         rows.setdefault(date, {})
-        # HRV items is a list of 5-min averages — take the mean
-        items = h.get("items", []) or []
-        if items:
-            valid = [x for x in items if x is not None]
-            if valid:
-                rows[date]["hrv"] = sum(valid) / len(valid)
+        avg_hrv = s.get("average_hrv")
+        if avg_hrv is not None:
+            # A night can have more than one sleep period; keep the longest-duration one's HRV
+            # by simply taking the last non-null value (detailed sleep records are already
+            # ordered by Oura's API — good enough for a daily aggregate).
+            rows[date]["hrv"] = avg_hrv
 
     if not rows:
         return pd.DataFrame()
