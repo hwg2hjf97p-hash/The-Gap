@@ -148,6 +148,29 @@ def _consume_state(state: str) -> Optional[dict]:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@router.get("/debug/{provider}/auth-url")
+async def debug_auth_url(provider: str):
+    """Return the exact auth URL (and its redirect_uri) without redirecting, for debugging."""
+    cfg = _get_provider_config(provider)
+    client_id, _ = _get_client_credentials(provider)
+    redirect_uri = _redirect_uri(provider)
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": cfg["scopes"],
+        "state": "debug-state-not-real",
+    }
+    auth_url = cfg["auth_url"] + "?" + urlencode(params)
+    return {
+        "provider": provider,
+        "redirect_uri_literal": redirect_uri,
+        "redirect_uri_length": len(redirect_uri),
+        "redirect_uri_bytes": redirect_uri.encode("utf-8").hex(),
+        "full_auth_url": auth_url,
+    }
+
+
 @router.get("/{provider}")
 async def start_oauth(
     provider: str,
