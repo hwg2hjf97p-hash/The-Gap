@@ -283,8 +283,14 @@ async def oauth_callback(
         )
         logger.info("TOKEN_SAVED_OK provider=%s user=%s", provider, user_id)
     except Exception as exc:
-        # Storage failed but token exchange worked — still show success
-        logger.error("Token storage failed (non-fatal): %s", exc)
+        # Storage genuinely failed — the OAuth token exchange itself worked,
+        # but nothing was persisted, so there is no connection to sync from.
+        # Telling the user "success" here was actively misleading — it hid
+        # this exact failure behind a false-positive UI, so we now surface it.
+        logger.error("Token storage failed: %s", exc)
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/connect?error=storage_failed&provider={provider}"
+        )
 
     return RedirectResponse(
         url=f"{FRONTEND_URL}/connect?success=true&provider={provider}"
@@ -356,6 +362,11 @@ async def _save_tokens_rest(
     """
     url = _supabase_rest_url("user_connections")
     headers = _supabase_headers()
+    # Without this, a POST is a plain INSERT — it silently fails with a 409
+    # Conflict on every reconnect attempt once a (user_id, provider) row
+    # already exists, because that pair is unique. This makes it a real
+    # upsert: insert if new, update in place if the pair already exists.
+    headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
 
     expires_at = int(time.time()) + expires_in
 
@@ -372,7 +383,12 @@ async def _save_tokens_rest(
     logger.info("SAVE_TOKENS_ATTEMPT provider=%s user=%s url=%s", provider, user_id, url)
 
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, headers=headers, json=payload)
+        resp = await client.post(
+            url,
+            headers=headers,
+            params={"on_conflict": "user_id,provider"},
+            json=payload,
+        )
         logger.info("SAVE_TOKENS_RESPONSE status=%d body=%s", resp.status_code, resp.text[:200])
         resp.raise_for_status()
 

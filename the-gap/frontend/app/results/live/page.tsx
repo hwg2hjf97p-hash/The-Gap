@@ -299,7 +299,7 @@ function ConnectContent() {
         </div>
 
         {/* Run analysis CTA / loading / error / results */}
-        {hasHealthSource && !results && (
+        {(hasHealthSource || analyzing || analysisError) && !results && (
           <div
             className="rounded-2xl p-6 text-center"
             style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
