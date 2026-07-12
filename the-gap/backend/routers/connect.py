@@ -42,7 +42,7 @@ PROVIDERS = {
     "whoop": {
         "auth_url": "https://api.prod.whoop.com/oauth/oauth2/auth",
         "token_url": "https://api.prod.whoop.com/oauth/oauth2/token",
-        "scopes": "offline read:recovery read:sleep read:body_measurement read:profile",
+        "scopes": "offline read:recovery read:sleep read:cycles read:workout read:body_measurement read:profile",
         "client_id_env": "WHOOP_CLIENT_ID",
         "client_secret_env": "WHOOP_CLIENT_SECRET",
     },

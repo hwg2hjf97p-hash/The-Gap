@@ -52,18 +52,26 @@ async def _get_whoop_paginated(
     Whoop's real max `limit` is 25, not the 200 this code used to send —
     sending 200 gets flatly rejected with 400 Bad Request. This pages
     through with next_token until Whoop stops returning one.
+
+    Returns [] on failure instead of raising, so a problem with one data
+    type (e.g. a missing scope causing 401 on just this endpoint) doesn't
+    discard every other data type that already fetched successfully.
     """
     records: list[dict] = []
     params = {"start": start, "limit": 25}
-    for _ in range(max_pages):
-        resp = await client.get(f"{WHOOP_API_BASE}/{endpoint}", headers=headers, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-        records.extend(data.get("records", []))
-        next_token = data.get("next_token")
-        if not next_token:
-            break
-        params = {"start": start, "limit": 25, "next_token": next_token}
+    try:
+        for _ in range(max_pages):
+            resp = await client.get(f"{WHOOP_API_BASE}/{endpoint}", headers=headers, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            records.extend(data.get("records", []))
+            next_token = data.get("next_token")
+            if not next_token:
+                break
+            params = {"start": start, "limit": 25, "next_token": next_token}
+    except Exception as exc:
+        logger.warning("Whoop endpoint %s failed (continuing without it): %s", endpoint, exc)
+        return records  # return whatever pages succeeded before the failure, if any
     return records
 
 
