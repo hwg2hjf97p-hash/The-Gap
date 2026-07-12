@@ -40,6 +40,33 @@ async def refresh_whoop_token(
         return resp.json()
 
 
+async def _get_whoop_paginated(
+    client: httpx.AsyncClient,
+    endpoint: str,
+    headers: dict,
+    start: str,
+    max_pages: int = 20,
+) -> list[dict]:
+    """
+    Fetch every page of a Whoop v2 collection endpoint.
+    Whoop's real max `limit` is 25, not the 200 this code used to send —
+    sending 200 gets flatly rejected with 400 Bad Request. This pages
+    through with next_token until Whoop stops returning one.
+    """
+    records: list[dict] = []
+    params = {"start": start, "limit": 25}
+    for _ in range(max_pages):
+        resp = await client.get(f"{WHOOP_API_BASE}/{endpoint}", headers=headers, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        records.extend(data.get("records", []))
+        next_token = data.get("next_token")
+        if not next_token:
+            break
+        params = {"start": start, "limit": 25, "next_token": next_token}
+    return records
+
+
 async def fetch_whoop_data(
     access_token: str,
     days_back: int = 90,
@@ -54,32 +81,9 @@ async def fetch_whoop_data(
     headers = {"Authorization": f"Bearer {access_token}"}
 
     async with httpx.AsyncClient(timeout=30) as client:
-        # Fetch recovery records
-        recovery_resp = await client.get(
-            f"{WHOOP_API_BASE}/recovery",
-            headers=headers,
-            params={"start": start, "limit": 200},
-        )
-        recovery_resp.raise_for_status()
-        recovery_records = recovery_resp.json().get("records", [])
-
-        # Fetch sleep records
-        sleep_resp = await client.get(
-            f"{WHOOP_API_BASE}/activity/sleep",
-            headers=headers,
-            params={"start": start, "limit": 200},
-        )
-        sleep_resp.raise_for_status()
-        sleep_records = sleep_resp.json().get("records", [])
-
-        # Fetch cycle records (steps, active calories)
-        cycle_resp = await client.get(
-            f"{WHOOP_API_BASE}/cycle",
-            headers=headers,
-            params={"start": start, "limit": 200},
-        )
-        cycle_resp.raise_for_status()
-        cycle_records = cycle_resp.json().get("records", [])
+        recovery_records = await _get_whoop_paginated(client, "recovery", headers, start)
+        sleep_records = await _get_whoop_paginated(client, "activity/sleep", headers, start)
+        cycle_records = await _get_whoop_paginated(client, "cycle", headers, start)
 
     # Build daily rows
     rows: dict[str, dict] = {}
