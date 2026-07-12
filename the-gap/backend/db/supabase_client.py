@@ -61,6 +61,7 @@ def save_results(
     data_period_days: Optional[int],
     insights: list[dict],
     session_id: Optional[str] = None,
+    snapshot: Optional[dict] = None,
 ) -> str:
     """
     Persist analysis results to Supabase via direct REST API.
@@ -79,6 +80,7 @@ def save_results(
         "data_source": data_source,
         "data_period_days": data_period_days,
         "insights": insights,
+        "snapshot": snapshot,
         "share_url": share_url,
     }
 

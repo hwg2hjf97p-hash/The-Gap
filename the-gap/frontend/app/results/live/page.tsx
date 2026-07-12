@@ -66,10 +66,34 @@ type Insight = {
   actionable_tip?: string;
 };
 
+type SnapshotMetric = {
+  metric: string;
+  label: string;
+  value: number;
+  unit: string;
+  trend: "up" | "down" | "flat";
+  is_improving: boolean | null;
+};
+
+type RawSignal = {
+  description: string;
+  r: number;
+  direction: "positive" | "negative";
+  n: number;
+  strength_label: "moderate" | "strong";
+};
+
+type Snapshot = {
+  days_of_data: number;
+  latest: SnapshotMetric[];
+  raw_signals: RawSignal[];
+};
+
 type ResultsData = {
   insights: Insight[];
   data_source?: string;
   data_period_days?: number;
+  snapshot?: Snapshot;
 };
 
 function ConnectContent() {
@@ -368,14 +392,89 @@ function ConnectContent() {
               </button>
             </div>
 
+            {/* Today's Snapshot — always shown once we have any data, even before
+                enough days exist for the causal engine to validate anything */}
+            {results.snapshot && results.snapshot.latest.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-sm font-semibold mb-3" style={{ color: "#a2bcaf" }}>
+                  TODAY&apos;S SNAPSHOT
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                  {results.snapshot.latest.map((m) => (
+                    <div
+                      key={m.metric}
+                      className="rounded-xl p-4"
+                      style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                    >
+                      <p className="text-xs mb-1" style={{ color: "#a2bcaf" }}>
+                        {m.label}
+                      </p>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-bold" style={{ color: "#eef3f0" }}>
+                          {m.value}
+                        </span>
+                        <span className="text-xs" style={{ color: "#a2bcaf" }}>
+                          {m.unit}
+                        </span>
+                        {m.trend !== "flat" && (
+                          <span
+                            className="text-xs ml-1"
+                            style={{
+                              color:
+                                m.is_improving === null
+                                  ? "#a2bcaf"
+                                  : m.is_improving
+                                  ? "#34d399"
+                                  : "#f87171",
+                            }}
+                          >
+                            {m.trend === "up" ? "▲" : "▼"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {results.snapshot.raw_signals.length > 0 && (
+                  <div
+                    className="rounded-xl p-4"
+                    style={{ background: "#0f1f17", border: "1px dashed #2a4d3a" }}
+                  >
+                    <p className="text-xs mb-3" style={{ color: "#a2bcaf" }}>
+                      Raw patterns we&apos;re watching — not yet causally tested (needs 30+ days for that)
+                    </p>
+                    <div className="space-y-2">
+                      {results.snapshot.raw_signals.map((s, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm">
+                          <span style={{ color: "#eef3f0" }}>{s.description}</span>
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-2"
+                            style={{
+                              background: "rgba(201,168,76,0.1)",
+                              color: "#c9a84c",
+                            }}
+                          >
+                            {s.strength_label} {s.direction === "positive" ? "+" : "−"}
+                            {Math.abs(s.r)} (n={s.n})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {results.insights.length === 0 ? (
               <div
                 className="rounded-2xl p-6 text-center"
                 style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
               >
                 <p style={{ color: "#a2bcaf" }}>
-                  We found your data but couldn&apos;t detect any strong patterns yet.
-                  This usually resolves itself as more days of data come in.
+                  {results.snapshot && results.snapshot.days_of_data < 30
+                    ? `We haven't hit a statistically confident, causally-tested pattern yet — that typically needs 30+ days. Keep the snapshot above growing and check back.`
+                    : `We found your data but couldn't detect any statistically confident patterns yet. This usually resolves itself as more days of data come in.`}
                 </p>
               </div>
             ) : (

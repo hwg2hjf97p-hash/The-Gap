@@ -93,6 +93,12 @@ async def fetch_whoop_data(
         sleep_records = await _get_whoop_paginated(client, "activity/sleep", headers, start)
         cycle_records = await _get_whoop_paginated(client, "cycle", headers, start)
 
+    logger.info(
+        "Whoop raw records: recovery=%d sleep=%d cycle=%d",
+        len(recovery_records), len(sleep_records), len(cycle_records),
+    )
+    scored_counts = {"recovery": 0, "sleep": 0, "cycle": 0}
+
     # Build daily rows
     rows: dict[str, dict] = {}
 
@@ -101,6 +107,7 @@ async def fetch_whoop_data(
     for r in recovery_records:
         if r.get("score_state") != "SCORED":
             continue
+        scored_counts["recovery"] += 1
         date = r.get("created_at", "")[:10]
         score = r.get("score", {}) or {}
         # v2 renamed hrv_rmssd_on_wakeup -> hrv_rmssd_milli (units unchanged: ms)
@@ -111,6 +118,7 @@ async def fetch_whoop_data(
     for s in sleep_records:
         if s.get("score_state") != "SCORED":
             continue
+        scored_counts["sleep"] += 1
         date = s.get("start", "")[:10]
         score = s.get("score", {}) or {}
         stage_summary = score.get("stage_summary", {}) or {}
@@ -125,6 +133,7 @@ async def fetch_whoop_data(
     for c in cycle_records:
         if c.get("score_state") != "SCORED":
             continue
+        scored_counts["cycle"] += 1
         date = c.get("start", "")[:10]
         score = c.get("score", {}) or {}
         rows.setdefault(date, {})
@@ -147,5 +156,9 @@ async def fetch_whoop_data(
     # Default alcohol flag to 0 — not available via API
     df["alcohol_flag"] = 0
 
-    logger.info("Whoop sync: %d days fetched", len(df))
+    logger.info(
+        "Whoop sync: %d distinct days | scored: recovery=%d sleep=%d cycle=%d (of %d/%d/%d raw)",
+        len(df), scored_counts["recovery"], scored_counts["sleep"], scored_counts["cycle"],
+        len(recovery_records), len(sleep_records), len(cycle_records),
+    )
     return df
