@@ -186,11 +186,19 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                     client_secret = os.getenv(CLIENT_SECRET_ENVS.get(provider, ""), "")
                     new_tokens = await refresh_func(refresh_token, client_id, client_secret)
                     access_token = new_tokens.get("access_token", access_token)
+                    # Whoop's OAuth (Ory Hydra) issues single-use refresh tokens:
+                    # every refresh returns a NEW refresh_token and immediately
+                    # invalidates the old one. Not saving it here meant the very
+                    # next refresh attempt (even a background/cron one) would
+                    # permanently kill the connection — matching exactly what
+                    # was happening before this fix.
+                    new_refresh_token = new_tokens.get("refresh_token", refresh_token)
                     await _supabase_patch(
                         "user_connections",
                         {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
                         {
                             "access_token": access_token,
+                            "refresh_token": new_refresh_token,
                             "expires_at": int(time.time()) + new_tokens.get("expires_in", 3600),
                         },
                     )
