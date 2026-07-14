@@ -184,17 +184,96 @@ async def _get_streak(user_id: str) -> int:
         return 0
 
 
+@router.get("/{user_id}/extracted")
+async def get_extracted_days(user_id: str, days: int = 30) -> JSONResponse:
+    """
+    Returns Claude's extracted daily summaries — what it read from your
+    entries and what it concluded. Lets you sanity-check the extraction
+    rather than trusting it blindly.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("journal_extractions"),
+                headers=_sb_headers(),
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "entry_date": f"gte.{since}",
+                    "select": "entry_date,entry_count,mood_score,stress_event,travel_event,illness_event,conflict_event,big_win_event,summary",
+                    "order": "entry_date.desc",
+                },
+            )
+            resp.raise_for_status()
+            return JSONResponse(content={"days": resp.json() or []})
+    except Exception as exc:
+        logger.error("Fetching extracted days failed: %s", exc)
+        return JSONResponse(content={"days": []})
+
+
+async def _get_cached_extractions(user_id: str, since_date: str) -> dict[str, dict]:
+    """Returns {date_str: extraction_dict} for already-extracted days."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _sb_url("journal_extractions"),
+                headers=_sb_headers(),
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "entry_date": f"gte.{since_date}",
+                    "select": "*",
+                },
+            )
+            resp.raise_for_status()
+            rows = resp.json() or []
+            return {r["entry_date"]: r for r in rows}
+    except Exception as exc:
+        logger.warning("Fetching cached extractions failed (will re-extract): %s", exc)
+        return {}
+
+
+async def _save_extraction(user_id: str, entry_date: str, entry_count: int, signals: dict) -> None:
+    payload = {
+        "user_id": user_id,
+        "entry_date": entry_date,
+        "entry_count": entry_count,
+        "mood_score": signals.get("mood_score"),
+        "stress_event": signals.get("stress_event"),
+        "travel_event": signals.get("travel_event"),
+        "illness_event": signals.get("illness_event"),
+        "conflict_event": signals.get("conflict_event"),
+        "big_win_event": signals.get("big_win_event"),
+        "summary": signals.get("summary", ""),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                _sb_url("journal_extractions"),
+                headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
+                params={"on_conflict": "user_id,entry_date"},
+                json=payload,
+            )
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.warning("Saving extraction failed (will re-extract next sync): %s", exc)
+
+
 async def get_journal_dataframe(user_id: str, days: int = 90) -> pd.DataFrame:
     """
-    Fetch quick entries for the last N days, group by date, run each day's
-    entries through the LLM extractor, and return a date-indexed DataFrame
-    ready to merge into the main health DataFrame.
+    Fetch quick entries for the last N days, group by date, and return a
+    date-indexed DataFrame ready to merge into the main health DataFrame.
 
-    Days with no entries simply don't appear as rows — this merges via a
-    left-join elsewhere, so missing days correctly stay NaN rather than
-    being assumed to be "no stress" etc.
+    Cost control: only calls the LLM for (a) days that have never been
+    extracted before, or (b) today, since today's entries can still be
+    accumulating. Every other historical day is served from the
+    journal_extractions cache — this is what keeps the API bill bounded
+    as a user's history grows, instead of re-processing their entire
+    journal history on every single sync.
     """
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    since_date = since[:10]
+    today_str = datetime.now(timezone.utc).date().isoformat()
+
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
@@ -222,12 +301,26 @@ async def get_journal_dataframe(user_id: str, days: int = 90) -> pd.DataFrame:
         d = r["created_at"][:10]
         by_date.setdefault(d, []).append(r["entry_text"])
 
+    cached = await _get_cached_extractions(user_id, since_date)
+
     records = {}
     for d, entries in by_date.items():
-        signals = await extract_daily_signals(entries)
-        if signals is not None:
-            signals.pop("summary", None)  # not a numeric feature — display-only, not for the engine
-            records[d] = signals
+        needs_extraction = d == today_str or d not in cached
+        if needs_extraction:
+            signals = await extract_daily_signals(entries)
+            if signals is not None:
+                await _save_extraction(user_id, d, len(entries), signals)
+                records[d] = {k: v for k, v in signals.items() if k != "summary"}
+        else:
+            c = cached[d]
+            records[d] = {
+                "mood_score": c.get("mood_score"),
+                "stress_event": c.get("stress_event"),
+                "travel_event": c.get("travel_event"),
+                "illness_event": c.get("illness_event"),
+                "conflict_event": c.get("conflict_event"),
+                "big_win_event": c.get("big_win_event"),
+            }
 
     if not records:
         return pd.DataFrame()

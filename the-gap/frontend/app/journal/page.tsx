@@ -6,6 +6,18 @@ import Link from "next/link";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://the-gap-backend.onrender.com";
 const MAX_LENGTH = 280;
 
+type ExtractedDay = {
+  entry_date: string;
+  entry_count: number;
+  mood_score: number | null;
+  stress_event: number | null;
+  travel_event: number | null;
+  illness_event: number | null;
+  conflict_event: number | null;
+  big_win_event: number | null;
+  summary: string;
+};
+
 function getUserId(): string {
   if (typeof window === "undefined") return "";
   let id = localStorage.getItem("gap_user_id");
@@ -42,6 +54,8 @@ function timeAgo(iso: string): string {
 export default function JournalPage() {
   const [userId, setUserId] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [extracted, setExtracted] = useState<ExtractedDay[]>([]);
+  const [showExtracted, setShowExtracted] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [streak, setStreak] = useState(0);
@@ -57,14 +71,17 @@ export default function JournalPage() {
 
   async function loadToday(uid: string) {
     try {
-      const [entriesRes, streakRes] = await Promise.all([
+      const [entriesRes, streakRes, extractedRes] = await Promise.all([
         fetch(`${API_URL}/journal/${uid}/today`),
         fetch(`${API_URL}/journal/${uid}/streak`),
+        fetch(`${API_URL}/journal/${uid}/extracted?days=30`),
       ]);
       const entriesData = await entriesRes.json();
       const streakData = await streakRes.json();
+      const extractedData = await extractedRes.json();
       setEntries(entriesData.entries ?? []);
       setStreak(streakData.streak ?? 0);
+      setExtracted(extractedData.days ?? []);
     } catch {
       // silent — an empty list is a fine fallback here
     }
@@ -200,6 +217,86 @@ export default function JournalPage() {
             </div>
           )}
         </div>
+
+        {/* What Claude extracted */}
+        {extracted.length > 0 && (
+          <div className="mt-10">
+            <button
+              onClick={() => setShowExtracted((s) => !s)}
+              className="w-full flex items-center justify-between text-xs font-semibold mb-3 tracking-wide"
+              style={{ color: "#a2bcaf" }}
+            >
+              <span>WHAT CLAUDE EXTRACTED ({extracted.length} day{extracted.length !== 1 ? "s" : ""})</span>
+              <span>{showExtracted ? "▲" : "▼"}</span>
+            </button>
+
+            {showExtracted && (
+              <div className="space-y-2">
+                {extracted.map((d) => {
+                  const flags = [
+                    d.stress_event ? "stress" : null,
+                    d.travel_event ? "travel" : null,
+                    d.illness_event ? "illness" : null,
+                    d.conflict_event ? "conflict" : null,
+                    d.big_win_event ? "big win" : null,
+                  ].filter(Boolean) as string[];
+
+                  return (
+                    <div
+                      key={d.entry_date}
+                      className="rounded-xl px-4 py-3"
+                      style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-mono" style={{ color: "#a2bcaf" }}>
+                          {d.entry_date} · {d.entry_count} entr{d.entry_count !== 1 ? "ies" : "y"}
+                        </span>
+                        {d.mood_score !== null && (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full"
+                            style={{
+                              background:
+                                d.mood_score > 0.15
+                                  ? "rgba(52,211,153,0.1)"
+                                  : d.mood_score < -0.15
+                                  ? "rgba(248,113,113,0.1)"
+                                  : "rgba(162,188,175,0.1)",
+                              color:
+                                d.mood_score > 0.15
+                                  ? "#34d399"
+                                  : d.mood_score < -0.15
+                                  ? "#f87171"
+                                  : "#a2bcaf",
+                            }}
+                          >
+                            mood {d.mood_score > 0 ? "+" : ""}
+                            {d.mood_score.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm mb-2" style={{ color: "#eef3f0" }}>
+                        {d.summary || "—"}
+                      </p>
+                      {flags.length > 0 && (
+                        <div className="flex gap-1 flex-wrap">
+                          {flags.map((f) => (
+                            <span
+                              key={f}
+                              className="text-xs px-2 py-0.5 rounded-full"
+                              style={{ background: "rgba(201,168,76,0.1)", color: "#c9a84c" }}
+                            >
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

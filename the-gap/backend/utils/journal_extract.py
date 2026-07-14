@@ -18,7 +18,11 @@ import httpx
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
+# Haiku, not Sonnet — this is simple structured extraction from a handful of
+# short sentences, not a reasoning task. Haiku 4.5 is ~3x cheaper and plenty
+# capable for this; using a bigger model here would just burn money for no
+# quality benefit.
+MODEL = "claude-haiku-4-5-20251001"
 
 EXTRACTION_SYSTEM_PROMPT = """You extract structured daily signals from a user's short, informal journal notes for a health-analytics app. You will receive several short notes a person jotted down over one day.
 
