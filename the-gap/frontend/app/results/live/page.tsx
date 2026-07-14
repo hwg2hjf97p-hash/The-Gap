@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Activity, CircleDot, Route, Calendar, PenLine } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-backend.onrender.com";
 
@@ -10,7 +11,7 @@ const PROVIDERS = [
   {
     id: "whoop",
     name: "Whoop",
-    icon: "⚡",
+    Icon: Activity,
     description: "HRV, recovery score, sleep stages, strain",
     color: "#ff3c00",
     dataPoints: ["Heart Rate Variability", "Recovery Score", "Deep Sleep", "Strain"],
@@ -18,7 +19,7 @@ const PROVIDERS = [
   {
     id: "oura",
     name: "Oura Ring",
-    icon: "💍",
+    Icon: CircleDot,
     description: "Readiness, HRV, sleep stages, activity, temperature",
     color: "#6366f1",
     dataPoints: ["Readiness Score", "HRV", "Sleep Efficiency", "Body Temperature"],
@@ -26,7 +27,7 @@ const PROVIDERS = [
   {
     id: "strava",
     name: "Strava",
-    icon: "🏃",
+    Icon: Route,
     description: "Training load, workout intensity, activity type",
     color: "#fc4c02",
     dataPoints: ["Training Load", "Hard Sessions", "Weekly Volume", "Activity Type"],
@@ -34,7 +35,7 @@ const PROVIDERS = [
   {
     id: "google",
     name: "Google Calendar",
-    icon: "📅",
+    Icon: Calendar,
     description: "Meeting load, late meetings, busy-day patterns",
     color: "#34a853",
     dataPoints: ["Meeting Hours", "Late Meetings", "Calendar Density", "Free Days"],
@@ -223,7 +224,7 @@ function ConnectContent() {
         )}
 
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <div
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono mb-4"
             style={{ background: "#132c1f", color: "#34d399", border: "1px solid #1a3d2b" }}
@@ -237,14 +238,32 @@ function ConnectContent() {
             Connect your devices once. The Gap pulls fresh data every day and
             updates your causal insights automatically — no uploads needed.
           </p>
-          <Link
-            href="/journal"
-            className="inline-flex items-center gap-1 mt-4 text-sm font-medium"
-            style={{ color: "#c9a84c" }}
-          >
-            📝 Quick Entry — log a moment →
-          </Link>
         </div>
+
+        {/* Quick Entry — deliberately big and bordered so it isn't missed */}
+        <Link
+          href="/journal"
+          className="flex items-center gap-4 rounded-2xl p-5 mb-8 transition-all hover:opacity-90"
+          style={{ background: "#1a1610", border: "2px solid #c9a84c" }}
+        >
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "#0a1710", border: "1px solid #c9a84c66" }}
+          >
+            <PenLine size={24} color="#c9a84c" strokeWidth={2} />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold" style={{ color: "#eef3f0" }}>
+              Quick Entry
+            </p>
+            <p className="text-sm" style={{ color: "#a2bcaf" }}>
+              Log a moment in a few words — it feeds straight into your insights.
+            </p>
+          </div>
+          <span className="text-xl flex-shrink-0" style={{ color: "#c9a84c" }}>
+            →
+          </span>
+        </Link>
 
         {/* Provider cards */}
         <div className="space-y-4 mb-8">
@@ -262,10 +281,10 @@ function ConnectContent() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-4">
                     <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                      style={{ background: "#0a1710" }}
+                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: "#0a1710", border: `1px solid ${provider.color}33` }}
                     >
-                      {provider.icon}
+                      <provider.Icon size={24} color={provider.color} strokeWidth={2} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
