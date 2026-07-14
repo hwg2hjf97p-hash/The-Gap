@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Settings as SettingsIcon, PenLine } from "lucide-react";
+import { Settings as SettingsIcon, PenLine, RefreshCw } from "lucide-react";
 import { getUserId, getDisplayName } from "../../../lib/identity";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-backend.onrender.com";
@@ -17,6 +18,14 @@ type SnapshotMetric = {
   recent: number[];
 };
 
+type RawSignal = {
+  description: string;
+  r: number;
+  direction: "positive" | "negative";
+  n: number;
+  strength_label: "moderate" | "strong";
+};
+
 type Experiment = {
   id: string;
   treatment_label: string;
@@ -29,7 +38,7 @@ type Experiment = {
 type LatestResults = {
   found: boolean;
   insights?: unknown[];
-  snapshot?: { latest: SnapshotMetric[]; raw_signals: unknown[] };
+  snapshot?: { latest: SnapshotMetric[]; raw_signals: RawSignal[] };
   experiments?: Experiment[];
   data_period_days?: number;
 };
@@ -64,41 +73,81 @@ function greeting(): string {
   return "Good evening";
 }
 
-export default function HomeDashboard() {
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [userId, setUserId] = useState("");
   const [displayName, setDisplayNameState] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [hasAnyConnection, setHasAnyConnection] = useState<boolean | null>(null);
   const [results, setResults] = useState<LatestResults | null>(null);
   const [weekCount, setWeekCount] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     const id = getUserId();
     setUserId(id);
     setDisplayNameState(getDisplayName());
-    loadDashboard(id);
+
+    const success = searchParams.get("success");
+    const provider = searchParams.get("provider");
+    const error = searchParams.get("error");
+
+    if (success && provider) {
+      setToast(`${provider.charAt(0).toUpperCase() + provider.slice(1)} connected — running your analysis…`);
+      router.replace("/results/live");
+      loadDashboard(id, /* forceRefresh */ true);
+      setTimeout(() => setToast(null), 4000);
+    } else if (error) {
+      setToast(`Connection failed: ${error}. Please try again.`);
+      router.replace("/results/live");
+      loadDashboard(id, false);
+      setTimeout(() => setToast(null), 4000);
+    } else {
+      loadDashboard(id, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadDashboard(uid: string) {
+  async function loadDashboard(uid: string, forceRefresh: boolean) {
     setLoading(true);
     try {
-      const [statusRes, resultsRes, weekRes] = await Promise.all([
-        fetch(`${API_URL}/connect/status/${uid}`),
+      const statusRes = await fetch(`${API_URL}/connect/status/${uid}`);
+      const statusData = await statusRes.json();
+      const connectedCount = (statusData.connected ?? []).length;
+      setHasAnyConnection(connectedCount > 0);
+
+      if (connectedCount > 0 && forceRefresh) {
+        // Actually run the analysis — a GET of "latest" alone would just
+        // return whatever was last saved, which may be stale or nonexistent.
+        setRefreshing(true);
+        try {
+          await fetch(`${API_URL}/sync/user/${uid}`, { method: "POST" });
+        } catch {
+          // fall through — we'll still show whatever's already saved
+        } finally {
+          setRefreshing(false);
+        }
+      }
+
+      const [resultsRes, weekRes] = await Promise.all([
         fetch(`${API_URL}/results/latest/${uid}`),
         fetch(`${API_URL}/journal/${uid}/week`),
       ]);
-      const statusData = await statusRes.json();
-      const resultsData = await resultsRes.json();
+      setResults(await resultsRes.json());
       const weekData = await weekRes.json();
-
-      setHasAnyConnection((statusData.connected ?? []).length > 0);
-      setResults(resultsData);
       setWeekCount(weekData.count ?? 0);
     } catch {
       setHasAnyConnection(false);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleManualRefresh() {
+    if (!userId || refreshing) return;
+    await loadDashboard(userId, true);
   }
 
   if (loading) {
@@ -109,7 +158,6 @@ export default function HomeDashboard() {
     );
   }
 
-  // Onboarding state — nothing connected yet
   if (!hasAnyConnection) {
     return (
       <div className="min-h-screen px-5 py-10" style={{ background: "#0a1710" }}>
@@ -139,9 +187,18 @@ export default function HomeDashboard() {
   const insightsCount = results?.insights?.length ?? 0;
   const experiments = results?.experiments ?? [];
   const metrics = results?.snapshot?.latest ?? [];
+  const rawSignals = results?.snapshot?.raw_signals ?? [];
 
   return (
     <div className="min-h-screen" style={{ background: "#0a1710" }}>
+      {toast && (
+        <div
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm max-w-[90%] text-center"
+          style={{ background: "#132c1f", border: "1px solid #34d399", color: "#eef3f0" }}
+        >
+          {toast}
+        </div>
+      )}
       <div className="max-w-lg mx-auto px-5 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -153,14 +210,31 @@ export default function HomeDashboard() {
               {displayName || "there"}
             </h1>
           </div>
-          <Link
-            href="/settings"
-            className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
-          >
-            <SettingsIcon size={20} color="#a2bcaf" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+              title="Refresh insights"
+            >
+              <RefreshCw size={18} color="#a2bcaf" className={refreshing ? "animate-spin" : ""} />
+            </button>
+            <Link
+              href="/settings"
+              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+            >
+              <SettingsIcon size={20} color="#a2bcaf" />
+            </Link>
+          </div>
         </div>
+
+        {refreshing && (
+          <p className="text-xs text-center mb-4" style={{ color: "#a2bcaf" }}>
+            Running your analysis — this can take up to a minute…
+          </p>
+        )}
 
         {/* Weekly stats strip */}
         <div className="rounded-2xl p-5 mb-6" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
@@ -225,6 +299,32 @@ export default function HomeDashboard() {
           </div>
         )}
 
+        {/* Raw patterns we're watching (restored) */}
+        {rawSignals.length > 0 && (
+          <div
+            className="rounded-2xl p-4 mb-6"
+            style={{ background: "#0f1f17", border: "1px dashed #2a4d3a" }}
+          >
+            <p className="text-xs mb-3" style={{ color: "#a2bcaf" }}>
+              Raw patterns we&apos;re watching — not yet causally tested (needs 30+ days for that)
+            </p>
+            <div className="space-y-2">
+              {rawSignals.map((s, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span style={{ color: "#eef3f0" }}>{s.description}</span>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-2"
+                    style={{ background: "rgba(201,168,76,0.1)", color: "#c9a84c" }}
+                  >
+                    {s.strength_label} {s.direction === "positive" ? "+" : "−"}
+                    {Math.abs(s.r)} (n={s.n})
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Quick Entry CTA */}
         <Link
           href="/journal"
@@ -286,5 +386,19 @@ export default function HomeDashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function HomeDashboard() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a1710" }}>
+          <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }
