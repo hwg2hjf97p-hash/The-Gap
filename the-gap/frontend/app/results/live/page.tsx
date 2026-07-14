@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-backend.onrender.com";
 
@@ -236,6 +237,13 @@ function ConnectContent() {
             Connect your devices once. The Gap pulls fresh data every day and
             updates your causal insights automatically — no uploads needed.
           </p>
+          <Link
+            href="/journal"
+            className="inline-flex items-center gap-1 mt-4 text-sm font-medium"
+            style={{ color: "#c9a84c" }}
+          >
+            📝 Quick Entry — log a moment →
+          </Link>
         </div>
 
         {/* Provider cards */}

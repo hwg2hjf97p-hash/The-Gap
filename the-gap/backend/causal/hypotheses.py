@@ -371,4 +371,38 @@ HYPOTHESES: list[Hypothesis] = [
     # 28. Afternoon caffeine → Deep sleep (already exists as caffeine_sleep)
     # 29. Alcohol flag → HRV (already exists as alcohol_hrv)
     # These reuse existing hypotheses when check-in data is merged in
+
+    # ── QUICK ENTRY (JOURNAL) ────────────────────────────────────────────
+    # Derived from short, informal notes via LLM extraction — see
+    # utils/journal_extract.py. min_treated_days set lower than the
+    # check-in hypotheses (10) since this is a newer, lower-volume input
+    # channel; worth revisiting upward once entries are more common.
+
+    # 30. Stress-event day → Next-day HRV
+    Hypothesis(
+        id="journal_stress_hrv",
+        treatment_col="stress_event",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=5,
+        treatment_label="Day with a journaled stress event",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+
+    # 31. Conflict-event day → Same-night sleep duration
+    Hypothesis(
+        id="journal_conflict_sleep",
+        treatment_col="conflict_event",
+        outcome_col="sleep_total_min",
+        covariate_cols=["hrv_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=5,
+        treatment_label="Day with a journaled conflict/argument",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
 ]

@@ -24,6 +24,8 @@ from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from utils.data_cleaning import clean_dataframe
 from utils.snapshot import build_snapshot
 from causal.engine import run_all_hypotheses
+from routers.checkin import get_checkin_dataframe
+from routers.journal import get_journal_dataframe
 
 # Optional imports — don't crash if these aren't ready yet
 try:
@@ -256,6 +258,27 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     # Merge calendar if available
     if calendar_df is not None and not calendar_df.empty and merge_calendar_into_health is not None:
         health_df = merge_calendar_into_health(health_df, calendar_df)
+
+    # Merge daily check-ins (alcohol, caffeine, stress score) — this was
+    # collected all along but never actually reached the causal engine
+    # until now, so hypotheses like alcohol_hrv had no data to run against.
+    try:
+        health_df.index = pd.to_datetime(health_df.index)
+        checkin_df = get_checkin_dataframe(user_id)
+        if checkin_df is not None and not checkin_df.empty:
+            checkin_df.index = pd.to_datetime(checkin_df.index)
+            health_df = health_df.join(checkin_df, how="left")
+    except Exception as exc:
+        logger.warning("Check-in merge failed (continuing without it): %s", exc)
+
+    # Merge Quick Entry signals (mood, stress, travel, illness, conflict)
+    try:
+        journal_df = await get_journal_dataframe(user_id)
+        if journal_df is not None and not journal_df.empty:
+            journal_df.index = pd.to_datetime(journal_df.index)
+            health_df = health_df.join(journal_df, how="left")
+    except Exception as exc:
+        logger.warning("Journal merge failed (continuing without it): %s", exc)
 
     # Run causal engine
     try:
