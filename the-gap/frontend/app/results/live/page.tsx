@@ -43,6 +43,145 @@ type LatestResults = {
   data_period_days?: number;
 };
 
+type MetricInfo = {
+  label: string;
+  explanation: string;
+  whyItMatters: string;
+  comparisonLabel: string; // e.g. "Typical adult range" or "Whoop's scoring bands"
+  comparisonText: string;
+  goodDirection: string;
+};
+
+const METRIC_INFO: Record<string, MetricInfo> = {
+  hrv: {
+    label: "Heart Rate Variability",
+    explanation:
+      "The variation in time between each heartbeat — not your heart rate itself, but how much it naturally speeds up and slows down moment to moment.",
+    whyItMatters:
+      "Higher HRV generally means your nervous system is well-rested and able to adapt to stress. It tends to drop after poor sleep, illness, alcohol, or high stress, and recover as your body bounces back.",
+    comparisonLabel: "Typical adult range",
+    comparisonText:
+      "20–80ms is common, but this varies hugely by age, fitness, and genetics — there's no single 'normal' number. What matters most is your own trend over time, not comparing to someone else's.",
+    goodDirection: "Higher is generally better",
+  },
+  resting_hr: {
+    label: "Resting Heart Rate",
+    explanation:
+      "How many times your heart beats per minute while you're fully at rest, usually measured overnight.",
+    whyItMatters:
+      "A lower resting heart rate often reflects better cardiovascular fitness. It tends to rise temporarily with stress, illness, dehydration, or poor sleep.",
+    comparisonLabel: "Typical adult range",
+    comparisonText:
+      "60–100 bpm is considered typical for adults; well-trained athletes often sit lower, around 40–60 bpm.",
+    goodDirection: "Lower is generally better",
+  },
+  sleep_total_min: {
+    label: "Sleep Duration",
+    explanation: "Total time spent asleep, not counting time lying awake in bed.",
+    whyItMatters:
+      "Sleep is when most physical recovery happens. Consistently falling short of your body's need shows up in worse next-day HRV, mood, and focus.",
+    comparisonLabel: "General guidance",
+    comparisonText: "7–9 hours per night is the commonly recommended range for adults.",
+    goodDirection: "More (within reason) is generally better",
+  },
+  recovery_score: {
+    label: "Recovery Score",
+    explanation:
+      "Whoop's own 0–100 score estimating how ready your body is to take on strain today, based on your HRV, resting heart rate, and sleep.",
+    whyItMatters:
+      "It's a proprietary composite, not an independent medical measurement — think of it as Whoop's summary judgment, useful for spotting your own patterns over time.",
+    comparisonLabel: "Whoop's scoring bands",
+    comparisonText: "0–33 is considered low, 34–66 medium, 67–100 high, per Whoop's own scoring system.",
+    goodDirection: "Higher is generally better",
+  },
+  sleep_score: {
+    label: "Sleep Performance",
+    explanation:
+      "Whoop's estimate of the percentage of your body's actual sleep need that you got last night.",
+    whyItMatters:
+      "A proprietary score, not an independent measurement — 100% means you got as much sleep as Whoop estimates your body needed, not necessarily a 'perfect' night.",
+    comparisonLabel: "Whoop's scoring bands",
+    comparisonText: "Whoop generally treats 70%+ as adequate, with higher being better toward 100%.",
+    goodDirection: "Higher is generally better",
+  },
+  steps: {
+    label: "Steps",
+    explanation: "Total steps walked or run during the day, from your connected device.",
+    whyItMatters:
+      "General daily movement is linked to better mood, energy, and cardiovascular health independent of formal exercise.",
+    comparisonLabel: "General guidance",
+    comparisonText: "7,000–10,000 steps/day is a commonly cited general target for adults.",
+    goodDirection: "More is generally better",
+  },
+};
+
+function MetricInfoModal({ metric, value, unit, onClose }: { metric: SnapshotMetric; value: number; unit: string; onClose: () => void }) {
+  const info = METRIC_INFO[metric.metric];
+  if (!info) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4"
+      style={{ background: "rgba(0,0,0,0.6)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] overflow-y-auto"
+        style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold" style={{ color: "#eef3f0" }}>
+            {info.label}
+          </h3>
+          <button onClick={onClose} className="text-2xl leading-none" style={{ color: "#a2bcaf" }}>
+            ×
+          </button>
+        </div>
+
+        <div className="flex items-baseline gap-2 mb-6">
+          <span className="text-4xl font-bold" style={{ color: "#eef3f0" }}>
+            {value}
+          </span>
+          <span className="text-sm" style={{ color: "#a2bcaf" }}>
+            {unit} · your latest reading
+          </span>
+        </div>
+
+        <div className="mb-5">
+          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#c9a84c" }}>
+            WHAT IT IS
+          </p>
+          <p className="text-sm" style={{ color: "#eef3f0" }}>
+            {info.explanation}
+          </p>
+        </div>
+
+        <div className="mb-5">
+          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#c9a84c" }}>
+            WHY IT MATTERS
+          </p>
+          <p className="text-sm" style={{ color: "#eef3f0" }}>
+            {info.whyItMatters}
+          </p>
+        </div>
+
+        <div className="rounded-2xl p-4" style={{ background: "#0f1f17", border: "1px solid #1a3d2b" }}>
+          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#a2bcaf" }}>
+            {info.comparisonLabel.toUpperCase()}
+          </p>
+          <p className="text-sm mb-2" style={{ color: "#eef3f0" }}>
+            {info.comparisonText}
+          </p>
+          <p className="text-xs" style={{ color: "#5c7568" }}>
+            {info.goodDirection} — but your own trend over time matters more than any single reading.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   if (!values || values.length < 2) {
     return <div style={{ height: 32 }} />;
@@ -84,6 +223,7 @@ function HomeContent() {
   const [results, setResults] = useState<LatestResults | null>(null);
   const [weekCount, setWeekCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<SnapshotMetric | null>(null);
 
   useEffect(() => {
     const id = getUserId();
@@ -275,11 +415,17 @@ function HomeContent() {
             {metrics.map((m) => {
               const color =
                 m.is_improving === null ? "#c9a84c" : m.is_improving ? "#34d399" : "#f87171";
+              const hasInfo = !!METRIC_INFO[m.metric];
               return (
-                <div
+                <button
                   key={m.metric}
-                  className="rounded-2xl p-4"
-                  style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                  onClick={() => hasInfo && setSelectedMetric(m)}
+                  className="rounded-2xl p-4 text-left"
+                  style={{
+                    background: "#132c1f",
+                    border: "1px solid #1a3d2b",
+                    cursor: hasInfo ? "pointer" : "default",
+                  }}
                 >
                   <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
@@ -291,9 +437,10 @@ function HomeContent() {
                   </div>
                   <p className="text-xs mb-2" style={{ color: "#a2bcaf" }}>
                     {m.label}
+                    {hasInfo && <span style={{ color: "#5c7568" }}> · tap for details</span>}
                   </p>
                   <Sparkline values={m.recent} color={color} />
-                </div>
+                </button>
               );
             })}
           </div>
@@ -385,6 +532,15 @@ function HomeContent() {
           </div>
         )}
       </div>
+
+      {selectedMetric && (
+        <MetricInfoModal
+          metric={selectedMetric}
+          value={selectedMetric.value}
+          unit={selectedMetric.unit}
+          onClose={() => setSelectedMetric(null)}
+        />
+      )}
     </div>
   );
 }
