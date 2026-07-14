@@ -85,6 +85,10 @@ def build_snapshot(df: pd.DataFrame) -> dict:
         if trend != "flat":
             went_up = trend == "up"
             is_improving = went_up if meta["higher_is_better"] else not went_up
+        recent = [
+            round(v / divide_by, 1) if divide_by != 1 else round(float(v), 1)
+            for v in clean.tail(7).tolist()
+        ]
         latest_cards.append(
             {
                 "metric": col,
@@ -93,6 +97,7 @@ def build_snapshot(df: pd.DataFrame) -> dict:
                 "unit": meta["unit"],
                 "trend": trend,
                 "is_improving": is_improving,
+                "recent": recent,
             }
         )
 

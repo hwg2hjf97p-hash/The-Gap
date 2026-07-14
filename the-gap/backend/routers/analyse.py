@@ -254,3 +254,18 @@ async def get_results(session_id: str) -> JSONResponse:
             },
         )
     return JSONResponse(content=row)
+
+
+@router.get("/results/latest/{user_id}")
+async def get_latest_results_endpoint(user_id: str) -> JSONResponse:
+    """
+    Retrieve a user's most recent analysis without needing a session_id —
+    this is what the Home dashboard calls on every load, since a session_id
+    is only ever known right after analysis runs, not on a later visit.
+    """
+    from db.supabase_client import get_latest_results
+
+    row = get_latest_results(user_id)
+    if row is None:
+        return JSONResponse(content={"found": False})
+    return JSONResponse(content={"found": True, **row})

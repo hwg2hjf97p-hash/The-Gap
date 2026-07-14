@@ -29,7 +29,46 @@ MIN_EFFECT = {
 DEFAULT_MIN_EFFECT = 0.5
 
 
-def run_all_hypotheses(df: pd.DataFrame) -> list[Insight]:
+def get_experiments_in_progress(df: pd.DataFrame) -> list[dict]:
+    """
+    For every hypothesis that doesn't yet have enough data to run, report
+    how close it is — this is what powers the "Running on you" progress
+    list (e.g. "Day 4 of 14"). Uses the exact same sufficiency check as
+    _run_one, so this never claims something is "in progress" when it's
+    actually already been tested (or never will be, for lack of a
+    connected data source).
+    """
+    experiments = []
+    for hyp in HYPOTHESES:
+        required = [hyp.treatment_col, hyp.outcome_col] + (hyp.covariate_cols or [])
+        if any(c not in df.columns for c in required):
+            continue  # no relevant data source connected at all — nothing to show
+
+        cols = list({hyp.treatment_col, hyp.outcome_col, *(hyp.covariate_cols or [])})
+        sub = df[cols].dropna()
+
+        if hyp.binary_treatment:
+            current = int(sub[hyp.treatment_col].sum())
+            required_n = hyp.min_treated_days
+        else:
+            current = len(sub)
+            required_n = hyp.min_rows
+
+        if current >= required_n:
+            continue  # already sufficient — will surface as an insight instead
+
+        experiments.append({
+            "id": hyp.id,
+            "treatment_label": hyp.treatment_label,
+            "outcome_label": hyp.outcome_label,
+            "category": hyp.category,
+            "current": current,
+            "required": required_n,
+        })
+
+    # Closest-to-done first — most encouraging order to show someone
+    experiments.sort(key=lambda e: (e["required"] - e["current"]))
+    return experiments
     """
     Iterate over every pre-defined hypothesis.
     Skip those with insufficient data or near-zero effects.

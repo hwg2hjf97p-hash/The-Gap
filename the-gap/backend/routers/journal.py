@@ -117,6 +117,27 @@ async def get_today_entries(user_id: str) -> JSONResponse:
         return JSONResponse(content={"entries": []})
 
 
+@router.get("/{user_id}/week")
+async def get_week_count(user_id: str) -> JSONResponse:
+    """Count of quick entries in the last 7 days — powers the Home dashboard stat."""
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("quick_entries"),
+                headers=_sb_headers(),
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "created_at": f"gte.{since}",
+                    "select": "id",
+                },
+            )
+            resp.raise_for_status()
+            return JSONResponse(content={"count": len(resp.json() or [])})
+    except Exception:
+        return JSONResponse(content={"count": 0})
+
+
 @router.get("/{user_id}/streak")
 async def get_streak_endpoint(user_id: str) -> JSONResponse:
     streak = await _get_streak(user_id)

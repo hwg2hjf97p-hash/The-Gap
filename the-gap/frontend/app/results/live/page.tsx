@@ -1,72 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Activity, CircleDot, Route, Calendar, PenLine } from "lucide-react";
+import { Settings as SettingsIcon, PenLine } from "lucide-react";
+import { getUserId, getDisplayName } from "../../../lib/identity";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-backend.onrender.com";
-
-const PROVIDERS = [
-  {
-    id: "whoop",
-    name: "Whoop",
-    Icon: Activity,
-    description: "HRV, recovery score, sleep stages, strain",
-    color: "#ff3c00",
-    dataPoints: ["Heart Rate Variability", "Recovery Score", "Deep Sleep", "Strain"],
-  },
-  {
-    id: "oura",
-    name: "Oura Ring",
-    Icon: CircleDot,
-    description: "Readiness, HRV, sleep stages, activity, temperature",
-    color: "#6366f1",
-    dataPoints: ["Readiness Score", "HRV", "Sleep Efficiency", "Body Temperature"],
-  },
-  {
-    id: "strava",
-    name: "Strava",
-    Icon: Route,
-    description: "Training load, workout intensity, activity type",
-    color: "#fc4c02",
-    dataPoints: ["Training Load", "Hard Sessions", "Weekly Volume", "Activity Type"],
-  },
-  {
-    id: "google",
-    name: "Google Calendar",
-    Icon: Calendar,
-    description: "Meeting load, late meetings, busy-day patterns",
-    color: "#34a853",
-    dataPoints: ["Meeting Hours", "Late Meetings", "Calendar Density", "Free Days"],
-  },
-];
-
-function getUserId(): string {
-  if (typeof window === "undefined") return "";
-  let id = localStorage.getItem("gap_user_id");
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem("gap_user_id", id);
-  }
-  return id;
-}
-
-type Insight = {
-  hypothesis_id: string;
-  title: string;
-  headline: string;
-  body: string;
-  metric_delta: string;
-  metric_unit: string;
-  metric_direction: "positive" | "negative";
-  treatment_label: string;
-  outcome_label: string;
-  confidence: string;
-  confidence_label: string;
-  confidence_description: string;
-  actionable_tip?: string;
-};
 
 type SnapshotMetric = {
   metric: string;
@@ -75,518 +14,277 @@ type SnapshotMetric = {
   unit: string;
   trend: "up" | "down" | "flat";
   is_improving: boolean | null;
+  recent: number[];
 };
 
-type RawSignal = {
-  description: string;
-  r: number;
-  direction: "positive" | "negative";
-  n: number;
-  strength_label: "moderate" | "strong";
+type Experiment = {
+  id: string;
+  treatment_label: string;
+  outcome_label: string;
+  category: string;
+  current: number;
+  required: number;
 };
 
-type Snapshot = {
-  days_of_data: number;
-  latest: SnapshotMetric[];
-  raw_signals: RawSignal[];
-};
-
-type ResultsData = {
-  insights: Insight[];
-  data_source?: string;
+type LatestResults = {
+  found: boolean;
+  insights?: unknown[];
+  snapshot?: { latest: SnapshotMetric[]; raw_signals: unknown[] };
+  experiments?: Experiment[];
   data_period_days?: number;
-  snapshot?: Snapshot;
 };
 
-function ConnectContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [connected, setConnected] = useState<string[]>([]);
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  if (!values || values.length < 2) {
+    return <div style={{ height: 32 }} />;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const w = 100;
+  const h = 32;
+  const points = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * w;
+      const y = h - ((v - min) / range) * (h - 4) - 2;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 32 }} preserveAspectRatio="none">
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+export default function HomeDashboard() {
+  const [userId, setUserId] = useState("");
+  const [displayName, setDisplayNameState] = useState("");
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [results, setResults] = useState<ResultsData | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-
-  const userId = typeof window !== "undefined" ? getUserId() : "";
+  const [hasAnyConnection, setHasAnyConnection] = useState<boolean | null>(null);
+  const [results, setResults] = useState<LatestResults | null>(null);
+  const [weekCount, setWeekCount] = useState(0);
 
   useEffect(() => {
-    // Handle OAuth callback result
-    const success = searchParams.get("success");
-    const error = searchParams.get("error");
-    const provider = searchParams.get("provider");
+    const id = getUserId();
+    setUserId(id);
+    setDisplayNameState(getDisplayName());
+    loadDashboard(id);
+  }, []);
 
-    if (success && provider) {
-      setToast({ msg: `${provider.charAt(0).toUpperCase() + provider.slice(1)} connected successfully.`, type: "success" });
-      // Clean the success/provider params out of the URL, then auto-run analysis
-      router.replace(`/results/live?user_id=${getUserId()}`);
-      setTimeout(() => {
-        handleRunAnalysis();
-      }, 1200);
-    } else if (error) {
-      setToast({ msg: `Connection failed: ${error}. Please try again.`, type: "error" });
-    }
-
-    // Auto-dismiss toast
-    if (success || error) {
-      setTimeout(() => setToast(null), 4000);
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (!userId) return;
-    fetch(`${API_URL}/connect/status/${userId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setConnected((data.connected || []).map((c: { provider: string }) => c.provider));
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [userId]);
-
-  function handleConnect(provider: string) {
-    const url = `${API_URL}/connect/${provider}?user_id=${encodeURIComponent(userId)}`;
-    window.location.href = url;
-  }
-
-  async function handleDisconnect(provider: string) {
+  async function loadDashboard(uid: string) {
+    setLoading(true);
     try {
-      await fetch(`${API_URL}/connect/${provider}/${userId}`, { method: "DELETE" });
-      setConnected((prev) => prev.filter((p) => p !== provider));
-      setToast({ msg: `${provider} disconnected.`, type: "success" });
-      setTimeout(() => setToast(null), 3000);
-    } catch {
-      setToast({ msg: "Could not disconnect. Please try again.", type: "error" });
-    }
-  }
-
-  async function handleRunAnalysis() {
-    if (!userId) return;
-    setAnalyzing(true);
-    setAnalysisError(null);
-    setResults(null);
-    try {
-      const syncRes = await fetch(`${API_URL}/sync/user/${userId}`, { method: "POST" });
-      const syncData = await syncRes.json();
-
-      if (!syncRes.ok) {
-        const msg =
-          (typeof syncData?.detail === "string" && syncData.detail) ||
-          syncData?.detail?.message ||
-          "Analysis failed. Please try again.";
-        setAnalysisError(msg);
-        setAnalyzing(false);
-        return;
-      }
-
-      const sessionId = syncData.session_id;
-      if (!sessionId) {
-        setAnalysisError("Analysis completed but no results were returned. Please try again.");
-        setAnalyzing(false);
-        return;
-      }
-
-      const resultsRes = await fetch(`${API_URL}/results/${sessionId}`);
+      const [statusRes, resultsRes, weekRes] = await Promise.all([
+        fetch(`${API_URL}/connect/status/${uid}`),
+        fetch(`${API_URL}/results/latest/${uid}`),
+        fetch(`${API_URL}/journal/${uid}/week`),
+      ]);
+      const statusData = await statusRes.json();
       const resultsData = await resultsRes.json();
-      if (!resultsRes.ok) {
-        setAnalysisError("Analysis completed, but we couldn't load your results. Please try again.");
-        setAnalyzing(false);
-        return;
-      }
+      const weekData = await weekRes.json();
 
+      setHasAnyConnection((statusData.connected ?? []).length > 0);
       setResults(resultsData);
+      setWeekCount(weekData.count ?? 0);
     } catch {
-      setAnalysisError("Couldn't reach the server. Please check your connection and try again.");
+      setHasAnyConnection(false);
     } finally {
-      setAnalyzing(false);
+      setLoading(false);
     }
   }
 
-  const hasAnyConnected = connected.length > 0;
-  const hasHealthSource = connected.includes("whoop") || connected.includes("oura");
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a1710" }}>
+        <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
+      </div>
+    );
+  }
+
+  // Onboarding state — nothing connected yet
+  if (!hasAnyConnection) {
+    return (
+      <div className="min-h-screen px-5 py-10" style={{ background: "#0a1710" }}>
+        <div className="max-w-lg mx-auto text-center pt-16">
+          <p className="text-xs font-mono tracking-widest mb-3" style={{ color: "#c9a84c" }}>
+            PERSONAL CAUSAL INTELLIGENCE
+          </p>
+          <h1 className="text-3xl font-bold mb-3" style={{ color: "#eef3f0" }}>
+            Let&apos;s connect your first data source
+          </h1>
+          <p className="text-sm mb-8" style={{ color: "#a2bcaf" }}>
+            Your dashboard fills in automatically once something&apos;s connected —
+            Whoop, Oura, or your calendar all work.
+          </p>
+          <Link
+            href="/settings"
+            className="inline-block px-8 py-3 rounded-xl font-semibold text-sm"
+            style={{ background: "#34d399", color: "#0a1710" }}
+          >
+            Connect a data source →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const insightsCount = results?.insights?.length ?? 0;
+  const experiments = results?.experiments ?? [];
+  const metrics = results?.snapshot?.latest ?? [];
 
   return (
-    <div className="min-h-screen px-4 py-16">
-      <div className="max-w-2xl mx-auto">
-
-        {/* Toast */}
-        {toast && (
-          <div
-            className="fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl text-sm font-medium z-50 shadow-lg"
-            style={{
-              background: toast.type === "success" ? "#132c1f" : "rgba(201,68,68,0.15)",
-              color: toast.type === "success" ? "#34d399" : "#f87171",
-              border: `1px solid ${toast.type === "success" ? "#1a3d2b" : "rgba(201,68,68,0.3)"}`,
-            }}
-          >
-            {toast.msg}
-          </div>
-        )}
-
+    <div className="min-h-screen" style={{ background: "#0a1710" }}>
+      <div className="max-w-lg mx-auto px-5 py-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono mb-4"
-            style={{ background: "#132c1f", color: "#34d399", border: "1px solid #1a3d2b" }}
-          >
-            ✦ Passive mode — connect once, insights update daily
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight mb-3" style={{ color: "#eef3f0" }}>
-            Connect your data sources
-          </h1>
-          <p style={{ color: "#a2bcaf" }}>
-            Connect your devices once. The Gap pulls fresh data every day and
-            updates your causal insights automatically — no uploads needed.
-          </p>
-        </div>
-
-        {/* Quick Entry — deliberately big and bordered so it isn't missed */}
-        <Link
-          href="/journal"
-          className="flex items-center gap-4 rounded-2xl p-5 mb-8 transition-all hover:opacity-90"
-          style={{ background: "#1a1610", border: "2px solid #c9a84c" }}
-        >
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: "#0a1710", border: "1px solid #c9a84c66" }}
-          >
-            <PenLine size={24} color="#c9a84c" strokeWidth={2} />
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold" style={{ color: "#eef3f0" }}>
-              Quick Entry
-            </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
             <p className="text-sm" style={{ color: "#a2bcaf" }}>
-              Log a moment in a few words — it feeds straight into your insights.
+              {greeting()},
             </p>
+            <h1 className="text-3xl font-bold" style={{ color: "#eef3f0" }}>
+              {displayName || "there"}
+            </h1>
           </div>
-          <span className="text-xl flex-shrink-0" style={{ color: "#c9a84c" }}>
-            →
-          </span>
-        </Link>
-
-        {/* Provider cards */}
-        <div className="space-y-4 mb-8">
-          {PROVIDERS.map((provider) => {
-            const isConnected = connected.includes(provider.id);
-            return (
-              <div
-                key={provider.id}
-                className="rounded-2xl p-6 transition-all"
-                style={{
-                  background: isConnected ? "#132c1f" : "#0f1f17",
-                  border: `1px solid ${isConnected ? "#34d399" : "#1a3d2b"}`,
-                }}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: "#0a1710", border: `1px solid ${provider.color}33` }}
-                    >
-                      <provider.Icon size={24} color={provider.color} strokeWidth={2} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold" style={{ color: "#eef3f0" }}>
-                          {provider.name}
-                        </h3>
-                        {isConnected && (
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={{ background: "rgba(52,211,153,0.1)", color: "#34d399" }}
-                          >
-                            Connected
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm mb-3" style={{ color: "#a2bcaf" }}>
-                        {provider.description}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {provider.dataPoints.map((dp) => (
-                          <span
-                            key={dp}
-                            className="text-xs px-2 py-1 rounded-lg"
-                            style={{ background: "#0a1710", color: "#a2bcaf" }}
-                          >
-                            {dp}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 flex-shrink-0">
-                    {isConnected ? (
-                      <button
-                        onClick={() => handleDisconnect(provider.id)}
-                        className="px-4 py-2 rounded-lg text-sm transition-all"
-                        style={{
-                          background: "transparent",
-                          color: "#a2bcaf",
-                          border: "1px solid #1a3d2b",
-                        }}
-                      >
-                        Disconnect
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleConnect(provider.id)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                        style={{
-                          background: "#34d399",
-                          color: "#0a1710",
-                        }}
-                      >
-                        Connect →
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Run analysis CTA / loading / error / results */}
-        {(hasHealthSource || analyzing || analysisError) && !results && (
-          <div
-            className="rounded-2xl p-6 text-center"
+          <Link
+            href="/settings"
+            className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
           >
-            {analyzing ? (
-              <>
-                <div
-                  className="w-6 h-6 mx-auto mb-3 border-2 rounded-full animate-spin"
-                  style={{ borderColor: "#34d399", borderTopColor: "transparent" }}
-                />
-                <p className="font-medium mb-1" style={{ color: "#eef3f0" }}>
-                  Running your analysis…
-                </p>
-                <p className="text-sm" style={{ color: "#a2bcaf" }}>
-                  Pulling your data and testing it against known patterns. This can take up to a minute.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium mb-1" style={{ color: "#eef3f0" }}>
-                  Ready to analyse
-                </p>
-                <p className="text-sm mb-4" style={{ color: "#a2bcaf" }}>
-                  {connected.length} source{connected.length !== 1 ? "s" : ""} connected
-                  {connected.includes("google") ? " including calendar" : ""} —
-                  your insights update automatically every morning.
-                </p>
-                {analysisError && (
-                  <p className="text-sm mb-4" style={{ color: "#f87171" }}>
-                    {analysisError}
-                  </p>
-                )}
-                <button
-                  onClick={handleRunAnalysis}
-                  className="px-8 py-3 rounded-xl font-semibold text-sm"
-                  style={{ background: "#34d399", color: "#0a1710" }}
-                >
-                  {analysisError ? "Try again →" : "Run analysis now →"}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Results */}
-        {results && (
-          <div className="mt-2">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
-                  Your insights
-                </h2>
-                {results.data_period_days ? (
-                  <p className="text-sm mt-1" style={{ color: "#a2bcaf" }}>
-                    Based on {results.data_period_days} days of data
-                  </p>
-                ) : null}
-              </div>
-              <button
-                onClick={handleRunAnalysis}
-                disabled={analyzing}
-                className="px-4 py-2 rounded-lg text-sm transition-all flex-shrink-0"
-                style={{ background: "transparent", color: "#a2bcaf", border: "1px solid #1a3d2b" }}
-              >
-                {analyzing ? "Refreshing…" : "Re-run analysis"}
-              </button>
-            </div>
-
-            {/* Today's Snapshot — always shown once we have any data, even before
-                enough days exist for the causal engine to validate anything */}
-            {results.snapshot && results.snapshot.latest.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-sm font-semibold mb-3" style={{ color: "#a2bcaf" }}>
-                  TODAY&apos;S SNAPSHOT
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-                  {results.snapshot.latest.map((m) => (
-                    <div
-                      key={m.metric}
-                      className="rounded-xl p-4"
-                      style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
-                    >
-                      <p className="text-xs mb-1" style={{ color: "#a2bcaf" }}>
-                        {m.label}
-                      </p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-bold" style={{ color: "#eef3f0" }}>
-                          {m.value}
-                        </span>
-                        <span className="text-xs" style={{ color: "#a2bcaf" }}>
-                          {m.unit}
-                        </span>
-                        {m.trend !== "flat" && (
-                          <span
-                            className="text-xs ml-1"
-                            style={{
-                              color:
-                                m.is_improving === null
-                                  ? "#a2bcaf"
-                                  : m.is_improving
-                                  ? "#34d399"
-                                  : "#f87171",
-                            }}
-                          >
-                            {m.trend === "up" ? "▲" : "▼"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {results.snapshot.raw_signals.length > 0 && (
-                  <div
-                    className="rounded-xl p-4"
-                    style={{ background: "#0f1f17", border: "1px dashed #2a4d3a" }}
-                  >
-                    <p className="text-xs mb-3" style={{ color: "#a2bcaf" }}>
-                      Raw patterns we&apos;re watching — not yet causally tested (needs 30+ days for that)
-                    </p>
-                    <div className="space-y-2">
-                      {results.snapshot.raw_signals.map((s, i) => (
-                        <div key={i} className="flex items-center justify-between text-sm">
-                          <span style={{ color: "#eef3f0" }}>{s.description}</span>
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-2"
-                            style={{
-                              background: "rgba(201,168,76,0.1)",
-                              color: "#c9a84c",
-                            }}
-                          >
-                            {s.strength_label} {s.direction === "positive" ? "+" : "−"}
-                            {Math.abs(s.r)} (n={s.n})
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {results.insights.length === 0 ? (
-              <div
-                className="rounded-2xl p-6 text-center"
-                style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
-              >
-                <p style={{ color: "#a2bcaf" }}>
-                  {results.snapshot && results.snapshot.days_of_data < 30
-                    ? `We haven't hit a statistically confident, causally-tested pattern yet — that typically needs 30+ days. Keep the snapshot above growing and check back.`
-                    : `We found your data but couldn't detect any statistically confident patterns yet. This usually resolves itself as more days of data come in.`}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {results.insights.map((insight) => (
-                  <div
-                    key={insight.hypothesis_id}
-                    className="rounded-2xl p-6"
-                    style={{ background: "#0f1f17", border: "1px solid #1a3d2b" }}
-                  >
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <h3 className="font-semibold" style={{ color: "#eef3f0" }}>
-                        {insight.title}
-                      </h3>
-                      <span
-                        className="text-xs px-2 py-1 rounded-full flex-shrink-0"
-                        style={{
-                          background:
-                            insight.metric_direction === "positive"
-                              ? "rgba(52,211,153,0.1)"
-                              : "rgba(248,113,113,0.1)",
-                          color: insight.metric_direction === "positive" ? "#34d399" : "#f87171",
-                        }}
-                      >
-                        {insight.metric_direction === "positive" ? "▲" : "▼"} {insight.metric_delta} {insight.metric_unit}
-                      </span>
-                    </div>
-                    <p className="text-sm mb-2" style={{ color: "#eef3f0" }}>
-                      {insight.headline}
-                    </p>
-                    <p className="text-sm mb-3" style={{ color: "#a2bcaf" }}>
-                      {insight.body}
-                    </p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className="text-xs px-2 py-1 rounded-lg"
-                        style={{ background: "#0a1710", color: "#a2bcaf" }}
-                      >
-                        {insight.confidence_label}
-                      </span>
-                      <span
-                        className="text-xs px-2 py-1 rounded-lg"
-                        style={{ background: "#0a1710", color: "#a2bcaf" }}
-                      >
-                        {insight.treatment_label} → {insight.outcome_label}
-                      </span>
-                    </div>
-                    {insight.actionable_tip && (
-                      <p className="text-sm mt-3" style={{ color: "#c9a84c" }}>
-                        💡 {insight.actionable_tip}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Or upload manually */}
-        <div className="mt-6 text-center">
-          <p className="text-sm" style={{ color: "#a2bcaf" }}>
-            Prefer to upload manually?{" "}
-            <a href="/" style={{ color: "#c9a84c" }}>
-              Upload a file instead →
-            </a>
-          </p>
+            <SettingsIcon size={20} color="#a2bcaf" />
+          </Link>
         </div>
 
+        {/* Weekly stats strip */}
+        <div className="rounded-2xl p-5 mb-6" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
+          <p className="text-xs font-mono tracking-widest mb-4" style={{ color: "#c9a84c" }}>
+            THIS WEEK
+          </p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+                {experiments.length}
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#a2bcaf" }}>
+                Experiments running
+              </p>
+            </div>
+            <div style={{ borderLeft: "1px solid #1a3d2b", borderRight: "1px solid #1a3d2b" }}>
+              <p className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+                {insightsCount}
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#a2bcaf" }}>
+                Insights discovered
+              </p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+                {weekCount}
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#a2bcaf" }}>
+                Quick entries logged
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Metric grid with sparklines */}
+        {metrics.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {metrics.map((m) => {
+              const color =
+                m.is_improving === null ? "#c9a84c" : m.is_improving ? "#34d399" : "#f87171";
+              return (
+                <div
+                  key={m.metric}
+                  className="rounded-2xl p-4"
+                  style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                >
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+                      {m.value}
+                    </span>
+                    <span className="text-xs" style={{ color: "#a2bcaf" }}>
+                      {m.unit}
+                    </span>
+                  </div>
+                  <p className="text-xs mb-2" style={{ color: "#a2bcaf" }}>
+                    {m.label}
+                  </p>
+                  <Sparkline values={m.recent} color={color} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Quick Entry CTA */}
+        <Link
+          href="/journal"
+          className="flex items-center gap-4 rounded-2xl p-5 mb-8"
+          style={{ background: "#c9a84c" }}
+        >
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#0a1710" }}>
+            <PenLine size={20} color="#c9a84c" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold" style={{ color: "#0a1710" }}>
+              Quick Entry
+            </p>
+            <p className="text-sm" style={{ color: "#2a2410" }}>
+              Log a moment — it feeds straight into your insights
+            </p>
+          </div>
+          <span className="text-xl" style={{ color: "#0a1710" }}>→</span>
+        </Link>
+
+        {/* Running on you */}
+        {experiments.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold" style={{ color: "#eef3f0" }}>
+                Running on you
+              </h3>
+              <Link href="/insights" className="text-sm font-medium" style={{ color: "#c9a84c" }}>
+                View all
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {experiments.slice(0, 3).map((e) => {
+                const pct = Math.min(100, Math.round((e.current / e.required) * 100));
+                return (
+                  <div
+                    key={e.id}
+                    className="rounded-2xl p-4"
+                    style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                  >
+                    <p className="font-medium mb-3" style={{ color: "#eef3f0" }}>
+                      {e.treatment_label} → {e.outcome_label}
+                    </p>
+                    <div className="w-full rounded-full h-1.5 mb-2" style={{ background: "#1a3d2b" }}>
+                      <div
+                        className="h-1.5 rounded-full"
+                        style={{ width: `${pct}%`, background: "#c9a84c" }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs" style={{ color: "#a2bcaf" }}>
+                      <span>Day {e.current} of {e.required}</span>
+                      <span>Gathering data</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
-export default function ConnectPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a1710" }}>
-        <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
-      </div>
-    }>
-      <ConnectContent />
-    </Suspense>
-  );
-}
-
-// Force dynamic rendering — prevents static generation errors with useSearchParams
-export const dynamic = "force-dynamic";

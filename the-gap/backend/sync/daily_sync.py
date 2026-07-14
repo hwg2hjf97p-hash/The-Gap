@@ -23,7 +23,7 @@ from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from utils.data_cleaning import clean_dataframe
 from utils.snapshot import build_snapshot
-from causal.engine import run_all_hypotheses
+from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 
@@ -287,14 +287,17 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         insights = run_all_hypotheses(df)
         insights_dicts = [i.to_dict() for i in insights]
         snapshot = build_snapshot(df)
-        logger.info("ENGINE_DONE user=%s insights=%d elapsed=%.1fs",
-                    user_id[:8], len(insights_dicts), time.perf_counter() - t0)
+        experiments = get_experiments_in_progress(df)
+        logger.info("ENGINE_DONE user=%s insights=%d experiments_in_progress=%d elapsed=%.1fs",
+                    user_id[:8], len(insights_dicts), len(experiments), time.perf_counter() - t0)
 
         session_id = save_results(
+            user_id=user_id,
             data_source=",".join(providers_synced),
             data_period_days=len(df),
             insights=insights_dicts,
             snapshot=snapshot,
+            experiments=experiments,
         )
 
         return {

@@ -1,17 +1,23 @@
 """
-Supabase client — insert analysis results and retrieve by session ID.
+Supabase client — insert analysis results and retrieve by session ID or by user.
 Uses direct httpx REST calls to avoid supabase-py DNS resolution issues on Railway.
 
 Table DDL (run once in Supabase SQL editor):
 
   CREATE TABLE results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     data_source TEXT NOT NULL,
     data_period_days INTEGER,
     insights JSONB NOT NULL,
+    snapshot JSONB,
+    experiments JSONB,
     share_url TEXT
   );
+
+  CREATE INDEX IF NOT EXISTS idx_results_user_created
+    ON results (user_id, created_at DESC);
 """
 
 from __future__ import annotations
@@ -60,8 +66,10 @@ def save_results(
     data_source: str,
     data_period_days: Optional[int],
     insights: list[dict],
+    user_id: Optional[str] = None,
     session_id: Optional[str] = None,
     snapshot: Optional[dict] = None,
+    experiments: Optional[list[dict]] = None,
 ) -> str:
     """
     Persist analysis results to Supabase via direct REST API.
@@ -77,10 +85,12 @@ def save_results(
 
     payload = {
         "id": session_id,
+        "user_id": user_id,
         "data_source": data_source,
         "data_period_days": data_period_days,
         "insights": insights,
         "snapshot": snapshot,
+        "experiments": experiments,
         "share_url": share_url,
     }
 
@@ -92,7 +102,7 @@ def save_results(
             timeout=15,
         )
         resp.raise_for_status()
-        logger.info("Results saved to Supabase (session: %s)", session_id)
+        logger.info("Results saved to Supabase (session: %s, user: %s)", session_id, user_id[:8])
     except Exception as exc:
         logger.error("Supabase insert failed: %s", exc)
         # Don't raise — return session_id anyway so user still gets results
@@ -124,6 +134,35 @@ def get_results(session_id: str) -> Optional[dict]:
         return data[0] if data else None
     except Exception as exc:
         logger.error("Supabase fetch failed for %s: %s", session_id, exc)
+        return None
+
+
+def get_latest_results(user_id: str) -> Optional[dict]:
+    """
+    Retrieve the most recent analysis for a user — this is what powers the
+    always-on Home dashboard, as opposed to get_results() which needs an
+    exact session_id from the one-time response right after analysis runs.
+    """
+    if not _is_configured():
+        return None
+
+    try:
+        resp = httpx.get(
+            _sb_url("results"),
+            headers=_sb_headers(),
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "*",
+                "order": "created_at.desc",
+                "limit": "1",
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+    except Exception as exc:
+        logger.error("Supabase latest-results fetch failed for %s: %s", user_id[:8], exc)
         return None
 
 

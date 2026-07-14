@@ -41,12 +41,14 @@ from routers import analyse
 from routers import connect
 from routers import checkin
 from routers import journal
+from routers import assistant
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
 app.include_router(checkin.router)
 app.include_router(daily_sync.router)
 app.include_router(journal.router)
+app.include_router(assistant.router)
 
 @app.get("/health")
 def health_check():
