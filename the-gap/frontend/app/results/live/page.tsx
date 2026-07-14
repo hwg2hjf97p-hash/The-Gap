@@ -319,6 +319,11 @@ function HomeContent() {
           >
             Connect a data source →
           </Link>
+          <p className="text-sm mt-4">
+            <a href="/upload" style={{ color: "#c9a84c" }}>
+              Or analyse a file you already have →
+            </a>
+          </p>
         </div>
       </div>
     );
