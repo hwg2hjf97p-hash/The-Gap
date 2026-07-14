@@ -35,7 +35,8 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`${API_URL}/connect/status/${uid}`);
       const data = await res.json();
-      setConnected(data.connected ?? []);
+      const providerNames = (data.connected ?? []).map((c: { provider: string }) => c.provider);
+      setConnected(providerNames);
     } catch {
       setConnected([]);
     } finally {
