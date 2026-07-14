@@ -69,6 +69,9 @@ def get_experiments_in_progress(df: pd.DataFrame) -> list[dict]:
     # Closest-to-done first — most encouraging order to show someone
     experiments.sort(key=lambda e: (e["required"] - e["current"]))
     return experiments
+
+
+def run_all_hypotheses(df: pd.DataFrame) -> list[Insight]:
     """
     Iterate over every pre-defined hypothesis.
     Skip those with insufficient data or near-zero effects.
