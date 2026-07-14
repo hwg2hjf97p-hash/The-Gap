@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from db.supabase_client import save_results
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
+from sync.withings_sync import fetch_withings_data, refresh_withings_token
 from utils.data_cleaning import clean_dataframe
 from utils.snapshot import build_snapshot
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
@@ -55,12 +56,14 @@ REFRESH_FUNCS = {
     "oura": refresh_oura_token,
     "google": refresh_google_token,
     "strava": refresh_strava_token,
+    "withings": refresh_withings_token,
 }
 
 FETCH_FUNCS = {
     "whoop": fetch_whoop_data,
     "oura": fetch_oura_data,
     "strava": fetch_strava_data,
+    "withings": fetch_withings_data,
 }
 
 CLIENT_ID_ENVS = {
@@ -68,12 +71,14 @@ CLIENT_ID_ENVS = {
     "oura": "OURA_CLIENT_ID",
     "google": "GOOGLE_CLIENT_ID",
     "strava": "STRAVA_CLIENT_ID",
+    "withings": "WITHINGS_CLIENT_ID",
 }
 CLIENT_SECRET_ENVS = {
     "whoop": "WHOOP_CLIENT_SECRET",
     "oura": "OURA_CLIENT_SECRET",
     "google": "GOOGLE_CLIENT_SECRET",
     "strava": "STRAVA_CLIENT_SECRET",
+    "withings": "WITHINGS_CLIENT_SECRET",
 }
 
 

@@ -24,6 +24,7 @@ METRIC_DISPLAY = {
     "recovery_score": {"label": "Recovery score", "unit": "%", "higher_is_better": True},
     "sleep_score": {"label": "Sleep performance", "unit": "%", "higher_is_better": True},
     "steps": {"label": "Steps", "unit": "", "higher_is_better": True},
+    "weight_kg": {"label": "Weight", "unit": "kg", "higher_is_better": None},
 }
 
 # Candidate raw-correlation pairs to check, in priority order.
@@ -82,7 +83,7 @@ def build_snapshot(df: pd.DataFrame) -> dict:
         display_value = round(value / divide_by, 1) if divide_by != 1 else round(float(value), 1)
         trend = _trend(series)
         is_improving = None
-        if trend != "flat":
+        if trend != "flat" and meta["higher_is_better"] is not None:
             went_up = trend == "up"
             is_improving = went_up if meta["higher_is_better"] else not went_up
         recent = [

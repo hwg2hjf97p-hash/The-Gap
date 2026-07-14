@@ -60,6 +60,19 @@ PROVIDERS = {
         "client_id_env": "GOOGLE_CLIENT_ID",
         "client_secret_env": "GOOGLE_CLIENT_SECRET",
     },
+    "withings": {
+        # Withings' OAuth doesn't follow the standard shape other providers
+        # use here — it's a single endpoint driven by an `action` param,
+        # and returns HTTP 200 even on logical errors (a `status` field in
+        # the JSON body signals success/failure instead). Handled as a
+        # special case in oauth_callback below rather than forcing it
+        # through the generic exchange path.
+        "auth_url": "https://account.withings.com/oauth2_user/authorize2",
+        "token_url": "https://wbsapi.withings.net/v2/oauth2",
+        "scopes": "user.info,user.metrics,user.activity",
+        "client_id_env": "WITHINGS_CLIENT_ID",
+        "client_secret_env": "WITHINGS_CLIENT_SECRET",
+    },
 }
 
 APP_BASE_URL = os.getenv("APP_BASE_URL", "https://the-gap-production.up.railway.app")
@@ -234,43 +247,77 @@ async def oauth_callback(
     cfg = _get_provider_config(provider)
     client_id, client_secret = _get_client_credentials(provider)
 
-    # Exchange code for tokens
-    try:
-        # Strava uses integer client_id
-        cid = int(client_id) if provider == "strava" else client_id
-        exchange_start = time.time()
-        logger.info("TOKEN_EXCHANGE_START provider=%s code_prefix=%s redirect_uri=%s",
-                    provider, code[:8], _redirect_uri(provider))
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                cfg["token_url"],
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": _redirect_uri(provider),
-                    "client_id": cid,
-                    "client_secret": client_secret,
-                },
-                headers={"Accept": "application/json"},
+    if provider == "withings":
+        try:
+            exchange_start = time.time()
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    cfg["token_url"],
+                    data={
+                        "action": "requesttoken",
+                        "grant_type": "authorization_code",
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "code": code,
+                        "redirect_uri": _redirect_uri(provider),
+                    },
+                )
+                body = resp.json()
+                logger.info(
+                    "TOKEN_EXCHANGE_DONE provider=withings http_status=%d withings_status=%s elapsed=%.3fs",
+                    resp.status_code, body.get("status"), time.time() - exchange_start,
+                )
+                # Withings returns HTTP 200 even on failure — status 0 means success,
+                # anything else is an error, with the real detail in body["error"].
+                if body.get("status") != 0:
+                    logger.error("Withings token exchange failed: %s", body.get("error"))
+                    return RedirectResponse(
+                        url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider=withings"
+                    )
+                token_data = body["body"]  # flatten to match the shape the rest of this function expects
+        except Exception as exc:
+            logger.error("Withings token exchange network error: %s", exc)
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider=withings"
             )
-            logger.info("TOKEN_EXCHANGE_DONE provider=%s status=%d elapsed=%.3fs",
-                        provider, resp.status_code, time.time() - exchange_start)
-            resp.raise_for_status()
-            token_data = resp.json()
-    except httpx.HTTPStatusError as exc:
-        body = exc.response.text if exc.response is not None else "no response"
-        logger.error(
-            "Token exchange failed for %s: status=%s body=%s",
-            provider, exc.response.status_code if exc.response is not None else "?", body
-        )
-        return RedirectResponse(
-            url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}&detail={exc.response.status_code if exc.response is not None else 0}"
-        )
-    except httpx.HTTPError as exc:
-        logger.error("Token exchange network error for %s: %s", provider, exc)
-        return RedirectResponse(
-            url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}"
-        )
+    else:
+        # Exchange code for tokens
+        try:
+            # Strava uses integer client_id
+            cid = int(client_id) if provider == "strava" else client_id
+            exchange_start = time.time()
+            logger.info("TOKEN_EXCHANGE_START provider=%s code_prefix=%s redirect_uri=%s",
+                        provider, code[:8], _redirect_uri(provider))
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    cfg["token_url"],
+                    data={
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": _redirect_uri(provider),
+                        "client_id": cid,
+                        "client_secret": client_secret,
+                    },
+                    headers={"Accept": "application/json"},
+                )
+                logger.info("TOKEN_EXCHANGE_DONE provider=%s status=%d elapsed=%.3fs",
+                            provider, resp.status_code, time.time() - exchange_start)
+                resp.raise_for_status()
+                token_data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text if exc.response is not None else "no response"
+            logger.error(
+                "Token exchange failed for %s: status=%s body=%s",
+                provider, exc.response.status_code if exc.response is not None else "?", body
+            )
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}&detail={exc.response.status_code if exc.response is not None else 0}"
+            )
+        except httpx.HTTPError as exc:
+            logger.error("Token exchange network error for %s: %s", provider, exc)
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider={provider}"
+            )
 
     # Store tokens via direct REST API (bypasses supabase-py DNS issues)
     try:

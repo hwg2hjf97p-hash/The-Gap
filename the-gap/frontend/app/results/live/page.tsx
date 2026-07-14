@@ -113,6 +113,16 @@ const METRIC_INFO: Record<string, MetricInfo> = {
     comparisonText: "7,000–10,000 steps/day is a commonly cited general target for adults.",
     goodDirection: "More is generally better",
   },
+  weight_kg: {
+    label: "Weight",
+    explanation: "Your most recent body weight reading, from a connected smart scale.",
+    whyItMatters:
+      "Useful mainly as a trend over weeks or months — day-to-day changes are usually water weight, not fat or muscle change, so a single reading rarely means much on its own.",
+    comparisonLabel: "A note on this one",
+    comparisonText:
+      "There's no single 'right' weight — it depends entirely on your height, frame, and goals. This app tracks it purely to look for patterns against your other metrics, not to judge the number itself.",
+    goodDirection: "Neither direction is inherently 'better'",
+  },
 };
 
 function MetricInfoModal({ metric, value, unit, onClose }: { metric: SnapshotMetric; value: number; unit: string; onClose: () => void }) {
