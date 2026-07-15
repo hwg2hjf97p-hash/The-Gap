@@ -22,6 +22,7 @@ from db.supabase_client import save_results
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
+from sync.polar_sync import fetch_polar_data
 from utils.data_cleaning import clean_dataframe
 from utils.snapshot import build_snapshot
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
@@ -240,6 +241,25 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                 if fetched is not None and not fetched.empty:
                     health_df = fetched if health_df is None else health_df.combine_first(fetched)
                     providers_synced.append(provider)
+            elif provider == "withings":
+                fetched = await fetch_withings_data(access_token)
+                logger.info("FETCH_DONE provider=withings rows=%d", len(fetched) if fetched is not None else 0)
+                if fetched is not None and not fetched.empty:
+                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    providers_synced.append(provider)
+            elif provider == "polar":
+                # Polar's user_id was stashed in refresh_token at connect time
+                # (see routers/connect.py) since Polar tokens never expire and
+                # that field would otherwise go unused for this provider.
+                polar_user_id = refresh_token
+                if not polar_user_id:
+                    logger.error("Polar connection missing polar_user_id — skipping this sync")
+                else:
+                    fetched = await fetch_polar_data(access_token, polar_user_id)
+                    logger.info("FETCH_DONE provider=polar rows=%d", len(fetched) if fetched is not None else 0)
+                    if fetched is not None and not fetched.empty:
+                        health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                        providers_synced.append(provider)
 
             # Update last_synced_at
             await _supabase_patch(

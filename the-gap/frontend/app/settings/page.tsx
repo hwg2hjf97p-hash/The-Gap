@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Activity, CircleDot, Route, Calendar, LogOut, Cpu, Scale } from "lucide-react";
+import { ArrowLeft, Activity, CircleDot, Route, Calendar, LogOut, Cpu, Scale, Watch } from "lucide-react";
 import { getUserId, getDisplayName, setDisplayName, resetIdentity } from "../../lib/identity";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-backend.onrender.com";
@@ -14,6 +14,7 @@ const PROVIDERS = [
   { id: "strava", name: "Strava", Icon: Route, color: "#fc4c02" },
   { id: "google", name: "Google Calendar", Icon: Calendar, color: "#34a853" },
   { id: "withings", name: "Withings", Icon: Scale, color: "#00bcd4" },
+  { id: "polar", name: "Polar", Icon: Watch, color: "#e6ff00" },
 ];
 
 export default function SettingsPage() {

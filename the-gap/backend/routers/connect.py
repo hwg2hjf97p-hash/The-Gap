@@ -73,6 +73,18 @@ PROVIDERS = {
         "client_id_env": "WITHINGS_CLIENT_ID",
         "client_secret_env": "WITHINGS_CLIENT_SECRET",
     },
+    "polar": {
+        # Polar's token exchange uses HTTP Basic Auth (client_id:client_secret
+        # in the Authorization header), not form-field credentials like the
+        # other providers — handled as its own branch in oauth_callback below.
+        # Polar access tokens also never expire, so there's no refresh_func
+        # for this provider at all (see daily_sync.py's REFRESH_FUNCS).
+        "auth_url": "https://flow.polar.com/oauth2/authorization",
+        "token_url": "https://polarremote.com/v2/oauth2/token",
+        "scopes": "accesslink.read_all",
+        "client_id_env": "POLAR_CLIENT_ID",
+        "client_secret_env": "POLAR_CLIENT_SECRET",
+    },
 }
 
 APP_BASE_URL = os.getenv("APP_BASE_URL", "https://the-gap-production.up.railway.app")
@@ -280,6 +292,81 @@ async def oauth_callback(
             return RedirectResponse(
                 url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider=withings"
             )
+    elif provider == "polar":
+        try:
+            exchange_start = time.time()
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    cfg["token_url"],
+                    data={
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": _redirect_uri(provider),
+                    },
+                    # Polar uses HTTP Basic Auth for client credentials, not form fields
+                    auth=(client_id, client_secret),
+                    headers={"Accept": "application/json"},
+                )
+                logger.info("TOKEN_EXCHANGE_DONE provider=polar status=%d elapsed=%.3fs",
+                            resp.status_code, time.time() - exchange_start)
+                resp.raise_for_status()
+                token_data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text if exc.response is not None else "no response"
+            logger.error("Polar token exchange failed: status=%s body=%s",
+                         exc.response.status_code if exc.response is not None else "?", body)
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider=polar"
+            )
+        except httpx.HTTPError as exc:
+            logger.error("Polar token exchange network error: %s", exc)
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/connect?error=token_exchange_failed&provider=polar"
+            )
+
+        # Polar-specific extra step: the user must be explicitly registered
+        # with this app before ANY data endpoint will work — skipping this
+        # silently breaks every future sync, even with a perfectly valid
+        # token. A 409 here means "already registered" (e.g. reconnecting),
+        # which is fine and expected, not an error.
+        try:
+            polar_user_id = token_data.get("x_user_id")
+            async with httpx.AsyncClient(timeout=15) as client:
+                reg_resp = await client.post(
+                    "https://www.polaraccesslink.com/v3/users",
+                    headers={
+                        "Authorization": f"Bearer {token_data.get('access_token', '')}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"member-id": user_id},
+                )
+                if reg_resp.status_code not in (200, 201, 409):
+                    logger.error(
+                        "Polar user registration failed: status=%d body=%s",
+                        reg_resp.status_code, reg_resp.text,
+                    )
+                    return RedirectResponse(
+                        url=f"{FRONTEND_URL}/connect?error=user_registration_failed&provider=polar"
+                    )
+                logger.info(
+                    "POLAR_USER_REGISTERED status=%d polar_user_id=%s",
+                    reg_resp.status_code, polar_user_id,
+                )
+        except Exception as exc:
+            logger.error("Polar user registration network error: %s", exc)
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/connect?error=user_registration_failed&provider=polar"
+            )
+
+        # Polar tokens don't expire — store a far-future expiry so the sync
+        # loop never mistakenly thinks this needs a refresh (there is no
+        # refresh_func registered for polar at all, by design).
+        token_data["expires_in"] = 315360000  # ~10 years
+        # Polar's data URLs all require polar_user_id (x_user_id), which no
+        # other provider needs. Since Polar tokens never expire, refresh_token
+        # is otherwise unused here — repurposed to carry this instead of
+        # adding a new database column. daily_sync.py reads it back out.
+        token_data["refresh_token"] = str(polar_user_id) if polar_user_id else ""
     else:
         # Exchange code for tokens
         try:
