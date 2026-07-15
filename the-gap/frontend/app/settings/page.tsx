@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Activity, CircleDot, Route, Calendar, LogOut, Cpu, Scale, Watch } from "lucide-react";
+import { ArrowLeft, Activity, CircleDot, Route, Calendar, LogOut, Cpu, Scale, Watch, Download, Trash2, ChevronRight } from "lucide-react";
 import { getUserId, getDisplayName, setDisplayName, resetIdentity } from "../../lib/identity";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-backend.onrender.com";
@@ -24,6 +24,9 @@ export default function SettingsPage() {
   const [nameInput, setNameInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const id = getUserId();
@@ -62,6 +65,37 @@ export default function SettingsPage() {
 
   function saveName() {
     setDisplayName(nameInput);
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    try {
+      const res = await fetch(`${API_URL}/account/export/${userId}`);
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `the-gap-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Export failed — please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    try {
+      await fetch(`${API_URL}/account/${userId}`, { method: "DELETE" });
+      resetIdentity();
+      router.push("/results/live");
+    } catch {
+      alert("Deletion failed — please try again.");
+      setDeleting(false);
+    }
   }
 
   function handleSignOut() {
@@ -164,6 +198,62 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Data & Privacy */}
+        <div className="mb-8">
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+            DATA & PRIVACY
+          </p>
+          <div className="rounded-2xl overflow-hidden" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
+            <button
+              onClick={handleExportData}
+              disabled={exporting}
+              className="w-full flex items-center gap-3 p-4 text-left"
+              style={{ borderBottom: "1px solid #1a3d2b" }}
+            >
+              <Download size={18} color="#c9a84c" />
+              <span className="text-sm flex-1" style={{ color: "#eef3f0" }}>
+                {exporting ? "Preparing your export…" : "Export my data"}
+              </span>
+              <ChevronRight size={16} color="#5c7568" />
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="w-full flex items-center gap-3 p-4 text-left"
+            >
+              <Trash2 size={18} color="#f87171" />
+              <span className="text-sm flex-1" style={{ color: "#f87171" }}>
+                Delete account & data
+              </span>
+              <ChevronRight size={16} color="#5c7568" />
+            </button>
+          </div>
+        </div>
+
+        {/* Legal */}
+        <div className="mb-8">
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+            LEGAL
+          </p>
+          <div className="rounded-2xl overflow-hidden" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
+            <a
+              href="/privacy"
+              className="flex items-center gap-3 p-4"
+              style={{ borderBottom: "1px solid #1a3d2b" }}
+            >
+              <span className="text-sm flex-1" style={{ color: "#eef3f0" }}>
+                Privacy Policy
+              </span>
+              <ChevronRight size={16} color="#5c7568" />
+            </a>
+            <a href="/terms" className="flex items-center gap-3 p-4">
+              <span className="text-sm flex-1" style={{ color: "#eef3f0" }}>
+                Terms of Service
+              </span>
+              <ChevronRight size={16} color="#5c7568" />
+            </a>
+          </div>
+        </div>
+
         {/* About */}
         <div className="mb-8">
           <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
@@ -193,6 +283,48 @@ export default function SettingsPage() {
           This clears your local identity on this device — your data on our
           servers isn&apos;t deleted.
         </p>
+
+        {/* Delete confirmation modal */}
+        {showDeleteConfirm && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ background: "rgba(0,0,0,0.7)" }}
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl p-6"
+              style={{ background: "#132c1f", border: "1px solid #3d1a1a" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold mb-2" style={{ color: "#eef3f0" }}>
+                Delete everything?
+              </h3>
+              <p className="text-sm mb-6" style={{ color: "#a2bcaf" }}>
+                This permanently deletes all your connections, entries, and
+                insights from our servers. This can&apos;t be undone. It doesn&apos;t
+                revoke access on the provider&apos;s own side (e.g. Whoop) — do
+                that separately there if you want full revocation.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-3 rounded-xl text-sm font-medium"
+                  style={{ background: "transparent", border: "1px solid #1a3d2b", color: "#a2bcaf" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold"
+                  style={{ background: "#f87171", color: "#0a1710" }}
+                >
+                  {deleting ? "Deleting…" : "Delete everything"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
