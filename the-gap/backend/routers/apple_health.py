@@ -1,35 +1,32 @@
 """
 Apple Health ingestion — the one genuinely different data path in this app.
 
-Every other provider (Whoop, Oura, Withings, Polar) is fetched server-side
-via OAuth. Apple Health has no server API at all — HealthKit only exists
-on-device. So instead of fetching, the native app reads HealthKit locally
-and POSTs the aggregated daily data here, where it's merged into the exact
-same pipeline (check-ins, journal signals, causal engine, snapshot,
-experiments) every other provider already uses.
+Every OAuth provider (Whoop, Oura, Withings, Polar) is fetched server-side.
+Apple Health has no server API at all — HealthKit only exists on-device.
+So the native app reads HealthKit locally and POSTs the aggregated daily
+data here.
 
-Deliberately duplicates a small amount of the merge/engine logic from
-sync/daily_sync.py's _sync_user rather than refactoring that function to
-be shared — this session has already had one real regression from a
-rushed shared-code edit, and this endpoint is simple enough on its own
-that the duplication is a reasonable, lower-risk tradeoff.
+This endpoint used to run its own separate merge-and-save pipeline,
+completely disconnected from the OAuth-provider one — meaning connecting
+Whoop and syncing Apple Health would each silently overwrite the other's
+results, since neither knew the other's data existed. Fixed by: (1)
+persisting Apple Health data (see sync/apple_health_store.py) so it isn't
+thrown away after one request, and (2) routing through the exact same
+_sync_user function the OAuth-provider path uses, so every sync — no
+matter which source triggered it — merges everything the user has
+connected into one consistent result.
 """
 
 from __future__ import annotations
 
 import logging
 
-import pandas as pd
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from db.supabase_client import save_results
-from utils.data_cleaning import clean_dataframe
-from utils.snapshot import build_snapshot
-from causal.engine import run_all_hypotheses, get_experiments_in_progress
-from routers.checkin import get_checkin_dataframe
-from routers.journal import get_journal_dataframe
+from sync.apple_health_store import upsert_apple_health_rows
+from sync.daily_sync import _sync_user, _supabase_get
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/apple-health", tags=["apple-health"])
@@ -45,53 +42,39 @@ async def sync_apple_health(body: AppleHealthSyncRequest) -> JSONResponse:
     if not body.daily_rows:
         return JSONResponse(content={"status": "no_data", "days": 0})
 
-    health_df = pd.DataFrame.from_dict(body.daily_rows, orient="index")
-    health_df.index = pd.to_datetime(health_df.index)
-    health_df = health_df.sort_index()
+    # Persist first — this is what makes the data survive future syncs
+    # triggered by other sources (e.g. connecting a new OAuth provider
+    # later shouldn't erase this).
+    await upsert_apple_health_rows(body.user_id, body.daily_rows)
 
-    # Same merge steps as the OAuth sync path (daily_sync.py's _sync_user)
+    # Fetch this user's active OAuth connections (same lookup the
+    # OAuth-triggered sync endpoint uses) so this run merges everything —
+    # Apple Health plus Whoop/Oura/etc — into one unified result, rather
+    # than Apple Health running its own disconnected analysis.
     try:
-        checkin_df = get_checkin_dataframe(body.user_id)
-        if checkin_df is not None and not checkin_df.empty:
-            checkin_df.index = pd.to_datetime(checkin_df.index)
-            health_df = health_df.join(checkin_df, how="left")
-    except Exception as exc:
-        logger.warning("Check-in merge failed (continuing without it): %s", exc)
-
-    try:
-        journal_df = await get_journal_dataframe(body.user_id)
-        if journal_df is not None and not journal_df.empty:
-            journal_df.index = pd.to_datetime(journal_df.index)
-            health_df = health_df.join(journal_df, how="left")
-    except Exception as exc:
-        logger.warning("Journal merge failed (continuing without it): %s", exc)
-
-    try:
-        df = clean_dataframe(health_df)
-        insights = run_all_hypotheses(df)
-        insights_dicts = [i.to_dict() for i in insights]
-        snapshot = build_snapshot(df)
-        experiments = get_experiments_in_progress(df)
-
-        session_id = save_results(
-            user_id=body.user_id,
-            data_source="apple_health",
-            data_period_days=len(df),
-            insights=insights_dicts,
-            snapshot=snapshot,
-            experiments=experiments,
-        )
-        logger.info(
-            "APPLE_HEALTH_SYNC_DONE user=%s days=%d insights=%d",
-            body.user_id[:8], len(df), len(insights_dicts),
+        connections = await _supabase_get(
+            "user_connections",
+            {"user_id": f"eq.{body.user_id}", "is_active": "eq.true", "select": "*"},
         )
     except Exception as exc:
-        logger.error("Apple Health engine run failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Analysis failed. Please try again.")
+        logger.error("Could not fetch connections for %s: %s", body.user_id, exc)
+        connections = []
+
+    result = await _sync_user(body.user_id, connections)
+
+    if result.get("status") == "no_data":
+        # Shouldn't normally happen since we just upserted real data above,
+        # but surfaced honestly rather than silently returning success.
+        raise HTTPException(status_code=500, detail="Sync ran but produced no data — please try again.")
+
+    logger.info(
+        "APPLE_HEALTH_SYNC_DONE user=%s status=%s",
+        body.user_id[:8], result.get("status"),
+    )
 
     return JSONResponse(content={
-        "status": "ok",
-        "session_id": session_id,
-        "days": len(df),
-        "insights": len(insights_dicts),
+        "status": result.get("status"),
+        "session_id": result.get("session_id"),
+        "days": result.get("days"),
+        "insights": result.get("insights"),
     })
