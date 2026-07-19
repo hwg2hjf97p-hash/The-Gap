@@ -28,6 +28,7 @@ from utils.snapshot import build_snapshot
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
+from sync.apple_health_store import get_apple_health_dataframe
 
 # Optional imports — don't crash if these aren't ready yet
 try:
@@ -276,6 +277,24 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                 len(health_df) if health_df is not None else 0,
                 providers_synced,
                 time.perf_counter() - t0)
+
+    # Merge Apple Health — stored persistently (see sync/apple_health_store.py)
+    # specifically so it survives across syncs regardless of which data
+    # source triggered this particular run, rather than being silently
+    # overwritten every time a different source syncs most recently.
+    try:
+        apple_df = await get_apple_health_dataframe(user_id)
+        if apple_df is not None and not apple_df.empty:
+            apple_df.index = pd.to_datetime(apple_df.index)
+            if health_df is None:
+                health_df = apple_df
+            else:
+                health_df.index = pd.to_datetime(health_df.index)
+                health_df = health_df.combine_first(apple_df)
+            if "apple_health" not in providers_synced:
+                providers_synced.append("apple_health")
+    except Exception as exc:
+        logger.warning("Apple Health merge failed (continuing without it): %s", exc)
 
     if health_df is None or health_df.empty:
         return {"user_id": user_id, "status": "no_data", "elapsed": round(time.perf_counter() - t0, 1)}
