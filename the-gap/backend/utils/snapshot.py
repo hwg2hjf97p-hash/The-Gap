@@ -25,6 +25,10 @@ METRIC_DISPLAY = {
     "sleep_score": {"label": "Sleep performance", "unit": "%", "higher_is_better": True},
     "steps": {"label": "Steps", "unit": "", "higher_is_better": True},
     "weight_kg": {"label": "Weight", "unit": "kg", "higher_is_better": None},
+    "dietary_energy": {"label": "Calories", "unit": "kcal", "higher_is_better": None},
+    "protein_g": {"label": "Protein", "unit": "g", "higher_is_better": None},
+    "carbs_g": {"label": "Carbs", "unit": "g", "higher_is_better": None},
+    "fat_g": {"label": "Fat", "unit": "g", "higher_is_better": None},
 }
 
 # Candidate raw-correlation pairs to check, in priority order.
