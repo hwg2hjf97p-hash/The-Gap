@@ -139,14 +139,15 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
     )
 
     if result is None:
+        logger.info("ESTIMATION_RETURNED_NONE hyp=%s rows=%d — see estimator.py logs above for the actual cause", hyp.id, len(sub))
         return None
 
     # ── 6. Filter out near-zero / trivially small effects ─────────────────
     min_effect = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)
     if abs(result["effect"]) < min_effect:
-        logger.debug(
-            "Skipping %s — effect too small (%.4f < %.4f threshold)",
-            hyp.id, abs(result["effect"]), min_effect,
+        logger.info(
+            "FILTERED_SMALL_EFFECT hyp=%s effect=%.4f threshold=%.4f n_obs=%d p_value=%s",
+            hyp.id, result["effect"], min_effect, result["n_obs"], result.get("p_value"),
         )
         return None
 
