@@ -37,7 +37,7 @@ CANDIDATE_PAIRS = [
     ("sleep_total_min", "hrv_next", "Sleep duration vs. next-day HRV"),
     ("sleep_total_min", "resting_hr_next", "Sleep duration vs. next-day resting heart rate"),
     ("hrv_lag1", "recovery_score", "Prior-day HRV vs. recovery score"),
-    ("sleep_debt", "recovery_score", "Sleep debt vs. recovery score"),
+    ("sleep_debt_min", "recovery_score", "Sleep debt vs. recovery score"),
     ("is_weekend", "sleep_total_min", "Weekends vs. sleep duration"),
     ("steps", "sleep_total_min", "Daily steps vs. same-night sleep duration"),
 ]
@@ -138,3 +138,4 @@ def build_snapshot(df: pd.DataFrame) -> dict:
         "latest": latest_cards,
         "raw_signals": raw_signals,
     }
+
