@@ -3,6 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
 import os
+import logging
+
+# Without this, Python's root logger defaults to WARNING level, meaning
+# every logger.info(...) call anywhere in this app — SYNC_DATA_COLLECTED,
+# ENGINE_DONE, TOKEN_EXCHANGE_DONE, and every other diagnostic line added
+# throughout this app's development — is silently discarded, never
+# reaching Render's log output at all. Only warnings/errors and the
+# automatic HTTP access logs would ever show up. This was never fixed
+# until now, which is why several "no matching logs" moments earlier
+# may have been this, rather than the code genuinely not running.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = FastAPI(
     title="The Gap API",
