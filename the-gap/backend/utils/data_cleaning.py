@@ -51,7 +51,7 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if "sleep_total_min" in df.columns:
         df["sleep_lag1"] = df["sleep_total_min"].shift(1)
         # Sleep debt: rolling 7-day average minus 480 minutes (8 hours)
-        df["sleep_debt"] = (df["sleep_total_min"].rolling(7, min_periods=3).mean() - 480).fillna(0)
+        df["sleep_debt_min"] = (df["sleep_total_min"].rolling(7, min_periods=3).mean() - 480).fillna(0)
 
     # Bedtime deviation: how many minutes later/earlier than personal mean bedtime
     # Proxy: we infer bedtime from sleep start (not directly available in aggregated data)
