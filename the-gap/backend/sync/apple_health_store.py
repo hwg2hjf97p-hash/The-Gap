@@ -18,10 +18,13 @@ Table DDL (run once in Supabase SQL editor):
     resting_hr NUMERIC,
     steps NUMERIC,
     sleep_total_min NUMERIC,
+    sleep_deep_min NUMERIC,
     dietary_energy NUMERIC,
     protein_g NUMERIC,
     carbs_g NUMERIC,
     fat_g NUMERIC,
+    active_energy NUMERIC,
+    vo2max NUMERIC,
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, entry_date)
   );
@@ -31,6 +34,13 @@ Table DDL (run once in Supabase SQL editor):
   ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS protein_g NUMERIC;
   ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS carbs_g NUMERIC;
   ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS fat_g NUMERIC;
+
+  -- New in this fix: deep sleep, active energy, VO2 max — previously
+  -- collected nowhere at all, which permanently blocked 8 of the 34
+  -- causal hypotheses for anyone relying on Apple Health alone.
+  ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS sleep_deep_min NUMERIC;
+  ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS active_energy NUMERIC;
+  ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS vo2max NUMERIC;
 """
 
 from __future__ import annotations
@@ -75,10 +85,13 @@ async def upsert_apple_health_rows(user_id: str, daily_rows: dict[str, dict[str,
             "resting_hr": values.get("resting_hr"),
             "steps": values.get("steps"),
             "sleep_total_min": values.get("sleep_total_min"),
+            "sleep_deep_min": values.get("sleep_deep_min"),
             "dietary_energy": values.get("dietary_energy"),
             "protein_g": values.get("protein_g"),
             "carbs_g": values.get("carbs_g"),
             "fat_g": values.get("fat_g"),
+            "active_energy": values.get("active_energy"),
+            "vo2max": values.get("vo2max"),
         }
         for date, values in daily_rows.items()
     ]
@@ -110,7 +123,7 @@ async def get_apple_health_dataframe(user_id: str, days: int = 90) -> pd.DataFra
                 params={
                     "user_id": f"eq.{user_id}",
                     "entry_date": f"gte.{since}",
-                    "select": "entry_date,hrv,resting_hr,steps,sleep_total_min,dietary_energy,protein_g,carbs_g,fat_g",
+                    "select": "entry_date,hrv,resting_hr,steps,sleep_total_min,sleep_deep_min,dietary_energy,protein_g,carbs_g,fat_g,active_energy,vo2max",
                 },
             )
             resp.raise_for_status()
