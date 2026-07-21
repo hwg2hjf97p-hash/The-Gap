@@ -405,4 +405,44 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_label="Sleep duration that night (min)",
         category="lifestyle",
     ),
+
+    # ── ENVIRONMENT (weather & commute) ─────────────────────────────────────
+
+    # 32. Rainy day → Daily steps
+    Hypothesis(
+        id="rain_steps",
+        treatment_col="is_rainy",
+        outcome_col="steps",
+        covariate_cols=["day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=5,
+        treatment_label="Rainy day (>1mm rainfall)",
+        outcome_label="Daily steps",
+        category="environment",
+    ),
+
+    # 33. Average temperature → Sleep duration
+    Hypothesis(
+        id="temp_sleep",
+        treatment_col="temp_c",
+        outcome_col="sleep_total_min",
+        covariate_cols=["day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Average temperature (°C)",
+        outcome_label="Sleep duration (min)",
+        category="environment",
+    ),
+
+    # 34. Commute time → Next-day HRV
+    Hypothesis(
+        id="commute_hrv",
+        treatment_col="commute_minutes",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "day_of_week"],
+        min_rows=30,
+        treatment_label="Commute time (minutes, with traffic)",
+        outcome_label="Next-day HRV (ms)",
+        category="environment",
+    ),
 ]
