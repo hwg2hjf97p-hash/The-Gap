@@ -29,6 +29,8 @@ METRIC_DISPLAY = {
     "protein_g": {"label": "Protein", "unit": "g", "higher_is_better": None},
     "carbs_g": {"label": "Carbs", "unit": "g", "higher_is_better": None},
     "fat_g": {"label": "Fat", "unit": "g", "higher_is_better": None},
+    "commute_minutes": {"label": "Commute time", "unit": "min", "higher_is_better": False},
+    "temp_c": {"label": "Temperature", "unit": "°C", "higher_is_better": None},
 }
 
 # Candidate raw-correlation pairs to check, in priority order.
@@ -138,4 +140,3 @@ def build_snapshot(df: pd.DataFrame) -> dict:
         "latest": latest_cards,
         "raw_signals": raw_signals,
     }
-
