@@ -29,6 +29,7 @@ from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 from sync.apple_health_store import get_apple_health_dataframe
+from sync.environment_store import get_environment_dataframe
 
 # Optional imports — don't crash if these aren't ready yet
 try:
@@ -295,6 +296,22 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                 providers_synced.append("apple_health")
     except Exception as exc:
         logger.warning("Apple Health merge failed (continuing without it): %s", exc)
+
+    # Merge weather/commute data — same pattern as Apple Health above.
+    # A user with only environment data and no health data yet still
+    # shouldn't hit this merge (weather alone can't produce insights),
+    # but if any health_df already exists, this fills in additional
+    # columns for it.
+    try:
+        env_df = await get_environment_dataframe(user_id)
+        if env_df is not None and not env_df.empty and health_df is not None:
+            env_df.index = pd.to_datetime(env_df.index)
+            health_df.index = pd.to_datetime(health_df.index)
+            health_df = health_df.combine_first(env_df)
+            if "environment" not in providers_synced:
+                providers_synced.append("environment")
+    except Exception as exc:
+        logger.warning("Environment data merge failed (continuing without it): %s", exc)
 
     if health_df is None or health_df.empty:
         return {"user_id": user_id, "status": "no_data", "elapsed": round(time.perf_counter() - t0, 1)}
