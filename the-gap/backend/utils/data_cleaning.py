@@ -14,8 +14,28 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.copy()
 
-    # Remove outliers per column (3 standard deviations)
-    for col in df.select_dtypes(include=[np.number]).columns:
+    # Binary/flag columns (0 or 1 only) used as treatments or covariates
+    # across the causal hypotheses. These must NEVER go through 3-sigma
+    # outlier removal below.
+    #
+    # REAL BUG FIXED HERE: for a rare binary event (say only ~5% of days
+    # are "1"), the mean is close to 0 and the standard deviation is small,
+    # so "mean + 3*std" can land below 1 — meaning the 3-sigma filter
+    # actually treated the real "1" values as outliers and wiped them to
+    # NaN. This directly undermined exactly the sparse binary hypotheses
+    # this app depends on most (alcohol, late meetings, hard training
+    # days, rain, journaled stress/conflict events) — it could zero out
+    # the very treated days those hypotheses are trying to measure, and/or
+    # make them look like they never had enough treated days to run at all.
+    BINARY_COLS = {
+        "alcohol_flag", "is_weekend", "has_late_meeting", "is_meeting_free",
+        "afternoon_caffeine", "high_stress_flag", "stress_event",
+        "conflict_event", "is_rainy", "is_hard_day",
+    }
+
+    # Remove outliers per column (3 standard deviations) — skip binary/flag columns
+    numeric_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c not in BINARY_COLS]
+    for col in numeric_cols:
         mean = df[col].mean()
         std = df[col].std()
         if std > 0:
