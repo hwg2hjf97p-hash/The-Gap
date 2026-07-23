@@ -29,6 +29,7 @@ from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 from sync.apple_health_store import get_apple_health_dataframe
+from sync.device_calendar_store import get_device_calendar_dataframe
 from sync.environment_store import get_environment_dataframe
 
 # Optional imports — don't crash if these aren't ready yet
@@ -315,6 +316,25 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
 
     if health_df is None or health_df.empty:
         return {"user_id": user_id, "status": "no_data", "elapsed": round(time.perf_counter() - t0, 1)}
+
+    # Merge in on-device Calendar (EventKit) data — fills gaps for users
+    # who never completed Google's OAuth verification/test-user flow, or
+    # who only use calendars added at the iOS system level. Google
+    # Calendar keeps priority for any day it already has data for;
+    # device data only fills in what Google doesn't have.
+    try:
+        device_cal_df = await get_device_calendar_dataframe(user_id)
+        if device_cal_df is not None and not device_cal_df.empty:
+            device_cal_df.index = pd.to_datetime(device_cal_df.index)
+            if calendar_df is None or calendar_df.empty:
+                calendar_df = device_cal_df
+            else:
+                calendar_df.index = pd.to_datetime(calendar_df.index)
+                calendar_df = calendar_df.combine_first(device_cal_df)
+            if "device_calendar" not in providers_synced:
+                providers_synced.append("device_calendar")
+    except Exception as exc:
+        logger.warning("Device calendar merge failed (continuing without it): %s", exc)
 
     # Merge calendar if available
     if calendar_df is not None and not calendar_df.empty and merge_calendar_into_health is not None:
