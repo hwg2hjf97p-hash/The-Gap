@@ -59,6 +59,7 @@ from routers import assistant
 from routers import account
 from routers import apple_health
 from routers import environment
+from routers import device_calendar
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
@@ -69,6 +70,7 @@ app.include_router(assistant.router)
 app.include_router(account.router)
 app.include_router(apple_health.router)
 app.include_router(environment.router)
+app.include_router(device_calendar.router)
 
 @app.get("/health")
 def health_check():
