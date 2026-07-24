@@ -313,6 +313,26 @@ HYPOTHESES: list[Hypothesis] = [
         category="recovery",
     ),
 
+    # 22b. Sleep performance (% of sleep need met) → Same-day recovery score.
+    # sleep_score is real data (Whoop's sleep_performance_percentage, Oura's
+    # sleep score, or Polar's sleep_score) — populated the whole time, just
+    # never tested against anything. Distinct from sleep_total_min: this
+    # measures how much of the calculated sleep *need* was met, not raw
+    # duration, so it can genuinely differ from the sleep-duration hypotheses
+    # above even on the same night. Same-day (not next-day) is the correct
+    # pairing here — Whoop calculates each morning's recovery score directly
+    # from that same night's sleep, so they already describe the same period.
+    Hypothesis(
+        id="sleep_performance_recovery",
+        treatment_col="sleep_score",
+        outcome_col="recovery_score",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Sleep performance (% of sleep need met)",
+        outcome_label="Same-day recovery score (%)",
+        category="recovery",
+    ),
+
     # ── STRAVA / TRAINING ────────────────────────────────────────────────────
 
     # 23. Training load → Next-day HRV
@@ -403,6 +423,64 @@ HYPOTHESES: list[Hypothesis] = [
         min_treated_days=5,
         treatment_label="Day with a journaled conflict/argument",
         outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+
+    # These four were already being extracted from every journal entry by
+    # utils/journal_extract.py the whole time, but never wired into a
+    # hypothesis — so they were computed daily and then silently unused.
+
+    # 32. Mood score → Next-day HRV (continuous treatment, not binary)
+    Hypothesis(
+        id="journal_mood_hrv",
+        treatment_col="mood_score",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Day's mood score (-1 bad to +1 good)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+
+    # 33. Travel/disrupted-routine day → Same-night sleep duration
+    Hypothesis(
+        id="journal_travel_sleep",
+        treatment_col="travel_event",
+        outcome_col="sleep_total_min",
+        covariate_cols=["hrv_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=5,
+        treatment_label="Day with travel or a disrupted routine",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+
+    # 34. Illness day → Next-day resting heart rate
+    Hypothesis(
+        id="journal_illness_rhr",
+        treatment_col="illness_event",
+        outcome_col="resting_hr_next",
+        covariate_cols=["resting_hr", "hrv_lag1", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=5,
+        treatment_label="Day with a journaled illness/feeling unwell",
+        outcome_label="Next-day resting heart rate (bpm)",
+        category="health",
+    ),
+
+    # 35. Big-win day → Next-day HRV
+    Hypothesis(
+        id="journal_bigwin_hrv",
+        treatment_col="big_win_event",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=5,
+        treatment_label="Day with a journaled win/good news",
+        outcome_label="Next-day HRV (ms)",
         category="lifestyle",
     ),
 
