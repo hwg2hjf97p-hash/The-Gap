@@ -38,7 +38,7 @@ async def refresh_google_token(
 
 async def fetch_google_calendar_data(
     access_token: str,
-    days_back: int = 90,
+    days_back: int = 180,
 ) -> pd.DataFrame:
     """
     Fetch Google Calendar events for the last N days.
