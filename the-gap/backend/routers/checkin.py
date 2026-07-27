@@ -204,7 +204,7 @@ async def _get_streak(user_id: str) -> int:
         return 1
 
 
-def get_checkin_dataframe(user_id: str, days: int = 90):
+def get_checkin_dataframe(user_id: str, days: int = 180):
     """
     Fetch check-in data as a DataFrame for merging into health analysis.
     Returns DataFrame with columns: alcohol_flag, afternoon_caffeine,
