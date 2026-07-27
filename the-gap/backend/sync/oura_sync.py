@@ -55,7 +55,7 @@ async def refresh_oura_token(
 
 async def fetch_oura_data(
     access_token: str,
-    days_back: int = 90,
+    days_back: int = 180,
 ) -> pd.DataFrame:
     """
     Fetch Oura daily readiness, sleep, and activity data for the last N days.
