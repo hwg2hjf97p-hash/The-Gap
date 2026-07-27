@@ -77,7 +77,7 @@ async def _get_whoop_paginated(
 
 async def fetch_whoop_data(
     access_token: str,
-    days_back: int = 90,
+    days_back: int = 180,
 ) -> pd.DataFrame:
     """
     Fetch Whoop recovery, sleep, and cycle data for the last N days.
@@ -118,13 +118,9 @@ async def fetch_whoop_data(
     for s in sleep_records:
         if s.get("score_state") != "SCORED":
             continue
-        # REAL BUG FIXED HERE: naps come back as separate sleep records
-        # from Whoop's API (each with its own "nap" boolean), and this
-        # loop used to have no handling for that at all — a plain
-        # assignment (not a sum) meant a nap processed after the main
-        # overnight sleep would silently overwrite it, replacing a real
-        # night's sleep with a 20-minute nap's duration. Skip naps here;
-        # they aren't what "sleep_total_min" is meant to represent.
+        # Naps come back as separate sleep records from Whoop's API (each
+        # with its own "nap" boolean) — skip them so they can't overwrite
+        # or distort the main overnight sleep number.
         if s.get("nap"):
             continue
         scored_counts["sleep"] += 1
@@ -132,25 +128,39 @@ async def fetch_whoop_data(
         score = s.get("score", {}) or {}
         stage_summary = score.get("stage_summary", {}) or {}
         rows.setdefault(date, {})
-        # REAL BUG FIXED HERE: total_in_bed_time_milli includes time spent
-        # lying awake in bed — it's not actual sleep duration, and it's
-        # larger than what Whoop's own app displays as your sleep number.
-        # Actual asleep time is the sum of the three real sleep stages.
+        if "sleep_total_min" in rows[date]:
+            # More than one non-nap sleep record for the same date — log
+            # it so we have real evidence next time, rather than guessing
+            # at the mechanism again. Currently just keeps the later
+            # record (see note below), but this tells us whether that's
+            # actually the right call or whether these should be summed.
+            logger.warning(
+                "Whoop: multiple non-nap sleep records for date=%s — "
+                "previous sleep_total_min=%.1f, new stage_summary=%s",
+                date, rows[date]["sleep_total_min"], stage_summary,
+            )
+        # total_in_bed_time_milli includes time spent lying awake — not
+        # actual sleep duration, and larger than what Whoop's own app
+        # shows as your sleep number. Actual asleep time is the sum of
+        # the three real sleep stages instead.
         light_ms = stage_summary.get("total_light_sleep_time_milli", 0) or 0
         # v2 renamed slow_wave_sleep_duration_milli -> total_slow_wave_sleep_time_milli
         deep_ms = stage_summary.get("total_slow_wave_sleep_time_milli", 0) or 0
         rem_ms = stage_summary.get("total_rem_sleep_time_milli", 0) or 0
         asleep_ms = light_ms + deep_ms + rem_ms
-        # Sum rather than overwrite — on the rare night Whoop splits one
-        # night into two non-nap sleep records (e.g. a long wake period
-        # in the middle of the night), both should count toward the
-        # total instead of the second one silently replacing the first.
-        rows[date]["sleep_total_min"] = rows[date].get("sleep_total_min", 0) + asleep_ms / 60000
-        rows[date]["sleep_deep_min"] = rows[date].get("sleep_deep_min", 0) + deep_ms / 60000
-        # sleep_performance_percentage is already a whole-night figure from
-        # Whoop directly, not something to sum across records — last one
-        # standing (typically the main sleep, since naps are now skipped
-        # above) is the right choice here.
+        # REVERTED to overwrite, not sum: an earlier version of this fix
+        # summed non-nap records sharing a date, meant to handle the rare
+        # case of Whoop splitting one night into two records. That
+        # produced a demonstrated, clearly wrong result (an ~169 hour
+        # single-night reading) for at least one real user — the exact
+        # mechanism isn't confirmed yet without production logs showing
+        # the raw record count per date, so this reverts to the safer,
+        # previously-working behavior (last record seen wins) rather
+        # than ship a second guess. Worth revisiting properly once we
+        # can see how many non-nap records Whoop actually returns per
+        # date for a real affected account.
+        rows[date]["sleep_total_min"] = asleep_ms / 60000
+        rows[date]["sleep_deep_min"] = deep_ms / 60000
         rows[date]["sleep_score"] = score.get("sleep_performance_percentage")
 
     for c in cycle_records:
