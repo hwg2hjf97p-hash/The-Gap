@@ -121,7 +121,7 @@ async def get_user_location(user_id: str) -> Optional[dict]:
         return None
 
 
-async def fetch_and_store_weather(user_id: str, lat: float, lon: float, days_back: int = 90) -> int:
+async def fetch_and_store_weather(user_id: str, lat: float, lon: float, days_back: int = 180) -> int:
     """
     Pulls real historical daily weather (rain, temperature) for the last
     N days and stores it — this is the one part of environment data that
@@ -229,7 +229,7 @@ async def fetch_and_store_commute(user_id: str, home_address: str, work_address:
         return False
 
 
-async def get_environment_dataframe(user_id: str, days: int = 90) -> pd.DataFrame:
+async def get_environment_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """Fetch this user's stored weather/commute history as a date-indexed DataFrame, for merging into the causal engine."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
