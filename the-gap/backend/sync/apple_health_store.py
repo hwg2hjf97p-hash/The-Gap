@@ -112,7 +112,7 @@ async def upsert_apple_health_rows(user_id: str, daily_rows: dict[str, dict[str,
         logger.warning("Apple Health upsert failed (continuing anyway): %s", exc)
 
 
-async def get_apple_health_dataframe(user_id: str, days: int = 90) -> pd.DataFrame:
+async def get_apple_health_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """Fetch this user's stored Apple Health history as a date-indexed DataFrame."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
