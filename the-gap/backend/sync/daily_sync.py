@@ -348,7 +348,13 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         checkin_df = get_checkin_dataframe(user_id)
         if checkin_df is not None and not checkin_df.empty:
             checkin_df.index = pd.to_datetime(checkin_df.index)
-            health_df = health_df.join(checkin_df, how="left")
+            # REAL BUG FIXED HERE: "left" join meant a Quick Entry logged
+            # on a day with no wearable data at all (no Whoop/Apple
+            # Health/etc that day) was silently dropped from the entire
+            # analysis — not deprioritized, just invisible, since
+            # health_df's own date index determined which days could
+            # exist at all. "outer" keeps every date from either side.
+            health_df = health_df.join(checkin_df, how="outer")
     except Exception as exc:
         logger.warning("Check-in merge failed (continuing without it): %s", exc)
 
@@ -357,7 +363,9 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         journal_df = await get_journal_dataframe(user_id)
         if journal_df is not None and not journal_df.empty:
             journal_df.index = pd.to_datetime(journal_df.index)
-            health_df = health_df.join(journal_df, how="left")
+            # Same fix as checkin_df above — outer join so a journal
+            # entry on a wearable-free day still makes it into analysis.
+            health_df = health_df.join(journal_df, how="outer")
     except Exception as exc:
         logger.warning("Journal merge failed (continuing without it): %s", exc)
 
