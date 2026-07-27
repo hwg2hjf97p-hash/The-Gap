@@ -165,7 +165,7 @@ async def _count_today(user_id: str) -> int:
 
 async def _get_streak(user_id: str) -> int:
     """Consecutive days with at least one quick entry — same idea as the check-in streak."""
-    since = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+    since = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
@@ -279,7 +279,7 @@ async def _save_extraction(user_id: str, entry_date: str, entry_count: int, sign
         logger.warning("Saving extraction failed (will re-extract next sync): %s", exc)
 
 
-async def get_journal_dataframe(user_id: str, days: int = 90) -> pd.DataFrame:
+async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """
     Fetch quick entries for the last N days, group by date, and return a
     date-indexed DataFrame ready to merge into the main health DataFrame.
