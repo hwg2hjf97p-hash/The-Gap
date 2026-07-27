@@ -245,9 +245,15 @@ def merge_calendar_into_health(
     calendar_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Left-join calendar features onto the main health dataframe.
+    Outer-join calendar features onto the main health dataframe.
     Both must be indexed by date (pd.Timestamp).
     Missing calendar days get 0 events (assumed no data = no meetings).
+
+    REAL BUG FIXED HERE: this used to be a left join, which meant a
+    calendar day with no wearable data at all (no Whoop/Apple Health/etc
+    that day) would be silently dropped from the entire analysis —
+    health_df's own date index determined which days could exist at
+    all. Outer join keeps every date present on either side.
     """
     if calendar_df.empty:
         return health_df
@@ -256,7 +262,7 @@ def merge_calendar_into_health(
     health_df.index = pd.to_datetime(health_df.index)
     calendar_df.index = pd.to_datetime(calendar_df.index)
 
-    merged = health_df.join(calendar_df, how="left")
+    merged = health_df.join(calendar_df, how="outer")
 
     # Fill calendar cols with 0 where no calendar data exists
     cal_cols = ["calendar_events", "meeting_hours", "has_late_meeting", "is_meeting_free"]
