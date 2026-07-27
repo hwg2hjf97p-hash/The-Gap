@@ -66,7 +66,7 @@ async def _withings_post(client: httpx.AsyncClient, path: str, access_token: str
         return None
 
 
-async def fetch_withings_data(access_token: str, days_back: int = 90) -> pd.DataFrame:
+async def fetch_withings_data(access_token: str, days_back: int = 180) -> pd.DataFrame:
     """
     Fetch Withings sleep and weight data for the last N days.
     Returns a DataFrame with The Gap column names.
