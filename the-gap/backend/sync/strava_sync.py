@@ -49,7 +49,7 @@ async def refresh_strava_token(
 
 async def fetch_strava_data(
     access_token: str,
-    days_back: int = 90,
+    days_back: int = 180,
 ) -> pd.DataFrame:
     """
     Fetch Strava activities for the last N days.
