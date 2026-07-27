@@ -118,16 +118,39 @@ async def fetch_whoop_data(
     for s in sleep_records:
         if s.get("score_state") != "SCORED":
             continue
+        # REAL BUG FIXED HERE: naps come back as separate sleep records
+        # from Whoop's API (each with its own "nap" boolean), and this
+        # loop used to have no handling for that at all — a plain
+        # assignment (not a sum) meant a nap processed after the main
+        # overnight sleep would silently overwrite it, replacing a real
+        # night's sleep with a 20-minute nap's duration. Skip naps here;
+        # they aren't what "sleep_total_min" is meant to represent.
+        if s.get("nap"):
+            continue
         scored_counts["sleep"] += 1
         date = s.get("start", "")[:10]
         score = s.get("score", {}) or {}
         stage_summary = score.get("stage_summary", {}) or {}
         rows.setdefault(date, {})
-        total_ms = stage_summary.get("total_in_bed_time_milli", 0) or 0
+        # REAL BUG FIXED HERE: total_in_bed_time_milli includes time spent
+        # lying awake in bed — it's not actual sleep duration, and it's
+        # larger than what Whoop's own app displays as your sleep number.
+        # Actual asleep time is the sum of the three real sleep stages.
+        light_ms = stage_summary.get("total_light_sleep_time_milli", 0) or 0
         # v2 renamed slow_wave_sleep_duration_milli -> total_slow_wave_sleep_time_milli
         deep_ms = stage_summary.get("total_slow_wave_sleep_time_milli", 0) or 0
-        rows[date]["sleep_total_min"] = total_ms / 60000
-        rows[date]["sleep_deep_min"] = deep_ms / 60000
+        rem_ms = stage_summary.get("total_rem_sleep_time_milli", 0) or 0
+        asleep_ms = light_ms + deep_ms + rem_ms
+        # Sum rather than overwrite — on the rare night Whoop splits one
+        # night into two non-nap sleep records (e.g. a long wake period
+        # in the middle of the night), both should count toward the
+        # total instead of the second one silently replacing the first.
+        rows[date]["sleep_total_min"] = rows[date].get("sleep_total_min", 0) + asleep_ms / 60000
+        rows[date]["sleep_deep_min"] = rows[date].get("sleep_deep_min", 0) + deep_ms / 60000
+        # sleep_performance_percentage is already a whole-night figure from
+        # Whoop directly, not something to sum across records — last one
+        # standing (typically the main sleep, since naps are now skipped
+        # above) is the right choice here.
         rows[date]["sleep_score"] = score.get("sleep_performance_percentage")
 
     for c in cycle_records:
