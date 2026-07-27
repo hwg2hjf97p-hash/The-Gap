@@ -71,8 +71,31 @@ async def _get_whoop_paginated(
             params = {"start": start, "limit": 25, "next_token": next_token}
     except Exception as exc:
         logger.warning("Whoop endpoint %s failed (continuing without it): %s", endpoint, exc)
-        return records  # return whatever pages succeeded before the failure, if any
-    return records
+        return _dedupe_by_id(records)  # return whatever pages succeeded before the failure, if any
+    return _dedupe_by_id(records)
+
+
+def _dedupe_by_id(records: list[dict]) -> list[dict]:
+    """
+    REAL BUG FIXED HERE: production logs showed Whoop returning the exact
+    same sleep record twice for every single night — confirmed by nearly
+    identical stage_summary totals across many different dates, not
+    genuinely different sleep periods. Whether this comes from an overlap
+    at our pagination page boundaries or a quirk in Whoop's own API, every
+    Whoop record has a unique "id" — deduplicating by it is correct
+    regardless of the exact mechanism, and safe even if duplication never
+    happens for a given user (a no-op in that case).
+    """
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for r in records:
+        rid = r.get("id")
+        if rid is not None and rid in seen:
+            continue
+        if rid is not None:
+            seen.add(rid)
+        deduped.append(r)
+    return deduped
 
 
 async def fetch_whoop_data(
