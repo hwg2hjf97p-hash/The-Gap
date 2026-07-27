@@ -90,7 +90,7 @@ async def upsert_device_calendar_rows(user_id: str, daily_rows: dict[str, dict[s
         logger.warning("Device calendar upsert failed (continuing anyway): %s", exc)
 
 
-async def get_device_calendar_dataframe(user_id: str, days: int = 90) -> pd.DataFrame:
+async def get_device_calendar_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """Fetch this user's stored device-calendar history as a date-indexed DataFrame."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
