@@ -369,6 +369,18 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     except Exception as exc:
         logger.warning("Journal merge failed (continuing without it): %s", exc)
 
+    # REAL BUG FIXED HERE: outer joins (checkin/journal/calendar above)
+    # don't guarantee the resulting index stays sorted by date — a new
+    # date introduced by one of those joins can land anywhere in the
+    # frame, not necessarily at the end. build_snapshot's "latest
+    # reading" for each metric relies on the *last row by position*
+    # (clean.iloc[-1]) actually being the most recent date — if the
+    # frame isn't sorted, that can silently pull from the wrong day
+    # entirely. Sorting once here, right before anything downstream
+    # depends on row order, fixes it regardless of which merge caused
+    # the disorder.
+    health_df = health_df.sort_index()
+
     # Run causal engine
     try:
         logger.info("ENGINE_START user=%s days=%d", user_id[:8], len(health_df))
