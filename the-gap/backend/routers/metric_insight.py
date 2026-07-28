@@ -173,10 +173,22 @@ async def get_metric_insight(body: MetricInsightRequest) -> JSONResponse:
 
     # 1. Fresh cache (< 1 hour old) — return it, no LLM call, no cost.
     if cached:
-        age_hours = (
-            datetime.now(timezone.utc)
-            - datetime.fromisoformat(cached["generated_at"].replace("Z", "+00:00"))
-        ).total_seconds() / 3600
+        # REAL BUG FIXED HERE: this parse had no error handling at all,
+        # unlike everything else in this file — any timestamp format
+        # Supabase returned that didn't parse perfectly (extra precision,
+        # a differently-formatted offset, etc.) threw an uncaught
+        # exception straight to a 500, every single time a cached
+        # insight existed. Treat a parse failure as "can't confirm it's
+        # fresh" and fall through to the normal stale/regenerate path
+        # instead of crashing the whole request.
+        try:
+            age_hours = (
+                datetime.now(timezone.utc)
+                - datetime.fromisoformat(cached["generated_at"].replace("Z", "+00:00"))
+            ).total_seconds() / 3600
+        except Exception as exc:
+            logger.warning("Could not parse cached generated_at (%r) — treating as stale: %s", cached.get("generated_at"), exc)
+            age_hours = CACHE_HOURS  # treat as exactly at the boundary — falls through to the stale path below
         if age_hours < CACHE_HOURS:
             return JSONResponse(content={
                 "insight_text": cached["insight_text"],
