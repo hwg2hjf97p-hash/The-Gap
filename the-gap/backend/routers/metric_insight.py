@@ -43,6 +43,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from causal.hypotheses import HYPOTHESES
+from sync.user_profile_store import get_user_profile
 from utils.metric_personal_insight import generate_personal_insight
 
 logger = logging.getLogger(__name__)
@@ -200,12 +201,14 @@ async def get_metric_insight(body: MetricInsightRequest) -> JSONResponse:
 
     # 3. Under the cap — generate a fresh one, grounded in real hypothesis data.
     relevant = _relevant_hypothesis_labels(body.metric)
+    profile = await get_user_profile(body.user_id)
     insight_text = await generate_personal_insight(
         metric_label=body.metric_label,
         reading_value=str(body.reading_value),
         unit=body.unit,
         comparison_text=body.comparison_text,
         relevant_hypotheses=relevant,
+        profile=profile,
     )
 
     if insight_text is None:
