@@ -103,7 +103,7 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
     required = [hyp.treatment_col, hyp.outcome_col] + (hyp.covariate_cols or [])
     missing = [c for c in required if c not in df.columns]
     if missing:
-        logger.debug("Skipping %s — missing columns: %s", hyp.id, missing)
+        logger.info("SKIPPED_MISSING_COLUMNS hyp=%s missing=%s", hyp.id, missing)
         return None
 
     # ── 2. Build working sub-frame ─────────────────────────────────────────
@@ -112,8 +112,8 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
 
     # ── 3. Check minimum row count ─────────────────────────────────────────
     if len(sub) < hyp.min_rows:
-        logger.debug(
-            "Skipping %s — only %d rows (need %d)", hyp.id, len(sub), hyp.min_rows
+        logger.info(
+            "SKIPPED_INSUFFICIENT_ROWS hyp=%s rows=%d needed=%d", hyp.id, len(sub), hyp.min_rows
         )
         return None
 
@@ -121,8 +121,8 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
     if hyp.binary_treatment:
         n_treated = sub[hyp.treatment_col].sum()
         if n_treated < hyp.min_treated_days:
-            logger.debug(
-                "Skipping %s — only %d treated days (need %d)",
+            logger.info(
+                "SKIPPED_INSUFFICIENT_TREATED_DAYS hyp=%s treated=%d needed=%d",
                 hyp.id,
                 int(n_treated),
                 hyp.min_treated_days,
