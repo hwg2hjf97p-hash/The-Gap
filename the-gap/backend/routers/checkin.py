@@ -108,7 +108,7 @@ async def submit_checkin(body: CheckInRequest) -> JSONResponse:
         logger.error("Check-in save failed: %s", exc)
         raise HTTPException(status_code=500, detail="Could not save check-in.")
 
-    streak = await _get_streak(body.user_id)
+    streak = await _get_streak(body.user_id, body.date)
 
     return JSONResponse(content={
         "success": True,
@@ -141,9 +141,13 @@ async def get_recent_checkins(user_id: str, days: int = 30) -> JSONResponse:
 
 
 @router.get("/{user_id}/today")
-async def get_today_checkin(user_id: str) -> JSONResponse:
+async def get_today_checkin(user_id: str, local_date: Optional[str] = None) -> JSONResponse:
     """Get today's check-in if it exists."""
-    today = date.today().isoformat()
+    # REAL BUG FIXED HERE: date.today() is the server's own clock, not
+    # the user's — same class of bug confirmed in journal.py tonight.
+    # Prefer the client-supplied local date; fall back to server date
+    # only for an un-updated app version.
+    today = local_date or date.today().isoformat()
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
@@ -164,7 +168,7 @@ async def get_today_checkin(user_id: str) -> JSONResponse:
         return JSONResponse(content={"checkin": None})
 
 
-async def _get_streak(user_id: str) -> int:
+async def _get_streak(user_id: str, local_date: Optional[str] = None) -> int:
     """Calculate current consecutive check-in streak."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -189,7 +193,10 @@ async def _get_streak(user_id: str) -> int:
             return 1
 
         streak = 1
-        today = date.today()
+        # REAL BUG FIXED HERE: date.today() is the server's own clock —
+        # prefer the client-supplied local date instead, same fix as
+        # journal.py's streak logic.
+        today = datetime.strptime(local_date, "%Y-%m-%d").date() if local_date else date.today()
         expected = today if dates[0] == today else today - timedelta(days=1)
 
         for d in dates:
