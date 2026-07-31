@@ -12,10 +12,23 @@ Table DDL (run once in Supabase SQL editor):
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL,
     entry_text TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    local_date DATE
   );
   CREATE INDEX IF NOT EXISTS idx_quick_entries_user_date
     ON quick_entries (user_id, created_at);
+
+  -- If the table already exists from before this fix:
+  ALTER TABLE quick_entries ADD COLUMN IF NOT EXISTS local_date DATE;
+
+  -- local_date: the device's own local calendar date at the moment of
+  -- logging, sent explicitly by the app — NOT derived from created_at.
+  -- REAL BUG THIS FIXES: created_at is a UTC server timestamp; deriving
+  -- "what day is this" from it breaks for anyone outside UTC during a
+  -- real daily window (confirmed with an actual entry: logged 9:46am
+  -- Brisbane time, stored as 23:46 UTC the *previous* day). The device
+  -- always knows its own local date correctly — this stores that
+  -- directly instead of re-deriving it from a timezone-less timestamp.
 """
 
 from __future__ import annotations
@@ -63,6 +76,9 @@ def _sb_headers(prefer: str = "") -> dict:
 class QuickEntryRequest(BaseModel):
     user_id: str
     text: str = Field(..., min_length=1, max_length=MAX_ENTRY_LENGTH)
+    # Optional for backward compatibility with an un-updated app version —
+    # falls back to server-derived UTC date if not provided, same as before.
+    local_date: Optional[str] = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -74,7 +90,7 @@ async def create_entry(body: QuickEntryRequest) -> JSONResponse:
     if not text:
         raise HTTPException(status_code=400, detail="Entry can't be empty.")
 
-    payload = {"user_id": body.user_id, "entry_text": text}
+    payload = {"user_id": body.user_id, "entry_text": text, "local_date": body.local_date}
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -88,28 +104,35 @@ async def create_entry(body: QuickEntryRequest) -> JSONResponse:
         logger.error("Quick entry save failed: %s", exc)
         raise HTTPException(status_code=500, detail="Could not save entry.")
 
-    count_today = await _count_today(body.user_id)
-    streak = await _get_streak(body.user_id)
+    count_today = await _count_today(body.user_id, body.local_date)
+    streak = await _get_streak(body.user_id, body.local_date)
 
     return JSONResponse(content={"success": True, "count_today": count_today, "streak": streak})
 
 
 @router.get("/{user_id}/today")
-async def get_today_entries(user_id: str) -> JSONResponse:
+async def get_today_entries(user_id: str, local_date: Optional[str] = None) -> JSONResponse:
     """List today's entries — shown as a running list above the input box."""
-    start = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                _sb_url("quick_entries"),
-                headers=_sb_headers(),
-                params={
+            if local_date:
+                # Correct path: filter by the device's own local date directly.
+                params = {
+                    "user_id": f"eq.{user_id}",
+                    "local_date": f"eq.{local_date}",
+                    "select": "id,entry_text,created_at",
+                    "order": "created_at.asc",
+                }
+            else:
+                # Fallback for an un-updated app version — old UTC-derived behavior.
+                start = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
+                params = {
                     "user_id": f"eq.{user_id}",
                     "created_at": f"gte.{start}",
                     "select": "id,entry_text,created_at",
                     "order": "created_at.asc",
-                },
-            )
+                }
+            resp = await client.get(_sb_url("quick_entries"), headers=_sb_headers(), params=params)
             resp.raise_for_status()
             return JSONResponse(content={"entries": resp.json() or []})
     except Exception as exc:
@@ -139,31 +162,27 @@ async def get_week_count(user_id: str) -> JSONResponse:
 
 
 @router.get("/{user_id}/streak")
-async def get_streak_endpoint(user_id: str) -> JSONResponse:
-    streak = await _get_streak(user_id)
+async def get_streak_endpoint(user_id: str, local_date: Optional[str] = None) -> JSONResponse:
+    streak = await _get_streak(user_id, local_date)
     return JSONResponse(content={"streak": streak})
 
 
-async def _count_today(user_id: str) -> int:
-    start = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
+async def _count_today(user_id: str, local_date: Optional[str] = None) -> int:
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                _sb_url("quick_entries"),
-                headers=_sb_headers(),
-                params={
-                    "user_id": f"eq.{user_id}",
-                    "created_at": f"gte.{start}",
-                    "select": "id",
-                },
-            )
+            if local_date:
+                params = {"user_id": f"eq.{user_id}", "local_date": f"eq.{local_date}", "select": "id"}
+            else:
+                start = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
+                params = {"user_id": f"eq.{user_id}", "created_at": f"gte.{start}", "select": "id"}
+            resp = await client.get(_sb_url("quick_entries"), headers=_sb_headers(), params=params)
             resp.raise_for_status()
             return len(resp.json() or [])
     except Exception:
         return 0
 
 
-async def _get_streak(user_id: str) -> int:
+async def _get_streak(user_id: str, local_date: Optional[str] = None) -> int:
     """Consecutive days with at least one quick entry — same idea as the check-in streak."""
     since = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()
     try:
@@ -174,21 +193,32 @@ async def _get_streak(user_id: str) -> int:
                 params={
                     "user_id": f"eq.{user_id}",
                     "created_at": f"gte.{since}",
-                    "select": "created_at",
+                    "select": "created_at,local_date",
                     "order": "created_at.desc",
                 },
             )
             resp.raise_for_status()
             rows = resp.json() or []
 
+        # Prefer the stored local_date (correct, device-reported); fall
+        # back to deriving from created_at only for historical rows from
+        # before this fix, which don't have local_date set.
         dates = sorted(
-            {datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")).date() for r in rows},
+            {
+                datetime.strptime(r["local_date"], "%Y-%m-%d").date()
+                if r.get("local_date")
+                else datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")).date()
+                for r in rows
+            },
             reverse=True,
         )
         if not dates:
             return 0
 
-        today = datetime.now(timezone.utc).date()
+        # Use the client-supplied local date as "today" if given — the
+        # phone always knows this correctly. Falls back to server UTC
+        # date for an un-updated app version.
+        today = datetime.strptime(local_date, "%Y-%m-%d").date() if local_date else datetime.now(timezone.utc).date()
         expected = today if dates[0] == today else today - timedelta(days=1)
         if dates[0] not in (today, today - timedelta(days=1)):
             return 0
@@ -303,7 +333,7 @@ async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
                 params={
                     "user_id": f"eq.{user_id}",
                     "created_at": f"gte.{since}",
-                    "select": "entry_text,created_at",
+                    "select": "entry_text,created_at,local_date",
                     "order": "created_at.asc",
                 },
             )
@@ -317,9 +347,19 @@ async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Group entries by calendar date
+    # REAL BUG FIXED HERE: this used to group by created_at[:10] — a raw
+    # UTC timestamp slice, with no timezone awareness at all. Confirmed
+    # with a real entry: logged 9:46am Brisbane time, stored as 23:46 UTC
+    # the *previous* day. That means an entry could get merged against
+    # the WRONG day's Whoop/Calendar/Apple Health data when training the
+    # journal-based hypotheses (journal_stress_hrv, journal_conflict_sleep,
+    # etc.) — silently misaligning cause and effect for anyone outside
+    # UTC. Use the client-reported local_date when available; only fall
+    # back to the old UTC-derived slice for entries logged before this
+    # fix shipped, which don't have local_date set.
     by_date: dict[str, list[str]] = {}
     for r in rows:
-        d = r["created_at"][:10]
+        d = r.get("local_date") or r["created_at"][:10]
         by_date.setdefault(d, []).append(r["entry_text"])
 
     cached = await _get_cached_extractions(user_id, since_date)
