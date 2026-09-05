@@ -63,6 +63,9 @@ from routers import device_calendar
 from routers import metric_insight
 from routers import profile
 from routers import hypothesis_explanation
+from routers import subscriptions
+from routers import push
+from routers import digest
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
@@ -77,6 +80,9 @@ app.include_router(device_calendar.router)
 app.include_router(metric_insight.router)
 app.include_router(profile.router)
 app.include_router(hypothesis_explanation.router)
+app.include_router(subscriptions.router)
+app.include_router(push.router)
+app.include_router(digest.router)
 
 @app.get("/health")
 def health_check():

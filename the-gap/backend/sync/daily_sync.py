@@ -15,10 +15,12 @@ from datetime import datetime, timezone
 
 import httpx
 import pandas as pd
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 
-from db.supabase_client import save_results
+from auth import get_current_user_id
+from db.supabase_client import save_results, get_latest_results
+from utils.push import send_push
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
@@ -392,6 +394,19 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         logger.info("ENGINE_DONE user=%s insights=%d experiments_in_progress=%d elapsed=%.1fs",
                     user_id[:8], len(insights_dicts), len(experiments), time.perf_counter() - t0)
 
+        # Diff against the previous run's insights *before* overwriting them,
+        # so a discovery push notification only fires for a hypothesis that
+        # is genuinely newly confirmed this run — not one that was already
+        # confirmed last time and simply reappears.
+        try:
+            previous = get_latest_results(user_id)
+            previous_ids = {i["hypothesis_id"] for i in (previous or {}).get("insights") or []}
+        except Exception as exc:
+            logger.warning("Could not load previous results for discovery diff (%s): %s", user_id[:8], exc)
+            previous_ids = set()
+
+        newly_confirmed = [i for i in insights_dicts if i["hypothesis_id"] not in previous_ids]
+
         session_id = save_results(
             user_id=user_id,
             data_source=",".join(providers_synced),
@@ -400,6 +415,14 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             snapshot=snapshot,
             experiments=experiments,
         )
+
+        for insight in newly_confirmed:
+            await send_push(
+                user_id,
+                title="New pattern found",
+                body=insight.get("headline") or insight.get("title") or "A new causal pattern just showed up in your data.",
+                data={"kind": "discovery", "hypothesis_id": insight["hypothesis_id"], "session_id": session_id},
+            )
 
         return {
             "user_id": user_id,
@@ -414,12 +437,12 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         return {"user_id": user_id, "status": "engine_error", "error": str(exc)}
 
 
-@router.post("/user/{user_id}")
-async def sync_single_user(user_id: str):
+@router.post("/user")
+async def sync_single_user(user_id: str = Depends(get_current_user_id)):
     """
     Immediately fetch data + run causal engine for one user.
-    Called by the frontend "Run analysis now" button right after OAuth connect.
-    No auth required — user_id is a random UUID from localStorage (not sensitive).
+    Called by the frontend "Run analysis now" button right after OAuth connect,
+    and by the onboarding flow after connecting a provider.
     """
     logger.info("Manual sync triggered for user: %s", user_id)
 

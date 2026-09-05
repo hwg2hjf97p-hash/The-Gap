@@ -23,8 +23,10 @@ from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+
+from auth import get_current_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/connect")
@@ -215,13 +217,56 @@ async def debug_auth_url(provider: str):
     }
 
 
+@router.get("/status")
+async def connection_status(user_id: str = Depends(get_current_user_id)):
+    """
+    Return which providers are connected for the authenticated user.
+
+    Deliberately registered BEFORE /{provider} below — FastAPI/Starlette
+    matches path operations in registration order, and /{provider} would
+    otherwise greedily match "status" as a provider name, routing every
+    call here into start_oauth instead (which then 422s on the missing
+    required user_id query param). Static paths must come before
+    wildcard/path-parameter routes that could shadow them.
+    """
+    url = _supabase_rest_url("user_connections")
+    headers = _supabase_headers()
+    headers.pop("Prefer", None)  # not needed for SELECT
+
+    params = {
+        "user_id": f"eq.{user_id}",
+        "is_active": "eq.true",
+        "select": "provider,connected_at,last_synced_at",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+            return JSONResponse(content={"connected": resp.json() or []})
+    except Exception as exc:
+        logger.error("Status check failed: %s", exc)
+        return JSONResponse(content={"connected": []})
+
+
 @router.get("/{provider}")
 async def start_oauth(
     provider: str,
     user_id: str = Query(..., description="Unique user identifier"),
     platform: str = Query("web", description="'web' or 'mobile' — determines post-auth redirect target"),
 ):
-    """Redirect user to provider OAuth page."""
+    """
+    Redirect user to provider OAuth page.
+
+    Deliberately NOT behind get_current_user_id: the app opens this URL as a
+    direct browser navigation (WebBrowser.openAuthSessionAsync), which can't
+    attach an Authorization header. user_id here is now always the caller's
+    real authenticated Supabase id (lib/api.ts fetches it from the session
+    before building this URL) rather than an arbitrary client-supplied value
+    — the OAuth state token that carries it onward is still HMAC-signed
+    (see _store_state/_consume_state below) so it can't be tampered with
+    once issued.
+    """
     cfg = _get_provider_config(provider)
     client_id, _ = _get_client_credentials(provider)
 
@@ -457,32 +502,9 @@ async def oauth_callback(
     )
 
 
-@router.get("/status/{user_id}")
-async def connection_status(user_id: str):
-    """Return which providers are connected for a user."""
-    url = _supabase_rest_url("user_connections")
-    headers = _supabase_headers()
-    headers.pop("Prefer", None)  # not needed for SELECT
-
-    params = {
-        "user_id": f"eq.{user_id}",
-        "is_active": "eq.true",
-        "select": "provider,connected_at,last_synced_at",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers=headers, params=params)
-            resp.raise_for_status()
-            return JSONResponse(content={"connected": resp.json() or []})
-    except Exception as exc:
-        logger.error("Status check failed: %s", exc)
-        return JSONResponse(content={"connected": []})
-
-
-@router.delete("/{provider}/{user_id}")
-async def disconnect(provider: str, user_id: str):
-    """Disconnect a provider for a user."""
+@router.delete("/{provider}")
+async def disconnect(provider: str, user_id: str = Depends(get_current_user_id)):
+    """Disconnect a provider for the authenticated user."""
     url = _supabase_rest_url("user_connections")
     headers = _supabase_headers()
     headers["Prefer"] = "return=minimal"

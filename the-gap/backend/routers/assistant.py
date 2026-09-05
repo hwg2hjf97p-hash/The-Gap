@@ -13,10 +13,11 @@ import logging
 import os
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from auth import get_current_user_id
 from db.supabase_client import get_latest_results
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,6 @@ Reference specific numbers from their data when you have them."""
 
 
 class AskRequest(BaseModel):
-    user_id: str
     question: str = Field(..., min_length=1, max_length=500)
 
 
@@ -78,12 +78,12 @@ def _build_context(results_row: dict | None) -> str:
 
 
 @router.post("/ask")
-async def ask(body: AskRequest) -> JSONResponse:
+async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="Assistant isn't configured yet.")
 
-    results_row = get_latest_results(body.user_id)
+    results_row = get_latest_results(user_id)
     context = _build_context(results_row)
 
     try:

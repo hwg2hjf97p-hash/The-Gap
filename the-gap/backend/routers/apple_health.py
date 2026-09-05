@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from auth import get_current_user_id
 from sync.apple_health_store import upsert_apple_health_rows
 from sync.daily_sync import _sync_user, _supabase_get
 
@@ -33,19 +34,18 @@ router = APIRouter(prefix="/apple-health", tags=["apple-health"])
 
 
 class AppleHealthSyncRequest(BaseModel):
-    user_id: str
     daily_rows: dict[str, dict[str, float]]  # {"2026-07-14": {"hrv": 45.2, "steps": 8000, ...}}
 
 
 @router.post("/sync")
-async def sync_apple_health(body: AppleHealthSyncRequest) -> JSONResponse:
+async def sync_apple_health(body: AppleHealthSyncRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     if not body.daily_rows:
         return JSONResponse(content={"status": "no_data", "days": 0})
 
     # Persist first — this is what makes the data survive future syncs
     # triggered by other sources (e.g. connecting a new OAuth provider
     # later shouldn't erase this).
-    await upsert_apple_health_rows(body.user_id, body.daily_rows)
+    await upsert_apple_health_rows(user_id, body.daily_rows)
 
     # Fetch this user's active OAuth connections (same lookup the
     # OAuth-triggered sync endpoint uses) so this run merges everything —
@@ -54,13 +54,13 @@ async def sync_apple_health(body: AppleHealthSyncRequest) -> JSONResponse:
     try:
         connections = await _supabase_get(
             "user_connections",
-            {"user_id": f"eq.{body.user_id}", "is_active": "eq.true", "select": "*"},
+            {"user_id": f"eq.{user_id}", "is_active": "eq.true", "select": "*"},
         )
     except Exception as exc:
-        logger.error("Could not fetch connections for %s: %s", body.user_id, exc)
+        logger.error("Could not fetch connections for %s: %s", user_id, exc)
         connections = []
 
-    result = await _sync_user(body.user_id, connections)
+    result = await _sync_user(user_id, connections)
 
     if result.get("status") == "no_data":
         # Shouldn't normally happen since we just upserted real data above,
@@ -69,7 +69,7 @@ async def sync_apple_health(body: AppleHealthSyncRequest) -> JSONResponse:
 
     logger.info(
         "APPLE_HEALTH_SYNC_DONE user=%s status=%s",
-        body.user_id[:8], result.get("status"),
+        user_id[:8], result.get("status"),
     )
 
     return JSONResponse(content={

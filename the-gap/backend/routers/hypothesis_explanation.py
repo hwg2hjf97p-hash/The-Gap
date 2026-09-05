@@ -30,10 +30,11 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from auth import get_current_user_id
 from causal.hypotheses import HYPOTHESES
 from utils.hypothesis_explanation import generate_hypothesis_explanation, generate_raw_signal_explanation
 
@@ -58,7 +59,6 @@ def _sb_headers(prefer: str = "") -> dict:
 
 
 class HypothesisExplanationRequest(BaseModel):
-    user_id: str
     kind: str = "hypothesis"  # "hypothesis" | "raw_signal"
     # for kind="hypothesis":
     hypothesis_id: str | None = None
@@ -151,7 +151,7 @@ async def _increment_today_count(user_id: str, current: int) -> None:
 
 
 @router.post("")
-async def get_hypothesis_explanation(body: HypothesisExplanationRequest) -> JSONResponse:
+async def get_hypothesis_explanation(body: HypothesisExplanationRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     cache_key = body.cache_key
     if not cache_key:
         return JSONResponse(content={"explanation_text": None, "cached": False, "limit_reached": False})
@@ -162,7 +162,7 @@ async def get_hypothesis_explanation(body: HypothesisExplanationRequest) -> JSON
         if hyp is None:
             return JSONResponse(content={"explanation_text": None, "cached": False, "limit_reached": False})
 
-    cached = await _get_cached(body.user_id, cache_key)
+    cached = await _get_cached(user_id, cache_key)
 
     if cached:
         # Same fix as metric_insight.py's earlier bug: never let a
@@ -178,7 +178,7 @@ async def get_hypothesis_explanation(body: HypothesisExplanationRequest) -> JSON
         if age_hours < CACHE_HOURS:
             return JSONResponse(content={"explanation_text": cached["explanation_text"], "cached": True, "limit_reached": False})
 
-    today_count = await _get_today_count(body.user_id)
+    today_count = await _get_today_count(user_id)
     if today_count >= DAILY_GENERATION_LIMIT:
         if cached:
             return JSONResponse(content={"explanation_text": cached["explanation_text"], "cached": True, "limit_reached": True})
@@ -209,7 +209,7 @@ async def get_hypothesis_explanation(body: HypothesisExplanationRequest) -> JSON
             return JSONResponse(content={"explanation_text": cached["explanation_text"], "cached": True, "limit_reached": False})
         return JSONResponse(content={"explanation_text": None, "cached": False, "limit_reached": False})
 
-    await _save_cache(body.user_id, cache_key, explanation_text)
-    await _increment_today_count(body.user_id, today_count)
+    await _save_cache(user_id, cache_key, explanation_text)
+    await _increment_today_count(user_id, today_count)
 
     return JSONResponse(content={"explanation_text": explanation_text, "cached": False, "limit_reached": False})

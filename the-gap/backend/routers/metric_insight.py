@@ -38,10 +38,11 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from auth import get_current_user_id
 from causal.hypotheses import HYPOTHESES
 from sync.user_profile_store import get_user_profile
 from utils.metric_personal_insight import generate_personal_insight
@@ -70,7 +71,6 @@ def _sb_headers(prefer: str = "") -> dict:
 
 
 class MetricInsightRequest(BaseModel):
-    user_id: str
     metric: str
     metric_label: str
     reading_value: float
@@ -168,8 +168,8 @@ async def _increment_today_count(user_id: str, current: int) -> None:
 
 
 @router.post("")
-async def get_metric_insight(body: MetricInsightRequest) -> JSONResponse:
-    cached = await _get_cached(body.user_id, body.metric)
+async def get_metric_insight(body: MetricInsightRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    cached = await _get_cached(user_id, body.metric)
 
     # 1. Fresh cache (< 1 hour old) — return it, no LLM call, no cost.
     if cached:
@@ -197,7 +197,7 @@ async def get_metric_insight(body: MetricInsightRequest) -> JSONResponse:
             })
 
     # 2. Cache is stale or missing — check the daily cap before calling the LLM.
-    today_count = await _get_today_count(body.user_id)
+    today_count = await _get_today_count(user_id)
     if today_count >= DAILY_GENERATION_LIMIT:
         if cached:
             return JSONResponse(content={
@@ -213,7 +213,7 @@ async def get_metric_insight(body: MetricInsightRequest) -> JSONResponse:
 
     # 3. Under the cap — generate a fresh one, grounded in real hypothesis data.
     relevant = _relevant_hypothesis_labels(body.metric)
-    profile = await get_user_profile(body.user_id)
+    profile = await get_user_profile(user_id)
     insight_text = await generate_personal_insight(
         metric_label=body.metric_label,
         reading_value=str(body.reading_value),
@@ -238,8 +238,8 @@ async def get_metric_insight(body: MetricInsightRequest) -> JSONResponse:
             "limit_reached": False,
         })
 
-    await _save_cache(body.user_id, body.metric, body.reading_value, insight_text)
-    await _increment_today_count(body.user_id, today_count)
+    await _save_cache(user_id, body.metric, body.reading_value, insight_text)
+    await _increment_today_count(user_id, today_count)
 
     return JSONResponse(content={
         "insight_text": insight_text,

@@ -40,10 +40,11 @@ from typing import Optional
 
 import httpx
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from auth import get_current_user_id
 from utils.journal_extract import extract_daily_signals
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,6 @@ def _sb_headers(prefer: str = "") -> dict:
 # ── Request / Response models ────────────────────────────────────────────────
 
 class QuickEntryRequest(BaseModel):
-    user_id: str
     text: str = Field(..., min_length=1, max_length=MAX_ENTRY_LENGTH)
     # Optional for backward compatibility with an un-updated app version —
     # falls back to server-derived UTC date if not provided, same as before.
@@ -84,13 +84,13 @@ class QuickEntryRequest(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/entry")
-async def create_entry(body: QuickEntryRequest) -> JSONResponse:
+async def create_entry(body: QuickEntryRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """Log one quick entry. Each submission is its own row — no editing a running draft."""
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Entry can't be empty.")
 
-    payload = {"user_id": body.user_id, "entry_text": text, "local_date": body.local_date}
+    payload = {"user_id": user_id, "entry_text": text, "local_date": body.local_date}
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -104,14 +104,14 @@ async def create_entry(body: QuickEntryRequest) -> JSONResponse:
         logger.error("Quick entry save failed: %s", exc)
         raise HTTPException(status_code=500, detail="Could not save entry.")
 
-    count_today = await _count_today(body.user_id, body.local_date)
-    streak = await _get_streak(body.user_id, body.local_date)
+    count_today = await _count_today(user_id, body.local_date)
+    streak = await _get_streak(user_id, body.local_date)
 
     return JSONResponse(content={"success": True, "count_today": count_today, "streak": streak})
 
 
-@router.get("/{user_id}/today")
-async def get_today_entries(user_id: str, local_date: Optional[str] = None) -> JSONResponse:
+@router.get("/today")
+async def get_today_entries(user_id: str = Depends(get_current_user_id), local_date: Optional[str] = None) -> JSONResponse:
     """List today's entries — shown as a running list above the input box."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -140,8 +140,8 @@ async def get_today_entries(user_id: str, local_date: Optional[str] = None) -> J
         return JSONResponse(content={"entries": []})
 
 
-@router.get("/{user_id}/week")
-async def get_week_count(user_id: str) -> JSONResponse:
+@router.get("/week")
+async def get_week_count(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """Count of quick entries in the last 7 days — powers the Home dashboard stat."""
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     try:
@@ -161,8 +161,8 @@ async def get_week_count(user_id: str) -> JSONResponse:
         return JSONResponse(content={"count": 0})
 
 
-@router.get("/{user_id}/streak")
-async def get_streak_endpoint(user_id: str, local_date: Optional[str] = None) -> JSONResponse:
+@router.get("/streak")
+async def get_streak_endpoint(user_id: str = Depends(get_current_user_id), local_date: Optional[str] = None) -> JSONResponse:
     streak = await _get_streak(user_id, local_date)
     return JSONResponse(content={"streak": streak})
 
@@ -235,8 +235,8 @@ async def _get_streak(user_id: str, local_date: Optional[str] = None) -> int:
         return 0
 
 
-@router.get("/{user_id}/extracted")
-async def get_extracted_days(user_id: str, days: int = 30) -> JSONResponse:
+@router.get("/extracted")
+async def get_extracted_days(user_id: str = Depends(get_current_user_id), days: int = 30) -> JSONResponse:
     """
     Returns Claude's extracted daily summaries — what it read from your
     entries and what it concluded. Lets you sanity-check the extraction

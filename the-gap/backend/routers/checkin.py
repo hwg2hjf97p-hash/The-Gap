@@ -30,9 +30,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
+
+from auth import get_current_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/checkin", tags=["checkin"])
@@ -60,7 +62,6 @@ def _sb_headers(prefer: str = "") -> dict:
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class CheckInRequest(BaseModel):
-    user_id: str
     date: str = Field(default_factory=lambda: date.today().isoformat())
     alcohol: bool = False
     afternoon_caffeine: bool = False
@@ -85,10 +86,10 @@ class CheckInResponse(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/")
-async def submit_checkin(body: CheckInRequest) -> JSONResponse:
+async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """Submit or update a daily check-in."""
     payload = {
-        "user_id": body.user_id,
+        "user_id": user_id,
         "date": body.date,
         "alcohol": body.alcohol,
         "afternoon_caffeine": body.afternoon_caffeine,
@@ -108,7 +109,7 @@ async def submit_checkin(body: CheckInRequest) -> JSONResponse:
         logger.error("Check-in save failed: %s", exc)
         raise HTTPException(status_code=500, detail="Could not save check-in.")
 
-    streak = await _get_streak(body.user_id, body.date)
+    streak = await _get_streak(user_id, body.date)
 
     return JSONResponse(content={
         "success": True,
@@ -117,8 +118,8 @@ async def submit_checkin(body: CheckInRequest) -> JSONResponse:
     })
 
 
-@router.get("/{user_id}/recent")
-async def get_recent_checkins(user_id: str, days: int = 30) -> JSONResponse:
+@router.get("/recent")
+async def get_recent_checkins(user_id: str = Depends(get_current_user_id), days: int = 30) -> JSONResponse:
     """Get recent check-ins for a user — used to pre-fill today's form."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
@@ -140,8 +141,8 @@ async def get_recent_checkins(user_id: str, days: int = 30) -> JSONResponse:
         return JSONResponse(content={"checkins": []})
 
 
-@router.get("/{user_id}/today")
-async def get_today_checkin(user_id: str, local_date: Optional[str] = None) -> JSONResponse:
+@router.get("/today")
+async def get_today_checkin(user_id: str = Depends(get_current_user_id), local_date: Optional[str] = None) -> JSONResponse:
     """Get today's check-in if it exists."""
     # REAL BUG FIXED HERE: date.today() is the server's own clock, not
     # the user's — same class of bug confirmed in journal.py tonight.

@@ -19,9 +19,10 @@ import logging
 import time
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from auth import get_current_user_id
 from utils.validation import validate_upload
 from parsers.apple_health import parse_apple_health
 from parsers.whoop import parse_whoop
@@ -239,6 +240,26 @@ async def analyse(
     )
 
 
+@router.get("/results/latest")
+async def get_latest_results_endpoint(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """
+    Retrieve the authenticated user's most recent analysis without needing a
+    session_id — this is what the Home dashboard calls on every load, since a
+    session_id is only ever known right after analysis runs, not on a later visit.
+
+    Deliberately registered BEFORE /results/{session_id} below — same
+    static-before-wildcard ordering fix as routers/connect.py's /status
+    route. Without this, /results/{session_id} greedily matches "latest"
+    as a session_id and this endpoint is never reached.
+    """
+    from db.supabase_client import get_latest_results
+
+    row = get_latest_results(user_id)
+    if row is None:
+        return JSONResponse(content={"found": False})
+    return JSONResponse(content={"found": True, **row})
+
+
 @router.get("/results/{session_id}")
 async def get_results(session_id: str) -> JSONResponse:
     """Retrieve previously computed results by session_id."""
@@ -254,18 +275,3 @@ async def get_results(session_id: str) -> JSONResponse:
             },
         )
     return JSONResponse(content=row)
-
-
-@router.get("/results/latest/{user_id}")
-async def get_latest_results_endpoint(user_id: str) -> JSONResponse:
-    """
-    Retrieve a user's most recent analysis without needing a session_id —
-    this is what the Home dashboard calls on every load, since a session_id
-    is only ever known right after analysis runs, not on a later visit.
-    """
-    from db.supabase_client import get_latest_results
-
-    row = get_latest_results(user_id)
-    if row is None:
-        return JSONResponse(content={"found": False})
-    return JSONResponse(content={"found": True, **row})
