@@ -1,0 +1,36 @@
+name: Scheduled Sync & Digest
+
+# Makes wearable syncing actually automatic — daily_sync.py and digest.py
+# have always accepted a secret-protected trigger, but nothing was ever
+# calling them on a schedule until this workflow.
+#
+# One-time setup needed in this repo's GitHub settings:
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#     SYNC_SECRET = <same value as the backend's SYNC_SECRET env var>
+#   Settings -> Secrets and variables -> Actions -> Variables (optional)
+#     BACKEND_URL = <your backend's base URL, if different from the default below>
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours — background sync, no "Sync Now" tap needed
+    - cron: "0 22 * * 0"    # Sundays 22:00 UTC — weekly digest
+  workflow_dispatch: {}       # lets you trigger either job manually from the Actions tab
+
+jobs:
+  sync:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 */4 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger backend sync
+        run: |
+          curl -sf -X POST "${{ vars.BACKEND_URL || 'https://the-gap-backend.onrender.com' }}/sync/run" \
+            -H "X-Sync-Secret: ${{ secrets.SYNC_SECRET }}"
+
+  digest:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 22 * * 0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger weekly digest
+        run: |
+          curl -sf -X POST "${{ vars.BACKEND_URL || 'https://the-gap-backend.onrender.com' }}/digest/run" \
+            -H "X-Sync-Secret: ${{ secrets.SYNC_SECRET }}"
