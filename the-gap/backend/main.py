@@ -66,6 +66,9 @@ from routers import hypothesis_explanation
 from routers import subscriptions
 from routers import push
 from routers import digest
+from routers import history
+from routers import experiments
+from routers import improvement
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
@@ -83,6 +86,9 @@ app.include_router(hypothesis_explanation.router)
 app.include_router(subscriptions.router)
 app.include_router(push.router)
 app.include_router(digest.router)
+app.include_router(history.router)
+app.include_router(experiments.router)
+app.include_router(improvement.router)
 
 @app.get("/health")
 def health_check():

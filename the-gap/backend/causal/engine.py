@@ -29,7 +29,7 @@ MIN_EFFECT = {
 DEFAULT_MIN_EFFECT = 0.5
 
 
-def get_experiments_in_progress(df: pd.DataFrame) -> list[dict]:
+def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[list[Hypothesis]] = None) -> list[dict]:
     """
     For every hypothesis that doesn't yet have enough data to run, report
     how close it is — this is what powers the "Running on you" progress
@@ -37,9 +37,12 @@ def get_experiments_in_progress(df: pd.DataFrame) -> list[dict]:
     _run_one, so this never claims something is "in progress" when it's
     actually already been tested (or never will be, for lack of a
     connected data source).
+
+    extra_hypotheses: a user's own proposed experiments (see
+    routers/experiments.py), merged in alongside the fixed HYPOTHESES list.
     """
     experiments = []
-    for hyp in HYPOTHESES:
+    for hyp in HYPOTHESES + (extra_hypotheses or []):
         required = [hyp.treatment_col, hyp.outcome_col] + (hyp.covariate_cols or [])
         if any(c not in df.columns for c in required):
             continue  # no relevant data source connected at all — nothing to show
@@ -71,15 +74,16 @@ def get_experiments_in_progress(df: pd.DataFrame) -> list[dict]:
     return experiments
 
 
-def run_all_hypotheses(df: pd.DataFrame) -> list[Insight]:
+def run_all_hypotheses(df: pd.DataFrame, extra_hypotheses: Optional[list[Hypothesis]] = None) -> list[Insight]:
     """
-    Iterate over every pre-defined hypothesis.
+    Iterate over every pre-defined hypothesis, plus any user-proposed ones
+    (see routers/experiments.py).
     Skip those with insufficient data or near-zero effects.
     Return a sorted list of Insight objects.
     """
     insights: list[Insight] = []
 
-    for hyp in HYPOTHESES:
+    for hyp in HYPOTHESES + (extra_hypotheses or []):
         try:
             insight = _run_one(df, hyp)
             if insight is not None:

@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 
 from auth import get_current_user_id
 from db.supabase_client import save_results, get_latest_results
+from routers.experiments import get_user_hypotheses
 from utils.push import send_push
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
@@ -387,10 +388,11 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     try:
         logger.info("ENGINE_START user=%s days=%d", user_id[:8], len(health_df))
         df = clean_dataframe(health_df)
-        insights = run_all_hypotheses(df)
+        extra_hypotheses = await get_user_hypotheses(user_id)
+        insights = run_all_hypotheses(df, extra_hypotheses)
         insights_dicts = [i.to_dict() for i in insights]
         snapshot = build_snapshot(df)
-        experiments = get_experiments_in_progress(df)
+        experiments = get_experiments_in_progress(df, extra_hypotheses)
         logger.info("ENGINE_DONE user=%s insights=%d experiments_in_progress=%d elapsed=%.1fs",
                     user_id[:8], len(insights_dicts), len(experiments), time.perf_counter() - t0)
 
