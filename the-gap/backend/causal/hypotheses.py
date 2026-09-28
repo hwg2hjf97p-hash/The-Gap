@@ -79,14 +79,22 @@ HYPOTHESES: list[Hypothesis] = [
 
     # ── SLEEP ───────────────────────────────────────────────────────────────
 
-    # 5. Sleep timing consistency → Deep sleep
+    # 5. Sleep duration consistency → Deep sleep
+    # REAL BUG FIXED HERE: this hypothesis was labeled "Bedtime deviation"
+    # but sleep_deviation (utils/data_cleaning.py) is actually a *duration*
+    # consistency proxy (abs distance from your average total sleep time),
+    # not a bedtime-timing signal — the label overclaimed what was
+    # actually measured. Also removed sleep_total_min from covariates: since
+    # sleep_deviation is mechanically derived FROM sleep_total_min, controlling
+    # for it here is a "bad control" that partials out much of the very
+    # variation this hypothesis is trying to test.
     Hypothesis(
         id="sleep_consistency_deep",
         treatment_col="sleep_deviation",
         outcome_col="sleep_deep_min",
-        covariate_cols=["sleep_total_min", "day_of_week", "is_weekend", "hrv_lag1"],
+        covariate_cols=["day_of_week", "is_weekend", "hrv_lag1"],
         min_rows=45,
-        treatment_label="Bedtime deviation (min from your norm)",
+        treatment_label="Sleep duration deviation (min from your norm)",
         outcome_label="Deep sleep (minutes)",
         category="health",
     ),
@@ -313,25 +321,15 @@ HYPOTHESES: list[Hypothesis] = [
         category="recovery",
     ),
 
-    # 22b. Sleep performance (% of sleep need met) → Same-day recovery score.
-    # sleep_score is real data (Whoop's sleep_performance_percentage, Oura's
-    # sleep score, or Polar's sleep_score) — populated the whole time, just
-    # never tested against anything. Distinct from sleep_total_min: this
-    # measures how much of the calculated sleep *need* was met, not raw
-    # duration, so it can genuinely differ from the sleep-duration hypotheses
-    # above even on the same night. Same-day (not next-day) is the correct
-    # pairing here — Whoop calculates each morning's recovery score directly
-    # from that same night's sleep, so they already describe the same period.
-    Hypothesis(
-        id="sleep_performance_recovery",
-        treatment_col="sleep_score",
-        outcome_col="recovery_score",
-        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
-        min_rows=30,
-        treatment_label="Sleep performance (% of sleep need met)",
-        outcome_label="Same-day recovery score (%)",
-        category="recovery",
-    ),
+    # 22b. REMOVED: sleep_score → recovery_score ("sleep performance vs
+    # same-day recovery score") used to be here. Pulled after a reliability
+    # audit found it's not a real causal test at all — Whoop's own
+    # documented recovery-score formula computes recovery_score *directly
+    # from* HRV, resting HR, and sleep performance, i.e. sleep_score is a
+    # mechanical input to the outcome, not an independent cause of it. Any
+    # "effect" this ever found would be definitional/formulaic, not
+    # causal — exactly the kind of finding that would quietly undermine
+    # trust in every other genuinely-tested hypothesis in this list.
 
     # ── STRAVA / TRAINING ────────────────────────────────────────────────────
 

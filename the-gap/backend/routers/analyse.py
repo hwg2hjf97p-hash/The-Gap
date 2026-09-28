@@ -127,6 +127,11 @@ async def analyse(
 
     # ── 5. Clean ───────────────────────────────────────────────────────────
     try:
+        # Same guard sync/daily_sync.py already applies after its outer
+        # joins: an outer join doesn't guarantee a sorted index, and
+        # clean_dataframe()'s .shift()-based lag/next columns need row
+        # order to match calendar order to mean anything.
+        df = df.sort_index()
         df = clean_dataframe(df)
     except Exception as exc:
         logger.exception("Data cleaning failed: %s", exc)

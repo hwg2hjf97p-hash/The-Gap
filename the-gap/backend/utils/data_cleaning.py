@@ -5,6 +5,7 @@ import numpy as np
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Apply standard cleaning to a daily health DataFrame:
+    - Reindex to a continuous daily calendar (see REAL BUG note below)
     - Remove statistical outliers (3 sigma)
     - Add engineered features needed for causal hypotheses
     - Forward-fill sparse metrics (HRV, VO2max)
@@ -13,6 +14,23 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     df = df.copy()
+
+    # REAL BUG FIXED HERE: every "_lag1"/"_next" column below is built with
+    # pandas .shift(), which shifts by ROW POSITION, not by calendar day.
+    # If a day has zero data from every connected source (device not worn,
+    # no journal entry, nothing synced) it was previously just a *missing
+    # row* rather than a present-but-NaN one — so .shift(-1) on the row
+    # before a gap silently pulled the value from 2+ calendar days later,
+    # mislabeled as "tomorrow". This is exactly the class of misalignment
+    # this app has already fixed for timezones/dates elsewhere, just at
+    # the row level instead of the per-entry level. Reindexing to a
+    # genuine continuous daily range up front means a gap day becomes an
+    # explicit all-NaN row, so every shift() below now correctly measures
+    # "the actual adjacent calendar day" — NaN when that day is truly
+    # unknown, instead of a real-looking value from the wrong day.
+    if isinstance(df.index, pd.DatetimeIndex) and len(df.index) > 1:
+        full_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq="D")
+        df = df.reindex(full_range)
 
     # Binary/flag columns (0 or 1 only) used as treatments or covariates
     # across the causal hypotheses. These must NEVER go through 3-sigma
@@ -43,11 +61,6 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 (df[col] >= mean - 3 * std) & (df[col] <= mean + 3 * std)
             )
 
-    # Forward fill sparse metrics (max 3 days)
-    sparse_cols = [c for c in ["vo2max", "resting_hr"] if c in df.columns]
-    if sparse_cols:
-        df[sparse_cols] = df[sparse_cols].ffill(limit=3)
-
     # --- Engineered features ---
 
     # Day of week (0=Monday, 6=Sunday) — important confounder
@@ -63,6 +76,13 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if "is_weekend" not in df.columns:
         df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
 
+    # REAL BUG FIXED HERE: these lag/next columns used to be computed
+    # *after* the forward-fill below, so resting_hr_next silently inherited
+    # a stale, forward-filled value instead of a genuine next-day reading
+    # (or a correct NaN) whenever that day's real measurement was missing.
+    # Computing them here, from the raw pre-ffill values, means a gap day
+    # honestly produces NaN rather than a fabricated "next day" value.
+
     # Lagged HRV (prior day)
     if "hrv" in df.columns:
         df["hrv_lag1"] = df["hrv"].shift(1)
@@ -73,10 +93,12 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         # Sleep debt: rolling 7-day average minus 480 minutes (8 hours)
         df["sleep_debt_min"] = (df["sleep_total_min"].rolling(7, min_periods=3).mean() - 480).fillna(0)
 
-    # Bedtime deviation: how many minutes later/earlier than personal mean bedtime
-    # Proxy: we infer bedtime from sleep start (not directly available in aggregated data)
-    # Use sleep_total_min variance as a proxy for consistency
-    if "sleep_total_min" in df.columns:
+    # Bedtime deviation: how many minutes later/earlier than personal mean bedtime.
+    # Only computed as a duration-based proxy when a real bedtime-derived
+    # value isn't already present — some parsers (e.g. Oura, see
+    # parsers/oura.py) compute a genuine bedtime-timing signal directly;
+    # this used to silently overwrite that better value every time.
+    if "sleep_deviation" not in df.columns and "sleep_total_min" in df.columns:
         personal_mean_sleep = df["sleep_total_min"].mean()
         df["sleep_deviation"] = (df["sleep_total_min"] - personal_mean_sleep).abs()
 
@@ -85,6 +107,13 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         df["hrv_next"] = df["hrv"].shift(-1)
     if "resting_hr" in df.columns:
         df["resting_hr_next"] = df["resting_hr"].shift(-1)
+
+    # Forward fill sparse metrics (max 3 days) — deliberately AFTER the
+    # lag/next columns above are computed, so those still reflect genuine
+    # measurements rather than carried-forward stand-ins.
+    sparse_cols = [c for c in ["vo2max", "resting_hr"] if c in df.columns]
+    if sparse_cols:
+        df[sparse_cols] = df[sparse_cols].ffill(limit=3)
 
     return df
 

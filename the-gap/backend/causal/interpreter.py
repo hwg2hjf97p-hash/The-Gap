@@ -10,6 +10,19 @@ from typing import Optional
 from causal.hypotheses import Hypothesis
 from models.insight import Insight, ConfidenceLevel
 
+# REAL BUG FIXED HERE: metric_direction (which drives the app's green/red
+# badge coloring) and direction_word (used in headlines) used to be
+# computed purely from the sign of the raw effect — correct for outcomes
+# where higher is better (HRV, sleep, steps, recovery score), but backwards
+# for resting heart rate, where an INCREASE is the bad outcome. A found
+# hypothesis like "alcohol raises your resting heart rate" was being shown
+# with a green "improves" badge. Only outcomes where higher is worse need
+# listing here; anything absent defaults to higher-is-better.
+OUTCOME_HIGHER_IS_BETTER = {
+    "resting_hr": False,
+    "resting_hr_next": False,
+}
+
 
 def interpret_result(
     *,
@@ -23,8 +36,13 @@ def interpret_result(
     """Turn a causal result into a human-readable Insight card."""
 
     is_positive = effect > 0
-    direction_word = "improves" if is_positive else "reduces"
-    metric_direction: str = "positive" if is_positive else "negative"
+    higher_is_better = OUTCOME_HIGHER_IS_BETTER.get(hypothesis.outcome_col, True)
+    is_good = is_positive if higher_is_better else not is_positive
+    # Purely descriptive (never a value judgment) — safe to use in every
+    # headline regardless of which direction is actually good for this
+    # outcome. "improves"/"reduces" got this backwards for RHR outcomes.
+    direction_word = "increases" if is_positive else "decreases"
+    metric_direction: str = "positive" if is_good else "negative"
     abs_effect = abs(round(effect, 1))
     metric_delta = f"+{abs_effect}" if is_positive else f"−{abs_effect}"
 
@@ -125,7 +143,7 @@ def interpret_result(
         )
         metric_unit = "bpm"
         tip = (
-            "Prioritise 7–8 hours consistently — your heart rate responds measurably."
+            "Interesting — more sleep is linked to a *higher* resting heart rate for you; worth keeping an eye on this."
             if is_positive
             else "Longer sleep is lowering your resting HR — a sign of improved cardiovascular fitness."
         )
@@ -203,11 +221,14 @@ def interpret_result(
             f"your resting heart rate the next day by {abs_effect} bpm"
         )
         metric_unit = "bpm"
+        # REAL BUG FIXED HERE: this was inverted — is_positive means resting
+        # HR went *up* on heavy-meeting days (the concerning direction), but
+        # the reassuring "stays stable" copy used to show for that case.
         tip = (
-            "Your cardiovascular system is responding to work stress. "
-            "Schedule recovery time after high-meeting days."
-            if not is_positive
-            else "Your body handles busy days well — resting HR stays stable."
+            "Heavy meeting days are measurably raising your resting heart rate. "
+            "Try blocking 30-minute recovery gaps between back-to-back meetings."
+            if is_positive
+            else "Your body handles busy days well — resting HR doesn't spike."
         )
 
     elif hid == "meeting_free_hrv":
@@ -255,14 +276,19 @@ def interpret_result(
 
     elif hid == "alcohol_rhr":
         title = "Alcohol & Heart Rate"
+        # REAL BUG FIXED HERE: both the headline's increased/decreased words
+        # and the tip's conditions were inverted relative to is_positive
+        # (compare the correct sibling hypothesis alcohol_hrv above) — this
+        # was telling users their resting heart rate *decreased* from
+        # alcohol on nights the data actually showed it increased.
         headline = (
             f"On nights you drank, your resting heart rate the next day "
-            f"{'decreased' if is_positive else 'increased'} by {abs_effect} bpm"
+            f"{'increased' if is_positive else 'decreased'} by {abs_effect} bpm"
         )
         metric_unit = "bpm"
         tip = (
             "Alcohol is elevating your resting heart rate — a sign of inflammatory stress response."
-            if not is_positive
+            if is_positive
             else "Your heart rate responds unusually to alcohol — worth tracking further."
         )
 
@@ -396,11 +422,14 @@ def interpret_result(
             f"your resting heart rate by {abs_effect} bpm"
         )
         metric_unit = "bpm"
+        # REAL BUG FIXED HERE: same class of inversion as busy_day_rhr above
+        # — is_positive means resting HR *rises* with weekly load (fatigue),
+        # but the "solid aerobic adaptation" praise used to show for that case.
         tip = (
             "Cumulative training fatigue is showing up in your resting HR. "
             "Build in a deload week every 3-4 weeks to let your cardiovascular system recover."
-            if not is_positive
-            else "Your resting HR improves as your weekly training load increases — solid aerobic adaptation."
+            if is_positive
+            else "Your resting HR stays steady or improves even as training load increases — solid aerobic adaptation."
         )
 
     # Fallback for any future hypotheses
