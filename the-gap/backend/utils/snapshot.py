@@ -35,13 +35,18 @@ METRIC_DISPLAY = {
 
 # Candidate raw-correlation pairs to check, in priority order.
 # (column_a, column_b, human-readable description template)
+# Plain sentences, not "X vs. Y" — this is exactly the kind of copy that
+# read as jargon to a non-technical user ("Sleep duration vs. next-day
+# HRV ... Moderate +0.47" means nothing without a stats background). The
+# raw r-value/strength badge is still shown alongside this in the app,
+# just no longer the headline.
 CANDIDATE_PAIRS = [
-    ("sleep_total_min", "hrv_next", "Sleep duration vs. next-day HRV"),
-    ("sleep_total_min", "resting_hr_next", "Sleep duration vs. next-day resting heart rate"),
-    ("hrv_lag1", "recovery_score", "Prior-day HRV vs. recovery score"),
-    ("sleep_debt_min", "recovery_score", "Sleep debt vs. recovery score"),
-    ("is_weekend", "sleep_total_min", "Weekends vs. sleep duration"),
-    ("steps", "sleep_total_min", "Daily steps vs. same-night sleep duration"),
+    ("sleep_total_min", "hrv_next", "How much you sleep seems to affect your HRV the next day"),
+    ("sleep_total_min", "resting_hr_next", "How much you sleep seems to affect your resting heart rate the next day"),
+    ("hrv_lag1", "recovery_score", "Yesterday's HRV seems to affect today's recovery score"),
+    ("sleep_debt_min", "recovery_score", "Building up sleep debt seems to affect your recovery score"),
+    ("is_weekend", "sleep_total_min", "Weekends seem to affect how long you sleep"),
+    ("steps", "sleep_total_min", "How many steps you take seems to affect your sleep that night"),
 ]
 
 

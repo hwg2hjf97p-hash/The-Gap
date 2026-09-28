@@ -69,6 +69,7 @@ from routers import digest
 from routers import history
 from routers import experiments
 from routers import improvement
+from routers import metric_history
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
@@ -89,6 +90,7 @@ app.include_router(digest.router)
 app.include_router(history.router)
 app.include_router(experiments.router)
 app.include_router(improvement.router)
+app.include_router(metric_history.router)
 
 @app.get("/health")
 def health_check():

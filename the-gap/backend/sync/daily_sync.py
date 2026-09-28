@@ -27,7 +27,7 @@ from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
 from sync.polar_sync import fetch_polar_data
 from utils.data_cleaning import clean_dataframe
-from utils.snapshot import build_snapshot
+from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
@@ -118,6 +118,43 @@ async def _supabase_get(table: str, params: dict) -> list[dict]:
         )
         resp.raise_for_status()
         return resp.json() or []
+
+
+async def _persist_metric_history(user_id: str, df: pd.DataFrame) -> None:
+    """
+    Best-effort — persists each METRIC_DISPLAY column's daily values so the
+    app can show a real "since you started" chart per metric (see
+    routers/metric_history.py), not just the last 7 days kept in the
+    snapshot. Runs every sync; upserts are idempotent so re-sending
+    already-seen dates is harmless, just slightly wasteful — fine at
+    current scale, worth trimming to only-new-dates if this ever gets
+    expensive. Never raises — a failure here must never break the actual
+    insight computation that follows it.
+    """
+    try:
+        records = []
+        for col in METRIC_DISPLAY:
+            if col not in df.columns:
+                continue
+            for date, value in df[col].dropna().items():
+                records.append({
+                    "user_id": user_id,
+                    "date": date.strftime("%Y-%m-%d") if hasattr(date, "strftime") else str(date)[:10],
+                    "metric": col,
+                    "value": float(value),
+                })
+        if not records:
+            return
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                _supabase_url("metric_history"),
+                headers={**_supabase_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
+                params={"on_conflict": "user_id,date,metric"},
+                json=records,
+            )
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.warning("Persisting metric history failed for %s (continuing anyway): %s", user_id[:8], exc)
 
 
 async def _supabase_patch(table: str, params: dict, payload: dict) -> None:
@@ -388,6 +425,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     try:
         logger.info("ENGINE_START user=%s days=%d", user_id[:8], len(health_df))
         df = clean_dataframe(health_df)
+        await _persist_metric_history(user_id, df)
         extra_hypotheses = await get_user_hypotheses(user_id)
         insights = run_all_hypotheses(df, extra_hypotheses)
         insights_dicts = [i.to_dict() for i in insights]
