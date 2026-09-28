@@ -438,6 +438,8 @@ def interpret_result(
         confidence=confidence,
         confidence_label=confidence_label,
         confidence_description=confidence_description,
+        treatment_col=hypothesis.treatment_col,
+        outcome_col=hypothesis.outcome_col,
         ate=round(effect, 4),
         ci_low=round(ci_low, 4),
         ci_high=round(ci_high, 4),

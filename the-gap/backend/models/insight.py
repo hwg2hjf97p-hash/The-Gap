@@ -48,6 +48,13 @@ class Insight:
     actionable_tip: str = ""
     share_text: str = ""
 
+    # ── Raw column names ─────────────────────────────────────────────────
+    # Lets the client map a finding back to a chartable metric (see
+    # utils/snapshot.py's METRIC_DISPLAY / metric_history table) without
+    # hardcoding a duplicate copy of every hypothesis's outcome mapping.
+    treatment_col: str = ""
+    outcome_col: str = ""
+
     def to_dict(self) -> dict:
         d = asdict(self)
         # Convert ConfidenceLevel enum to string for JSON serialisation
@@ -81,6 +88,8 @@ class InsightOut(BaseModel):
     p_value: Optional[float] = None
     actionable_tip: str = ""
     share_text: str = ""
+    treatment_col: str = ""
+    outcome_col: str = ""
 
 
 class DataSummaryOut(BaseModel):
