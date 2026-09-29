@@ -118,6 +118,24 @@ async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_curren
     })
 
 
+@router.delete("/{date}")
+async def delete_checkin(date: str, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """Delete a single day's check-in (e.g. logged by mistake)."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.delete(
+                _sb_url("daily_checkins"),
+                headers={**_sb_headers(), "Prefer": "return=minimal"},
+                params={"user_id": f"eq.{user_id}", "date": f"eq.{date}"},
+            )
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.error("Check-in delete failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Could not delete check-in.")
+
+    return JSONResponse(content={"success": True})
+
+
 @router.get("/recent")
 async def get_recent_checkins(user_id: str = Depends(get_current_user_id), days: int = 30) -> JSONResponse:
     """Get recent check-ins for a user — used to pre-fill today's form."""
