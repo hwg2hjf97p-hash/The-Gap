@@ -36,6 +36,7 @@ from auth import get_current_user_id
 from db.supabase_client import get_latest_results
 from routers.journal import _get_streak as _get_journal_streak
 from utils.push import send_push
+from utils.goals import compute_goal_progress
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/digest", tags=["digest"])
@@ -63,7 +64,7 @@ async def _supabase_get(table: str, params: dict) -> list[dict]:
         return resp.json() or []
 
 
-def _build_digest_text(confirmed_count: int, in_progress_count: int, streak: int) -> str:
+def _build_digest_text(confirmed_count: int, in_progress_count: int, streak: int, goal_lines: list[str]) -> str:
     parts = []
     if confirmed_count > 0:
         parts.append(f"{confirmed_count} confirmed pattern{'s' if confirmed_count != 1 else ''} running on you right now")
@@ -73,7 +74,37 @@ def _build_digest_text(confirmed_count: int, in_progress_count: int, streak: int
         parts.append(f"{in_progress_count} more still gathering data")
     if streak > 0:
         parts.append(f"a {streak}-day streak")
-    return "This week: " + ", ".join(parts) + "."
+    text = "This week: " + ", ".join(parts) + "."
+    if goal_lines:
+        text += " " + " ".join(goal_lines)
+    return text
+
+
+async def _build_goal_lines(user_id: str) -> list[str]:
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _sb_url("user_goals"),
+                headers=_sb_headers(),
+                params={"user_id": f"eq.{user_id}", "active": "eq.true", "select": "*"},
+            )
+            resp.raise_for_status()
+            goals = resp.json() or []
+    except Exception as exc:
+        logger.warning("Digest goal fetch failed for %s: %s", user_id[:8], exc)
+        return []
+
+    lines = []
+    for goal in goals:
+        progress = await compute_goal_progress(user_id, goal)
+        if progress["current_avg"] is None:
+            continue
+        status = "on track" if progress["on_track"] else "not quite there yet"
+        lines.append(
+            f"{goal['metric_label']} goal: averaging {round(progress['current_avg'], 1)}{goal.get('unit', '')} "
+            f"this week — {status}."
+        )
+    return lines
 
 
 async def _run_one_digest(user_id: str) -> dict:
@@ -86,8 +117,9 @@ async def _run_one_digest(user_id: str) -> dict:
     confirmed_count = len(insights)
     in_progress_count = len(experiments)
     streak = await _get_journal_streak(user_id)
+    goal_lines = await _build_goal_lines(user_id)
 
-    digest_text = _build_digest_text(confirmed_count, in_progress_count, streak)
+    digest_text = _build_digest_text(confirmed_count, in_progress_count, streak, goal_lines)
     week_start = (datetime.now(timezone.utc).date() - timedelta(days=datetime.now(timezone.utc).weekday())).isoformat()
 
     try:

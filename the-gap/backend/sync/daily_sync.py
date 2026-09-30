@@ -22,6 +22,8 @@ from auth import get_current_user_id
 from db.supabase_client import save_results, get_latest_results
 from routers.experiments import get_user_hypotheses
 from utils.push import send_push
+from utils.nudges import check_proactive_nudge
+from routers.interventions import get_active_hypothesis_ids, check_intervention_followups
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
@@ -131,9 +133,17 @@ async def _persist_metric_history(user_id: str, df: pd.DataFrame) -> None:
     expensive. Never raises — a failure here must never break the actual
     insight computation that follows it.
     """
+    # Beyond the METRIC_DISPLAY columns (shown as cards), also persist
+    # sleep_deep_min: it's an outcome column several hypotheses use, but
+    # has no display card of its own — without this, an "I'll try this"
+    # intervention tracking a sleep_deep_min outcome would have no history
+    # to compute a baseline/current comparison from (see
+    # routers/interventions.py's base_metric()).
+    history_columns = list(METRIC_DISPLAY) + ["sleep_deep_min"]
+
     try:
         records = []
-        for col in METRIC_DISPLAY:
+        for col in history_columns:
             if col not in df.columns:
                 continue
             for date, value in df[col].dropna().items():
@@ -463,6 +473,19 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                 body=insight.get("headline") or insight.get("title") or "A new causal pattern just showed up in your data.",
                 data={"kind": "discovery", "hypothesis_id": insight["hypothesis_id"], "session_id": session_id},
             )
+
+        # Best-effort — proactive "expect this today" nudges and intervention
+        # follow-ups. Neither should ever be able to fail this sync run.
+        try:
+            active_ids = await get_active_hypothesis_ids(user_id)
+            await check_proactive_nudge(user_id, df, insights_dicts, active_ids)
+        except Exception as exc:
+            logger.warning("Proactive nudge step failed for %s: %s", user_id[:8], exc)
+
+        try:
+            await check_intervention_followups(user_id)
+        except Exception as exc:
+            logger.warning("Intervention follow-up step failed for %s: %s", user_id[:8], exc)
 
         return {
             "user_id": user_id,
