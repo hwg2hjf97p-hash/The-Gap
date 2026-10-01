@@ -16,9 +16,11 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from typing import Optional
 
 from auth import get_current_user_id
 from db.supabase_client import get_latest_results
+from utils.assistant_signals import log_assistant_question
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -42,6 +44,7 @@ Reference specific numbers from their data when you have them."""
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500)
+    local_date: Optional[str] = None
 
 
 def _build_context(results_row: dict | None) -> str:
@@ -115,5 +118,13 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
     except Exception as exc:
         logger.error("Assistant request failed: %s", exc)
         raise HTTPException(status_code=502, detail="Couldn't reach the assistant. Try again.")
+
+    # Best-effort — what someone asks can itself be a signal (see
+    # utils/assistant_signals.py), but logging it should never be able to
+    # fail the response the user is actually waiting on.
+    try:
+        await log_assistant_question(user_id, body.question, body.local_date)
+    except Exception as exc:
+        logger.warning("Logging assistant question failed: %s", exc)
 
     return JSONResponse(content={"answer": answer})

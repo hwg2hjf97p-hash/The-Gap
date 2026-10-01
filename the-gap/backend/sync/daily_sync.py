@@ -33,6 +33,7 @@ from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
+from utils.assistant_signals import get_assistant_signal_dataframe
 from sync.apple_health_store import get_apple_health_dataframe
 from sync.device_calendar_store import get_device_calendar_dataframe
 from sync.environment_store import get_environment_dataframe
@@ -418,6 +419,21 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             health_df = health_df.join(journal_df, how="outer")
     except Exception as exc:
         logger.warning("Journal merge failed (continuing without it): %s", exc)
+
+    # Merge assistant-question signals (same columns as journal_df above —
+    # mood_score, stress_event, etc.) using combine_first rather than
+    # .join(), since .join() raises on overlapping column names. This
+    # fills in a day only where the journal didn't already cover it: an
+    # offhand question someone asked Gappy is a weaker signal than a
+    # deliberate journal entry, so it only acts as a gap-filler, never an
+    # override, for the exact same existing hypotheses.
+    try:
+        assistant_df = await get_assistant_signal_dataframe(user_id)
+        if assistant_df is not None and not assistant_df.empty:
+            assistant_df.index = pd.to_datetime(assistant_df.index)
+            health_df = health_df.combine_first(assistant_df)
+    except Exception as exc:
+        logger.warning("Assistant signal merge failed (continuing without it): %s", exc)
 
     # REAL BUG FIXED HERE: outer joins (checkin/journal/calendar above)
     # don't guarantee the resulting index stays sorted by date — a new
