@@ -428,6 +428,14 @@ async def get_day(local_date: str, user_id: str = Depends(get_current_user_id)) 
                 _get_rows(client, "water_log", {**base, "local_date": f"eq.{local_date}", "select": "id,amount_ml", "order": "created_at.asc"}),
                 _get_rows(client, "nutrition_goals", {**base, "select": "calorie_goal,protein_goal_g,water_goal_ml"}),
             )
+    except httpx.HTTPStatusError as exc:
+        # PostgREST answers 404 for a table that was never created — the
+        # most likely cause right after this feature ships, since the
+        # CREATE TABLE statements are run by hand.
+        logger.error("Loading nutrition day failed for %s: HTTP %s from %s", user_id[:8], exc.response.status_code, exc.request.url.path)
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=500, detail="Your food log isn't set up on the server yet — the database tables still need creating.")
+        raise HTTPException(status_code=500, detail="Couldn't load your log — please try again.")
     except Exception as exc:
         logger.error("Loading nutrition day failed for %s: %s", user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Couldn't load your log — please try again.")

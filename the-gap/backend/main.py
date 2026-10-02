@@ -194,6 +194,32 @@ async def debug_network():
     return results
 
 
+@app.get("/debug-tables")
+async def debug_tables():
+    """
+    Which per-user tables exist in Supabase? Every feature that stores data
+    needs its CREATE TABLE run once by hand (see new_tables.sql), and a
+    missing table surfaces to the app only as a generic "couldn't load"
+    error. Reads zero rows (limit=0), so this exposes table names and
+    nothing else.
+    """
+    import httpx
+    from routers.account import USER_DATA_TABLES
+
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    tables: dict[str, str] = {}
+    async with httpx.AsyncClient(timeout=10) as client:
+        for table in USER_DATA_TABLES + ["user_subscriptions"]:
+            try:
+                resp = await client.get(f"{base}/rest/v1/{table}", headers=headers, params={"select": "*", "limit": "0"})
+                tables[table] = "ok" if resp.status_code == 200 else f"status={resp.status_code}"
+            except Exception as exc:
+                tables[table] = f"error: {type(exc).__name__}"
+    return {"missing": [t for t, s in tables.items() if s != "ok"], "tables": tables}
+
+
 @app.get("/debug-imports")
 def debug_imports():
     """Check which packages are available on this server."""
