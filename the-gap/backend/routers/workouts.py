@@ -1,11 +1,18 @@
 """
-Workout planning + logging — plan a workout, check it off, and feed
-"did the workout you planned actually happen" into the causal engine as
-workout_completed_flag (see causal/hypotheses.py's workout_hrv/workout_rhr/
-workout_sleep hypotheses). Deliberately not a workout-detail tracker (sets,
-reps, weight) — that's well covered by dedicated apps and by Whoop/Strava
-auto-detection already synced elsewhere. This is specifically about
-intent vs. outcome: did you do the thing you said you'd do.
+Workouts — build a workout from an exercise library (exercise -> sets ->
+reps/weight), plan it or check it off, and feed what actually happened into
+the causal engine.
+
+Each workout stores its exercises and sets as one JSON document (the
+`exercises` column): a workout is always read and written whole, so
+separate exercise/set tables would only add joins for no benefit.
+
+Engine signals (see get_workout_dataframe and causal/hypotheses.py):
+  workout_completed_flag — a completed workout that day (planned-but-not-done = 0)
+  workout_volume_kg      — total weight x reps over the sets checked off
+  leg_day_flag           — the workout trained lower body (vs. a completed
+                           workout that didn't)
+A workout can opt out of the engine with include_in_engine=false.
 
 Table DDL (run once in Supabase SQL editor):
   CREATE TABLE IF NOT EXISTS workouts (
@@ -20,14 +27,21 @@ Table DDL (run once in Supabase SQL editor):
   );
   CREATE INDEX IF NOT EXISTS idx_workouts_user_date
     ON workouts (user_id, planned_date);
+
+  -- Added with the exercise-library builder:
+  ALTER TABLE workouts ADD COLUMN IF NOT EXISTS name TEXT;
+  ALTER TABLE workouts ADD COLUMN IF NOT EXISTS exercises JSONB NOT NULL DEFAULT '[]'::jsonb;
+  ALTER TABLE workouts ADD COLUMN IF NOT EXISTS duration_min INTEGER;
+  ALTER TABLE workouts ADD COLUMN IF NOT EXISTS include_in_engine BOOLEAN NOT NULL DEFAULT true;
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 import httpx
 import pandas as pd
@@ -41,6 +55,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
 WORKOUT_TYPES = ["Strength", "Cardio", "Run", "Yoga/Mobility", "Sport", "Other"]
+
+# Exercise groups (assigned in the app's bundled exercise library) that count
+# as training the lower body for leg_day_flag.
+LOWER_BODY_GROUPS = {"Quads", "Hamstrings", "Glutes & hips", "Calves"}
+
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _sb_url(table: str) -> str:
@@ -61,26 +81,70 @@ async def get_workout_types() -> JSONResponse:
     return JSONResponse(content={"types": WORKOUT_TYPES})
 
 
-class CreateWorkoutRequest(BaseModel):
-    workout_type: str
+class SetModel(BaseModel):
+    reps: Optional[int] = Field(default=None, ge=0, le=1000)
+    weight_kg: Optional[float] = Field(default=None, ge=0, le=1000)
+    duration_min: Optional[float] = Field(default=None, ge=0, le=1000)
+    done: bool = False
+
+
+class ExerciseModel(BaseModel):
+    exercise_id: str = Field(max_length=100)
+    name: str = Field(max_length=200)
+    group: str = Field(default="Other", max_length=40)
+    category: str = Field(default="strength", max_length=40)
+    sets: list[SetModel] = Field(default_factory=list)
+
+
+class WorkoutBody(BaseModel):
+    workout_type: str = Field(max_length=40)
     planned_date: str
-    notes: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=120)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+    exercises: list[ExerciseModel] = Field(default_factory=list)
+    status: Literal["planned", "completed"] = "planned"
+    duration_min: Optional[int] = Field(default=None, ge=0, le=1440)
+    include_in_engine: bool = True
+
+
+def _check_date(value: str) -> str:
+    if not DATE_RE.match(value):
+        raise HTTPException(status_code=400, detail="planned_date must be YYYY-MM-DD.")
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="planned_date must be a real date.")
+    return value
+
+
+def _row_from_body(body: WorkoutBody, user_id: str) -> dict:
+    # Limits checked here rather than as Field constraints, which are
+    # spelled differently across pydantic major versions.
+    if len(body.exercises) > 40 or any(len(e.sets) > 50 for e in body.exercises):
+        raise HTTPException(status_code=400, detail="That workout is too large — max 40 exercises and 50 sets each.")
+    return {
+        "user_id": user_id,
+        "workout_type": body.workout_type,
+        "planned_date": _check_date(body.planned_date),
+        "name": (body.name or "").strip() or None,
+        "notes": (body.notes or "").strip() or None,
+        "exercises": [e.model_dump() if hasattr(e, "model_dump") else e.dict() for e in body.exercises],
+        "status": body.status,
+        "duration_min": body.duration_min,
+        "include_in_engine": body.include_in_engine,
+    }
 
 
 @router.post("/")
-async def create_workout(body: CreateWorkoutRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
-    payload = {
-        "user_id": user_id,
-        "workout_type": body.workout_type,
-        "planned_date": body.planned_date,
-        "notes": body.notes,
-        "status": "planned",
-    }
+async def create_workout(body: WorkoutBody, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    payload = _row_from_body(body, user_id)
+    if body.status == "completed":
+        payload["completed_at"] = datetime.now(timezone.utc).isoformat()
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 _sb_url("workouts"),
-                headers={**_sb_headers(), "Prefer": "return=representation"},
+                headers=_sb_headers("return=representation"),
                 json=payload,
             )
             resp.raise_for_status()
@@ -91,8 +155,47 @@ async def create_workout(body: CreateWorkoutRequest, user_id: str = Depends(get_
     return JSONResponse(content={"workout": created[0] if created else None})
 
 
+@router.put("/{workout_id}")
+async def update_workout(workout_id: str, body: WorkoutBody, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    payload = _row_from_body(body, user_id)
+    payload.pop("user_id")
+    # completed_at tracks when it was actually finished: stamp it on the
+    # first transition to completed, clear it if it goes back to planned.
+    # (An already-completed workout being edited keeps its original stamp.)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            existing = await client.get(
+                _sb_url("workouts"),
+                headers=_sb_headers(),
+                params={"id": f"eq.{workout_id}", "user_id": f"eq.{user_id}", "select": "completed_at"},
+            )
+            existing.raise_for_status()
+            rows = existing.json() or []
+            if not rows:
+                raise HTTPException(status_code=404, detail="Workout not found.")
+            if body.status == "completed":
+                payload["completed_at"] = rows[0].get("completed_at") or datetime.now(timezone.utc).isoformat()
+            else:
+                payload["completed_at"] = None
+
+            resp = await client.patch(
+                _sb_url("workouts"),
+                headers=_sb_headers("return=representation"),
+                params={"id": f"eq.{workout_id}", "user_id": f"eq.{user_id}"},
+                json=payload,
+            )
+            resp.raise_for_status()
+            updated = resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Updating workout failed for %s: %s", user_id[:8], exc)
+        raise HTTPException(status_code=500, detail="Could not save that workout.")
+    return JSONResponse(content={"workout": updated[0] if updated else None})
+
+
 @router.get("/")
-async def list_workouts(user_id: str = Depends(get_current_user_id), days: int = 30) -> JSONResponse:
+async def list_workouts(user_id: str = Depends(get_current_user_id), days: int = 120) -> JSONResponse:
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -103,7 +206,7 @@ async def list_workouts(user_id: str = Depends(get_current_user_id), days: int =
                     "user_id": f"eq.{user_id}",
                     "planned_date": f"gte.{since}",
                     "select": "*",
-                    "order": "planned_date.desc",
+                    "order": "planned_date.desc,created_at.desc",
                 },
             )
             resp.raise_for_status()
@@ -115,13 +218,32 @@ async def list_workouts(user_id: str = Depends(get_current_user_id), days: int =
 
 @router.patch("/{workout_id}/complete")
 async def complete_workout(workout_id: str, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """Quick "I did it" check-off. For a workout with exercises this counts
+    every filled-in set as done — otherwise the engine would record zero
+    volume and no leg day for a session that really happened."""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
+            update: dict = {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()}
+            existing = await client.get(
+                _sb_url("workouts"),
+                headers=_sb_headers(),
+                params={"id": f"eq.{workout_id}", "user_id": f"eq.{user_id}", "select": "exercises"},
+            )
+            existing.raise_for_status()
+            rows = existing.json() or []
+            exercises = (rows[0].get("exercises") if rows else None) or []
+            if exercises and not any(s.get("done") for ex in exercises for s in (ex.get("sets") or [])):
+                for ex in exercises:
+                    for s in ex.get("sets") or []:
+                        if s.get("reps") or s.get("duration_min"):
+                            s["done"] = True
+                update["exercises"] = exercises
+
             resp = await client.patch(
                 _sb_url("workouts"),
-                headers={**_sb_headers(), "Prefer": "return=minimal"},
+                headers=_sb_headers("return=minimal"),
                 params={"id": f"eq.{workout_id}", "user_id": f"eq.{user_id}"},
-                json={"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()},
+                json=update,
             )
             resp.raise_for_status()
     except Exception as exc:
@@ -136,7 +258,7 @@ async def delete_workout(workout_id: str, user_id: str = Depends(get_current_use
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.delete(
                 _sb_url("workouts"),
-                headers={**_sb_headers(), "Prefer": "return=minimal"},
+                headers=_sb_headers("return=minimal"),
                 params={"id": f"eq.{workout_id}", "user_id": f"eq.{user_id}"},
             )
             resp.raise_for_status()
@@ -146,13 +268,34 @@ async def delete_workout(workout_id: str, user_id: str = Depends(get_current_use
     return JSONResponse(content={"success": True})
 
 
+def _volume_kg(exercises: list[dict]) -> float:
+    """Total weight x reps over the sets that were checked off."""
+    total = 0.0
+    for ex in exercises or []:
+        for s in ex.get("sets") or []:
+            if s.get("done") and s.get("reps") and s.get("weight_kg"):
+                total += float(s["reps"]) * float(s["weight_kg"])
+    return total
+
+
+def _trained_lower_body(exercises: list[dict]) -> bool:
+    return any(
+        ex.get("group") in LOWER_BODY_GROUPS and any(s.get("done") for s in (ex.get("sets") or []))
+        for ex in exercises or []
+    )
+
+
 def get_workout_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """
-    One row per planned_date with workout_completed_flag (1 if that day's
-    workout was marked done, 0 if planned but not completed). Days with no
-    planned workout at all are simply absent — this is a treatment signal,
-    not an attendance log, so "no workout planned" shouldn't be coerced
-    into a false 0 that the engine would read as "chose not to work out."
+    Date-indexed daily workout signals for the engine. Only days with a
+    workout that opted into the engine appear at all — "no workout logged"
+    isn't the same as "chose not to work out", so it's left absent rather
+    than coerced to a false 0.
+
+      workout_completed_flag  1 if any workout was completed, 0 if only planned
+      workout_volume_kg       total weight x reps over checked-off sets, on days
+                              that logged any (NaN otherwise, e.g. cardio-only)
+      leg_day_flag            1/0 on completed workouts that logged exercises
     """
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
@@ -162,19 +305,36 @@ def get_workout_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
             params={
                 "user_id": f"eq.{user_id}",
                 "planned_date": f"gte.{since}",
-                "select": "planned_date,status",
+                "select": "planned_date,status,exercises,include_in_engine",
             },
             timeout=10,
         )
         resp.raise_for_status()
-        rows = resp.json() or []
+        rows = [r for r in (resp.json() or []) if r.get("include_in_engine", True)]
         if not rows:
             return pd.DataFrame()
 
-        df = pd.DataFrame(rows)
-        df["date"] = pd.to_datetime(df["planned_date"])
-        df["workout_completed_flag"] = (df["status"] == "completed").astype(int)
-        df = df.groupby("date")["workout_completed_flag"].max().to_frame()
+        daily: dict[str, dict] = {}
+        for r in rows:
+            d = daily.setdefault(r["planned_date"], {"completed": False, "volume": 0.0, "has_ex": False, "lower": False})
+            if r.get("status") != "completed":
+                continue
+            d["completed"] = True
+            exercises = r.get("exercises") or []
+            if exercises:
+                d["has_ex"] = True
+                d["volume"] += _volume_kg(exercises)
+                d["lower"] = d["lower"] or _trained_lower_body(exercises)
+
+        records = {}
+        for date, d in daily.items():
+            records[date] = {
+                "workout_completed_flag": 1 if d["completed"] else 0,
+                "workout_volume_kg": d["volume"] if d["volume"] > 0 else None,
+                "leg_day_flag": (1 if d["lower"] else 0) if d["completed"] and d["has_ex"] else None,
+            }
+        df = pd.DataFrame.from_dict(records, orient="index")
+        df.index = pd.to_datetime(df.index)
         return df.sort_index()
     except Exception as exc:
         logger.error("Workout dataframe fetch failed: %s", exc)

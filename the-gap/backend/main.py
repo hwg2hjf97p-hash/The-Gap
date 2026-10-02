@@ -217,7 +217,21 @@ async def debug_tables():
                 tables[table] = "ok" if resp.status_code == 200 else f"status={resp.status_code}"
             except Exception as exc:
                 tables[table] = f"error: {type(exc).__name__}"
-    return {"missing": [t for t, s in tables.items() if s != "ok"], "tables": tables}
+    # Which kind of key is the backend using? Row-level security is only safe
+    # to turn on if this says service_role (it bypasses RLS; an anon key
+    # wouldn't). Reports the role claim only, never the key.
+    key_role = "unknown"
+    try:
+        import base64
+        import json
+
+        payload = key.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        key_role = json.loads(base64.urlsafe_b64decode(payload)).get("role", "unknown")
+    except Exception:
+        pass
+
+    return {"key_role": key_role, "missing": [t for t, s in tables.items() if s != "ok"], "tables": tables}
 
 
 @app.get("/debug-imports")

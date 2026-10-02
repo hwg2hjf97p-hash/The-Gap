@@ -472,6 +472,32 @@ def interpret_result(
             else "You sleep less after workouts. Try finishing earlier in the day and winding down properly."
         )
 
+    elif hid == "workout_volume_hrv":
+        title = "Training Volume & HRV"
+        headline = (
+            f"Each extra 1,000 kg of training volume causally {direction_word} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Bigger sessions aren't costing you recovery — you can keep pushing volume."
+            if is_positive
+            else "Higher-volume sessions drop your HRV the next morning. Cap session volume, or follow your biggest days with an easier one."
+        )
+
+    elif hid == "leg_day_hrv":
+        title = "Leg Days & HRV"
+        headline = (
+            f"After leg days, your next-morning HRV is {abs_effect} ms "
+            f"{'higher' if is_positive else 'lower'} than after other workouts"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Leg days aren't hurting your recovery more than other sessions."
+            if is_positive
+            else "Leg days hit your recovery harder than other sessions — plan an easier day after them."
+        )
+
     # NUTRITION (logged in-app)
     elif hid == "water_hrv":
         title = "Hydration & HRV"

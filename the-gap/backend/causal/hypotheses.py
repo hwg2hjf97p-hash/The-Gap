@@ -592,6 +592,35 @@ HYPOTHESES: list[Hypothesis] = [
         category="lifestyle",
     ),
 
+    # 41. Workout volume → Next-day HRV. Only workout days carry a value
+    # (see get_workout_dataframe), so this compares heavier and lighter
+    # sessions against each other rather than against rest days.
+    Hypothesis(
+        id="workout_volume_hrv",
+        treatment_col="workout_volume_kg",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=24,
+        treatment_label="Workout volume (per 1,000 kg lifted)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+        treatment_scale=1000.0,
+    ),
+
+    # 42. Leg day vs other workouts → Next-day HRV
+    Hypothesis(
+        id="leg_day_hrv",
+        treatment_col="leg_day_flag",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=24,
+        binary_treatment=True,
+        min_treated_days=6,
+        treatment_label="Leg day (yes/no)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+
     # ── NUTRITION (logged in-app, see routers/nutrition.py) ─────────────────
     # Only days that look fully logged feed these columns (see
     # get_nutrition_dataframe), so a day where someone logged just a coffee
