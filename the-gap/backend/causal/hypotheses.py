@@ -521,4 +521,52 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_label="Next-day HRV (ms)",
         category="environment",
     ),
+
+    # ── WORKOUTS (planned/logged in-app, see routers/workouts.py) ───────────
+    # workout_completed_flag is 1 on any day with a workout marked done —
+    # distinct from a wearable's own auto-detected exercise, since this
+    # specifically captures intent-to-outcome: did the workout someone
+    # said they'd do actually happen.
+
+    # 35. Workout completed → Next-day HRV
+    Hypothesis(
+        id="workout_hrv",
+        treatment_col="workout_completed_flag",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=8,
+        treatment_label="Workout completed (yes/no)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+
+    # 36. Workout completed → Next-day resting heart rate
+    Hypothesis(
+        id="workout_rhr",
+        treatment_col="workout_completed_flag",
+        outcome_col="resting_hr_next",
+        covariate_cols=["sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=8,
+        treatment_label="Workout completed (yes/no)",
+        outcome_label="Next-day resting heart rate (bpm)",
+        category="lifestyle",
+    ),
+
+    # 37. Workout completed → Same-night sleep duration
+    Hypothesis(
+        id="workout_sleep",
+        treatment_col="workout_completed_flag",
+        outcome_col="sleep_total_min",
+        covariate_cols=["day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=8,
+        treatment_label="Workout completed (yes/no)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
 ]

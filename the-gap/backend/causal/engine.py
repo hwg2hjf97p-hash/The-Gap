@@ -12,10 +12,21 @@ import pandas as pd
 
 from causal.hypotheses import HYPOTHESES, Hypothesis
 from causal.estimator import run_linear_dml
-from causal.interpreter import interpret_result
+from causal.interpreter import interpret_result, OUTCOME_HIGHER_IS_BETTER
 from models.insight import Insight, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
+
+# How early an in-progress experiment can get a preliminary directional
+# hint, attempted on the SAME LinearDML estimator used for a confirmed
+# insight — just run earlier and surfaced with a heavy caveat instead of
+# a confidence badge. Never treated as, or persisted as, a real insight;
+# purely additive to the "Day X of Y" progress list. Gated by both a
+# fraction of the real threshold and an absolute floor, so this is never
+# attempted on a handful of rows too small for DML to say anything
+# meaningful at all.
+EARLY_READ_MIN_FRACTION = 0.5
+EARLY_READ_MIN_ABSOLUTE = 12
 
 # Minimum meaningful effect sizes — below these the result is noise, not signal.
 # Values are in the natural unit of each outcome column.
@@ -60,6 +71,28 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
         if current >= required_n:
             continue  # already sufficient — will surface as an insight instead
 
+        early_read = None
+        if current >= max(EARLY_READ_MIN_ABSOLUTE, int(required_n * EARLY_READ_MIN_FRACTION)):
+            try:
+                result = run_linear_dml(
+                    df=sub,
+                    treatment_col=hyp.treatment_col,
+                    outcome_col=hyp.outcome_col,
+                    covariate_cols=hyp.covariate_cols or [],
+                    binary_treatment=hyp.binary_treatment,
+                )
+                if result is not None:
+                    min_effect = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)
+                    if abs(result["effect"]) >= min_effect:
+                        is_positive = result["effect"] > 0
+                        higher_is_better = OUTCOME_HIGHER_IS_BETTER.get(hyp.outcome_col, True)
+                        early_read = {
+                            "direction": "increases" if is_positive else "decreases",
+                            "is_good": is_positive if higher_is_better else not is_positive,
+                        }
+            except Exception as exc:
+                logger.warning("Early read failed for %s (continuing without it): %s", hyp.id, exc)
+
         experiments.append({
             "id": hyp.id,
             "treatment_label": hyp.treatment_label,
@@ -67,6 +100,7 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
             "category": hyp.category,
             "current": current,
             "required": required_n,
+            "early_read": early_read,
         })
 
     # Closest-to-done first — most encouraging order to show someone

@@ -33,6 +33,7 @@ from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
+from routers.workouts import get_workout_dataframe
 from utils.assistant_signals import get_assistant_signal_dataframe
 from sync.apple_health_store import get_apple_health_dataframe
 from sync.device_calendar_store import get_device_calendar_dataframe
@@ -408,6 +409,16 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             health_df = health_df.join(checkin_df, how="outer")
     except Exception as exc:
         logger.warning("Check-in merge failed (continuing without it): %s", exc)
+
+    # Merge planned/logged workouts (workout_completed_flag) — same outer-join
+    # pattern as check-ins, new column name so no collision risk.
+    try:
+        workout_df = get_workout_dataframe(user_id)
+        if workout_df is not None and not workout_df.empty:
+            workout_df.index = pd.to_datetime(workout_df.index)
+            health_df = health_df.join(workout_df, how="outer")
+    except Exception as exc:
+        logger.warning("Workout merge failed (continuing without it): %s", exc)
 
     # Merge Quick Entry signals (mood, stress, travel, illness, conflict)
     try:

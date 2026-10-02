@@ -73,6 +73,7 @@ from routers import metric_history
 from routers import interventions
 from routers import focus
 from routers import goals
+from routers import workouts
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
@@ -97,6 +98,7 @@ app.include_router(metric_history.router)
 app.include_router(interventions.router)
 app.include_router(focus.router)
 app.include_router(goals.router)
+app.include_router(workouts.router)
 
 @app.get("/health")
 def health_check():
