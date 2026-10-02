@@ -221,13 +221,20 @@ async def debug_tables():
     # to turn on if this says service_role (it bypasses RLS; an anon key
     # wouldn't). Reports the role claim only, never the key.
     key_role = "unknown"
+    # Newer Supabase keys aren't JWTs: "sb_secret_..." (bypasses RLS, like
+    # the old service_role key) vs "sb_publishable_..." (does not).
+    if key.startswith("sb_secret_"):
+        key_role = "service_role (new-style secret key)"
+    elif key.startswith("sb_publishable_"):
+        key_role = "anon (publishable key — do NOT enable RLS)"
     try:
         import base64
         import json
 
-        payload = key.split(".")[1]
-        payload += "=" * (-len(payload) % 4)
-        key_role = json.loads(base64.urlsafe_b64decode(payload)).get("role", "unknown")
+        if key_role == "unknown":
+            payload = key.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            key_role = json.loads(base64.urlsafe_b64decode(payload)).get("role", "unknown")
     except Exception:
         pass
 
