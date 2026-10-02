@@ -51,8 +51,21 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         "conflict_event", "is_rainy", "is_hard_day",
     }
 
+    # REAL BUG FIXED HERE: the hand-maintained BINARY_COLS list above missed
+    # flags added later (travel_event, illness_event, big_win_event, and
+    # workout_completed_flag) — every one of them was subject to the exact
+    # wipe-out described above, silently deleting the treated days those
+    # hypotheses need. Rather than keep patching a list, also skip any
+    # numeric column whose observed values are only 0/1: 3-sigma clipping
+    # of a 0/1 column is never meaningful.
+    numeric_candidates = list(df.select_dtypes(include=[np.number]).columns)
+    binary_like = {
+        c for c in numeric_candidates
+        if df[c].notna().any() and df[c].dropna().isin([0, 1]).all()
+    }
+
     # Remove outliers per column (3 standard deviations) — skip binary/flag columns
-    numeric_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c not in BINARY_COLS]
+    numeric_cols = [c for c in numeric_candidates if c not in BINARY_COLS and c not in binary_like]
     for col in numeric_cols:
         mean = df[col].mean()
         std = df[col].std()

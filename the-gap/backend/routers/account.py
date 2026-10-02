@@ -1,11 +1,18 @@
 """
 Account — data export and deletion.
 
-Aggregates/deletes across every table this app actually writes to for a
-given user_id: user_connections, quick_entries, journal_extractions,
-results. This is scoped to data we control directly — it does not (and
-can't, via a single call) revoke the OAuth grant on each provider's own
-side (Whoop/Oura/etc.), only our own stored copy of their tokens and data.
+Aggregates/deletes across every table this app writes per-user data to
+(USER_DATA_TABLES below). This is scoped to data we control directly — it
+does not (and can't, via a single call) revoke the OAuth grant on each
+provider's own side (Whoop/Oura/etc.), only our own stored copy of their
+tokens and data.
+
+REAL BUG FIXED HERE: export/deletion used to cover only 4 tables
+(user_connections, quick_entries, journal_extractions, results) while the
+app had grown to ~30 — "Delete account & data" left daily check-ins, Apple
+Health history, metric history, profile (weight/height/age) and the saved
+home address behind. Every table keyed by user_id is listed now; add any
+new per-user table here when it's created.
 """
 
 from __future__ import annotations
@@ -23,7 +30,28 @@ from auth import get_current_user_id
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/account", tags=["account"])
 
+# Only the tables that existed when anonymous device IDs did — used by
+# /claim to re-point pre-auth history. Newer tables never held anonymous
+# data, and re-pointing tables with unique constraints risks conflicts.
 TABLES = ["user_connections", "quick_entries", "journal_extractions", "results"]
+
+# Everything keyed by user_id. user_subscriptions is deliberately excluded:
+# it's a billing-state mirror of RevenueCat/Apple (which outlive this
+# database), not health data.
+USER_DATA_TABLES = TABLES + [
+    "daily_checkins", "apple_health_daily", "device_calendar_daily",
+    "user_locations", "environment_daily", "user_profile", "push_tokens",
+    "metric_history", "weekly_digests", "user_hypotheses", "user_goals",
+    "improvement_plans", "improvement_plan_usage",
+    "hypothesis_explanations", "hypothesis_explanation_usage",
+    "metric_insights", "metric_insight_usage",
+    "active_interventions", "proactive_nudges",
+    "assistant_questions", "assistant_extractions",
+    "workouts", "food_log", "water_log", "nutrition_goals",
+]
+
+# Credentials never belong in a data export, even the user's own.
+_EXPORT_STRIPPED_FIELDS = {"access_token", "refresh_token"}
 
 
 def _sb_url(table: str) -> str:
@@ -40,19 +68,24 @@ def _sb_headers() -> dict:
 async def export_my_data(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """Everything stored for this user, across every table, as one JSON download."""
     export: dict = {"user_id": user_id, "tables": {}}
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            for table in TABLES:
+    async with httpx.AsyncClient(timeout=20) as client:
+        for table in USER_DATA_TABLES:
+            # One missing/unreachable table (e.g. not created yet) must not
+            # sink the whole export.
+            try:
                 resp = await client.get(
                     _sb_url(table),
                     headers=_sb_headers(),
                     params={"user_id": f"eq.{user_id}", "select": "*"},
                 )
                 resp.raise_for_status()
-                export["tables"][table] = resp.json()
-    except Exception as exc:
-        logger.error("Export failed for %s: %s", user_id[:8], exc)
-        raise HTTPException(status_code=500, detail="Export failed. Please try again.")
+                rows = resp.json() or []
+                export["tables"][table] = [
+                    {k: v for k, v in row.items() if k not in _EXPORT_STRIPPED_FIELDS} for row in rows
+                ]
+            except Exception as exc:
+                logger.warning("Export skipped table %s for %s: %s", table, user_id[:8], exc)
+                export["tables"][table] = {"error": "unavailable"}
 
     return JSONResponse(content=export)
 
@@ -66,18 +99,27 @@ async def delete_my_account(user_id: str = Depends(get_current_user_id)) -> JSON
     account settings if they want to fully revoke access at the source.
     """
     deleted: dict[str, str] = {}
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            for table in TABLES:
+    async with httpx.AsyncClient(timeout=20) as client:
+        for table in USER_DATA_TABLES:
+            # Keep going if one table fails (e.g. not created yet) so a
+            # single problem can't leave everything else undeleted.
+            try:
                 resp = await client.delete(
                     _sb_url(table),
                     headers=_sb_headers(),
                     params={"user_id": f"eq.{user_id}"},
                 )
                 deleted[table] = "ok" if resp.status_code in (200, 204) else f"status={resp.status_code}"
-    except Exception as exc:
-        logger.error("Account deletion failed for %s: %s", user_id[:8], exc)
-        raise HTTPException(status_code=500, detail="Deletion failed. Please try again.")
+            except Exception as exc:
+                logger.warning("Account deletion hit an error on %s for %s: %s", table, user_id[:8], exc)
+                deleted[table] = "error"
+
+    # A table that failed for a reason other than "doesn't exist yet"
+    # (404 means the table isn't created) is a real problem to surface.
+    failed = {t: s for t, s in deleted.items() if s not in ("ok", "status=404")}
+    if failed:
+        logger.error("ACCOUNT_DELETE_INCOMPLETE user=%s failed=%s", user_id[:8], failed)
+        raise HTTPException(status_code=500, detail="Deletion didn't fully complete. Please try again.")
 
     logger.info("ACCOUNT_DELETED user=%s result=%s", user_id[:8], deleted)
     return JSONResponse(content={"deleted": True, "tables": deleted})

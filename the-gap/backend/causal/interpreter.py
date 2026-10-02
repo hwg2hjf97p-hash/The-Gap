@@ -432,6 +432,86 @@ def interpret_result(
             else "Your resting HR stays steady or improves even as training load increases — solid aerobic adaptation."
         )
 
+    # WORKOUTS (logged in-app)
+    elif hid == "workout_hrv":
+        title = "Workouts & HRV"
+        headline = (
+            f"After days you complete a workout, your next-morning HRV "
+            f"{'rises' if is_positive else 'drops'} by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Your body responds well to the workouts you follow through on — protect the habit."
+            if is_positive
+            else "Your HRV dips the morning after a workout. Pair training days with enough sleep and an easier day afterwards."
+        )
+
+    elif hid == "workout_rhr":
+        title = "Workouts & Resting Heart Rate"
+        headline = (
+            f"After days you complete a workout, your resting heart rate "
+            f"{'rises' if is_positive else 'drops'} by {abs_effect} bpm the next day"
+        )
+        metric_unit = "bpm"
+        tip = (
+            "Your resting heart rate runs higher after workout days — a sign you may need more recovery between sessions."
+            if is_positive
+            else "Workouts are lowering your next-day resting heart rate — a good sign your training is paying off."
+        )
+
+    elif hid == "workout_sleep":
+        title = "Workouts & Sleep"
+        headline = (
+            f"On days you complete a workout, you sleep "
+            f"{'longer' if is_positive else 'less'} by {abs_effect} minutes that night"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Training days are helping you sleep longer — keep the momentum."
+            if is_positive
+            else "You sleep less after workouts. Try finishing earlier in the day and winding down properly."
+        )
+
+    # NUTRITION (logged in-app)
+    elif hid == "water_hrv":
+        title = "Hydration & HRV"
+        headline = (
+            f"Each extra 500 ml of water causally {direction_word} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Staying well hydrated seems to support your recovery — spread your water through the day."
+            if is_positive
+            else "More water isn't helping your HRV — other factors are likely doing the heavy lifting."
+        )
+
+    elif hid == "protein_hrv":
+        title = "Protein & HRV"
+        headline = (
+            f"Each extra 25 g of protein causally {direction_word} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Higher-protein days go with better recovery for you — worth hitting your protein target consistently."
+            if is_positive
+            else "Higher-protein days go with a lower HRV for you — it may be about what else those days include, so check meal timing and sleep."
+        )
+
+    elif hid == "late_meal_deep_sleep":
+        title = "Meal Timing & Deep Sleep"
+        headline = (
+            f"Each hour later your last meal, your deep sleep that night "
+            f"{'increases' if is_positive else 'drops'} by {abs_effect} minutes"
+        )
+        metric_unit = "min deep sleep"
+        tip = (
+            "Later meals aren't hurting your deep sleep."
+            if is_positive
+            else "Eating later is cutting into your deep sleep — try finishing dinner 2-3 hours before bed."
+        )
+
     # Fallback for any future hypotheses
     else:
         title = hypothesis.treatment_label

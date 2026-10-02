@@ -40,6 +40,21 @@ MIN_EFFECT = {
 DEFAULT_MIN_EFFECT = 0.5
 
 
+def _scaled(result: dict, hyp: Hypothesis) -> dict:
+    """Re-express a per-one-raw-unit effect per hyp.treatment_scale units
+    (see Hypothesis.treatment_scale). The scale is always positive, so the
+    CI bounds keep their order; p_value and n_obs are scale-invariant."""
+    scale = hyp.treatment_scale
+    if scale == 1.0:
+        return result
+    return {
+        **result,
+        "effect": result["effect"] * scale,
+        "ci_low": result["ci_low"] * scale,
+        "ci_high": result["ci_high"] * scale,
+    }
+
+
 def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[list[Hypothesis]] = None) -> list[dict]:
     """
     For every hypothesis that doesn't yet have enough data to run, report
@@ -82,6 +97,7 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
                     binary_treatment=hyp.binary_treatment,
                 )
                 if result is not None:
+                    result = _scaled(result, hyp)
                     min_effect = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)
                     if abs(result["effect"]) >= min_effect:
                         is_positive = result["effect"] > 0
@@ -179,6 +195,8 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
     if result is None:
         logger.info("ESTIMATION_RETURNED_NONE hyp=%s rows=%d — see estimator.py logs above for the actual cause", hyp.id, len(sub))
         return None
+
+    result = _scaled(result, hyp)
 
     # ── 6. Filter out near-zero / trivially small effects ─────────────────
     min_effect = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)

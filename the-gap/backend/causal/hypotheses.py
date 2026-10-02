@@ -21,6 +21,17 @@ class Hypothesis:
     binary_treatment: bool = False
     min_treated_days: int = 0       # only checked when binary_treatment=True
     category: str = "health"        # health | work | lifestyle | recovery
+    # REAL BUG FIXED HERE: LinearDML returns the effect of a ONE-raw-unit
+    # change in the treatment. For treatments measured in tiny units
+    # (single steps, single kcal, single minutes) that effect is
+    # microscopic — e.g. ~0.0004 ms of HRV per step — so engine.py's
+    # "trivially small effect" noise floor (0.8 ms for hrv_next) discarded
+    # these hypotheses every time, no matter how real the relationship, and
+    # headlines promising "each extra 2,000 steps" were never reachable.
+    # treatment_scale re-expresses the effect per this many raw units
+    # (2000 for steps, 100 for kcal, ...) before the noise-floor check and
+    # the headline. Binary treatments leave this at 1.0.
+    treatment_scale: float = 1.0
 
 
 HYPOTHESES: list[Hypothesis] = [
@@ -37,6 +48,7 @@ HYPOTHESES: list[Hypothesis] = [
         treatment_label="Daily steps (per 2,000)",
         outcome_label="Next-day HRV (ms)",
         category="health",
+        treatment_scale=2000.0,
     ),
 
     # 2. Alcohol flag → Next-day HRV  (binary treatment)
@@ -60,9 +72,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="hrv_next",
         covariate_cols=["hrv_lag1", "sleep_total_min", "steps", "day_of_week"],
         min_rows=30,
-        treatment_label="Mindfulness minutes",
+        treatment_label="Mindfulness (per 10 minutes)",
         outcome_label="Next-day HRV (ms)",
         category="lifestyle",
+        treatment_scale=10.0,
     ),
 
     # 4. Morning HRV → Same-night deep sleep
@@ -72,9 +85,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="sleep_deep_min",
         covariate_cols=["sleep_lag1", "steps", "day_of_week", "resting_hr"],
         min_rows=30,
-        treatment_label="Morning HRV (ms)",
+        treatment_label="Morning HRV (per 10 ms)",
         outcome_label="That night's deep sleep (minutes)",
         category="recovery",
+        treatment_scale=10.0,
     ),
 
     # ── SLEEP ───────────────────────────────────────────────────────────────
@@ -94,9 +108,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="sleep_deep_min",
         covariate_cols=["day_of_week", "is_weekend", "hrv_lag1"],
         min_rows=45,
-        treatment_label="Sleep duration deviation (min from your norm)",
+        treatment_label="Sleep duration deviation (per 30 min from your norm)",
         outcome_label="Deep sleep (minutes)",
         category="health",
+        treatment_scale=30.0,
     ),
 
     # 6. Sleep duration → Next-day resting heart rate
@@ -106,9 +121,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="resting_hr_next",
         covariate_cols=["resting_hr", "day_of_week", "hrv_lag1"],
         min_rows=30,
-        treatment_label="Total sleep (hours)",
+        treatment_label="Total sleep (per hour)",
         outcome_label="Next-day resting heart rate (bpm)",
         category="health",
+        treatment_scale=60.0,
     ),
 
     # 7. Active calories → Total sleep
@@ -118,9 +134,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="sleep_total_min",
         covariate_cols=["sleep_lag1", "day_of_week", "resting_hr"],
         min_rows=30,
-        treatment_label="Active calories burned",
+        treatment_label="Active calories burned (per 100)",
         outcome_label="Total sleep (minutes)",
         category="health",
+        treatment_scale=100.0,
     ),
 
     # 8. Weekend flag → Sleep quality (binary)
@@ -144,9 +161,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="resting_hr_next",
         covariate_cols=["resting_hr", "steps", "day_of_week"],
         min_rows=30,
-        treatment_label="Accumulated sleep debt (min)",
+        treatment_label="Accumulated sleep debt (per hour)",
         outcome_label="Next-day resting heart rate (bpm)",
         category="recovery",
+        treatment_scale=60.0,
     ),
 
     # ── WORK / CALENDAR ─────────────────────────────────────────────────────
@@ -283,6 +301,7 @@ HYPOTHESES: list[Hypothesis] = [
         treatment_label="Daily steps (per 2,000)",
         outcome_label="Next-day resting heart rate (bpm)",
         category="health",
+        treatment_scale=2000.0,
     ),
 
     # 20. Active calories → Next-day HRV
@@ -292,9 +311,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="hrv_next",
         covariate_cols=["hrv_lag1", "sleep_total_min", "resting_hr", "day_of_week"],
         min_rows=30,
-        treatment_label="Active calories burned",
+        treatment_label="Active calories burned (per 100)",
         outcome_label="Next-day HRV (ms)",
         category="health",
+        treatment_scale=100.0,
     ),
 
     # 21. VO2 max trend → Resting HR
@@ -316,9 +336,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="steps",
         covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
         min_rows=30,
-        treatment_label="Daily recovery score (%)",
+        treatment_label="Daily recovery score (per 10%)",
         outcome_label="Steps taken that day",
         category="recovery",
+        treatment_scale=10.0,
     ),
 
     # 22b. REMOVED: sleep_score → recovery_score ("sleep performance vs
@@ -517,9 +538,10 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_col="hrv_next",
         covariate_cols=["hrv_lag1", "day_of_week"],
         min_rows=30,
-        treatment_label="Commute time (minutes, with traffic)",
+        treatment_label="Commute time (per 10 minutes, with traffic)",
         outcome_label="Next-day HRV (ms)",
         category="environment",
+        treatment_scale=10.0,
     ),
 
     # ── WORKOUTS (planned/logged in-app, see routers/workouts.py) ───────────
@@ -567,6 +589,50 @@ HYPOTHESES: list[Hypothesis] = [
         min_treated_days=8,
         treatment_label="Workout completed (yes/no)",
         outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+
+    # ── NUTRITION (logged in-app, see routers/nutrition.py) ─────────────────
+    # Only days that look fully logged feed these columns (see
+    # get_nutrition_dataframe), so a day where someone logged just a coffee
+    # isn't read as "ate almost nothing".
+
+    # 38. Water intake → Next-day HRV
+    Hypothesis(
+        id="water_hrv",
+        treatment_col="water_ml",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Water intake (per 500 ml)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+        treatment_scale=500.0,
+    ),
+
+    # 39. Protein intake → Next-day HRV (total calories held fixed, so this
+    # is about protein specifically rather than eating more in general)
+    Hypothesis(
+        id="protein_hrv",
+        treatment_col="protein_g",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "dietary_energy", "day_of_week"],
+        min_rows=30,
+        treatment_label="Protein intake (per 25 g)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+        treatment_scale=25.0,
+    ),
+
+    # 40. Time of last meal → Deep sleep that night
+    Hypothesis(
+        id="late_meal_deep_sleep",
+        treatment_col="last_meal_hour",
+        outcome_col="sleep_deep_min",
+        covariate_cols=["day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Time of last meal (per hour later)",
+        outcome_label="Deep sleep that night (minutes)",
         category="lifestyle",
     ),
 ]

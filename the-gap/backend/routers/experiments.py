@@ -87,6 +87,17 @@ def _default_covariates(outcome_col: str, treatment_col: str) -> list[str]:
     return ["day_of_week"]
 
 
+def _default_scale(treatment_col: str) -> float:
+    """Inherit the reporting unit (see Hypothesis.treatment_scale) from the
+    built-in hypothesis that already uses this treatment — without it, a
+    user-proposed 'steps -> X' experiment would hit the same tiny-per-unit
+    noise-floor problem the built-in ones had."""
+    for hyp in HYPOTHESES:
+        if hyp.treatment_col == treatment_col:
+            return hyp.treatment_scale
+    return 1.0
+
+
 @router.get("/available-metrics")
 async def available_metrics():
     """Everything the picker can offer — every combination is guaranteed runnable."""
@@ -212,5 +223,6 @@ async def get_user_hypotheses(user_id: str) -> list[Hypothesis]:
             min_rows=DEFAULT_MIN_ROWS,
             min_treated_days=DEFAULT_MIN_TREATED_DAYS if row["binary_treatment"] else 0,
             category=row.get("category", "custom"),
+            treatment_scale=_default_scale(row["treatment_col"]),
         ))
     return result
