@@ -492,12 +492,24 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         # confirmed last time and simply reappears.
         try:
             previous = get_latest_results(user_id)
-            previous_ids = {i["hypothesis_id"] for i in (previous or {}).get("insights") or []}
+            # Only previously CONFIRMED insights count as already-known: a
+            # hypothesis that was an early signal last time and has now
+            # graduated to confirmed is exactly what should trigger a push.
+            previous_ids = {
+                i["hypothesis_id"]
+                for i in (previous or {}).get("insights") or []
+                if i.get("confidence") != "weak"
+            }
         except Exception as exc:
             logger.warning("Could not load previous results for discovery diff (%s): %s", user_id[:8], exc)
             previous_ids = set()
 
-        newly_confirmed = [i for i in insights_dicts if i["hypothesis_id"] not in previous_ids]
+        # Early signals (confidence "weak") are never pushed — with this many
+        # hypotheses running, announcing every faint hint would be mostly noise.
+        newly_confirmed = [
+            i for i in insights_dicts
+            if i["hypothesis_id"] not in previous_ids and i.get("confidence") != "weak"
+        ]
 
         session_id = save_results(
             user_id=user_id,

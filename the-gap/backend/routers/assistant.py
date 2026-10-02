@@ -51,7 +51,9 @@ def _build_context(results_row: dict | None) -> str:
     if not results_row:
         return "This user has no analysis results yet — no data sources connected, or not enough days of data yet."
 
-    insights = results_row.get("insights") or []
+    all_insights = results_row.get("insights") or []
+    insights = [i for i in all_insights if i.get("confidence") != "weak"]
+    early = [i for i in all_insights if i.get("confidence") == "weak"]
     snapshot = results_row.get("snapshot") or {}
 
     lines = []
@@ -64,6 +66,12 @@ def _build_context(results_row: dict | None) -> str:
             )
     else:
         lines.append("No verified causal insights yet — not enough data for statistical confidence.")
+    if early:
+        # Listed separately and labelled, so the assistant can mention them as
+        # hints worth watching without ever stating them as established fact.
+        lines.append("\nEarly signals (NOT verified — faint hints that may be chance; never state these as fact):")
+        for i in early:
+            lines.append(f"- {i.get('headline', i.get('title', ''))}")
 
     latest = snapshot.get("latest") or []
     if latest:

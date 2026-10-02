@@ -64,12 +64,14 @@ async def _supabase_get(table: str, params: dict) -> list[dict]:
         return resp.json() or []
 
 
-def _build_digest_text(confirmed_count: int, in_progress_count: int, streak: int, goal_lines: list[str]) -> str:
+def _build_digest_text(confirmed_count: int, in_progress_count: int, streak: int, goal_lines: list[str], early_count: int = 0) -> str:
     parts = []
     if confirmed_count > 0:
         parts.append(f"{confirmed_count} confirmed pattern{'s' if confirmed_count != 1 else ''} running on you right now")
     else:
         parts.append("no confirmed patterns yet — keep logging, they take a few weeks to show up")
+    if early_count > 0:
+        parts.append(f"{early_count} early signal{'s' if early_count != 1 else ''} worth watching")
     if in_progress_count > 0:
         parts.append(f"{in_progress_count} more still gathering data")
     if streak > 0:
@@ -114,12 +116,15 @@ async def _run_one_digest(user_id: str) -> dict:
 
     insights = latest.get("insights") or []
     experiments = latest.get("experiments") or []
-    confirmed_count = len(insights)
+    # "Confirmed" means moderate/strong — early signals (confidence "weak")
+    # are counted separately so the recap never overstates what's established.
+    confirmed_count = sum(1 for i in insights if i.get("confidence") != "weak")
+    early_count = len(insights) - confirmed_count
     in_progress_count = len(experiments)
     streak = await _get_journal_streak(user_id)
     goal_lines = await _build_goal_lines(user_id)
 
-    digest_text = _build_digest_text(confirmed_count, in_progress_count, streak, goal_lines)
+    digest_text = _build_digest_text(confirmed_count, in_progress_count, streak, goal_lines, early_count)
     week_start = (datetime.now(timezone.utc).date() - timedelta(days=datetime.now(timezone.utc).weekday())).isoformat()
 
     try:

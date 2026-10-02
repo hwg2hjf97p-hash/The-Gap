@@ -99,6 +99,8 @@ async def check_proactive_nudge(user_id: str, df: pd.DataFrame, insights: list[d
             hypothesis_id = insight.get("hypothesis_id", "")
             if hypothesis_id in active_hypothesis_ids:
                 continue  # already being tried — no need to also nudge about it
+            if insight.get("confidence") == "weak":
+                continue  # never predict from a pattern that's still only an early signal
             hyp = _HYPOTHESES_BY_ID.get(hypothesis_id)
             if hyp is None or not hyp.binary_treatment:
                 continue

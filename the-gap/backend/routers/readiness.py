@@ -1,0 +1,143 @@
+"""
+Readiness — "how hard should I train today?", answered from the user's own
+recovery data compared with their own recent baseline (never a population
+average). Reads the metric_history table every sync already fills.
+
+Deliberately simple and transparent rather than a black-box score: if the
+wearable gives a recovery score (Whoop's 0-100), its own bands decide the
+level; otherwise it's today's HRV and resting heart rate against this
+person's 30-day normal. Short sleep can pull a "high" down a notch. The
+reasons behind the level are always returned so the app can show them.
+This is general guidance, not medical advice.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+import os
+from datetime import date, datetime, timedelta
+
+import httpx
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+
+from auth import get_current_user_id
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/readiness", tags=["readiness"])
+
+BASELINE_DAYS = 30
+MIN_BASELINE_POINTS = 10
+MAX_STALE_DAYS = 2  # a reading older than this isn't "today's" any more
+
+SUGGESTIONS = {
+    "high": "Good day to push. If you've got a hard session planned, this is the day for it.",
+    "moderate": "Train as planned, but keep it controlled — leave a rep or two in reserve.",
+    "low": "Take it easy today: mobility, a walk, or a light session. Save the hard work for when your recovery bounces back.",
+}
+
+
+def _sb_url(table: str) -> str:
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    return f"{base}/rest/v1/{table}"
+
+
+def _sb_headers() -> dict:
+    key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+
+def _latest_vs_baseline(series: list[tuple[date, float]], today: date) -> dict | None:
+    """Latest reading (if recent enough) plus the mean/sd of the prior 30 days."""
+    if not series:
+        return None
+    latest_date, latest = series[-1]
+    if (today - latest_date).days > MAX_STALE_DAYS:
+        return None
+    prior = [v for d, v in series[:-1] if 0 < (latest_date - d).days <= BASELINE_DAYS]
+    info = {"date": latest_date, "latest": latest, "n": len(prior), "mean": None, "sd": None}
+    if len(prior) >= MIN_BASELINE_POINTS:
+        mean = sum(prior) / len(prior)
+        sd = math.sqrt(sum((v - mean) ** 2 for v in prior) / (len(prior) - 1))
+        # A very steady baseline would make a tiny wobble look dramatic;
+        # never let the spread fall below 5% of the mean.
+        info["mean"], info["sd"] = mean, max(sd, abs(mean) * 0.05, 1e-6)
+    return info
+
+
+@router.get("/today")
+async def readiness_today(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    today = date.today()
+    since = (today - timedelta(days=BASELINE_DAYS + 15)).isoformat()
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _sb_url("metric_history"),
+                headers=_sb_headers(),
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "metric": "in.(hrv,resting_hr,recovery_score,sleep_total_min)",
+                    "date": f"gte.{since}",
+                    "select": "date,metric,value",
+                    "order": "date.asc",
+                    "limit": "2000",
+                },
+            )
+            resp.raise_for_status()
+            rows = resp.json() or []
+    except Exception as exc:
+        logger.error("Readiness fetch failed for %s: %s", user_id[:8], exc)
+        return JSONResponse(content={"level": "unknown", "reasons": [], "suggestion": None, "message": "Couldn't check your readiness right now."})
+
+    series: dict[str, list[tuple[date, float]]] = {}
+    for r in rows:
+        series.setdefault(r["metric"], []).append((datetime.strptime(r["date"], "%Y-%m-%d").date(), float(r["value"])))
+
+    hrv = _latest_vs_baseline(series.get("hrv", []), today)
+    rhr = _latest_vs_baseline(series.get("resting_hr", []), today)
+    recovery = _latest_vs_baseline(series.get("recovery_score", []), today)
+    sleep = _latest_vs_baseline(series.get("sleep_total_min", []), today)
+
+    reasons: list[str] = []
+    z_scores: list[float] = []
+    if hrv and hrv["mean"] is not None:
+        z_scores.append((hrv["latest"] - hrv["mean"]) / hrv["sd"])
+        pct = round((hrv["latest"] - hrv["mean"]) / hrv["mean"] * 100)
+        reasons.append(f"HRV {abs(pct)}% {'above' if pct >= 0 else 'below'} your 30-day average")
+    if rhr and rhr["mean"] is not None:
+        z_scores.append(-(rhr["latest"] - rhr["mean"]) / rhr["sd"])  # lower resting HR is better
+        diff = round(rhr["latest"] - rhr["mean"])
+        reasons.append(f"Resting heart rate {abs(diff)} bpm {'above' if diff >= 0 else 'below'} your usual")
+
+    level = None
+    score = None
+    if recovery:
+        score = round(recovery["latest"])
+        level = "high" if score >= 67 else "moderate" if score >= 34 else "low"
+        reasons.insert(0, f"Recovery score {score}%")
+    elif z_scores:
+        z_avg = sum(z_scores) / len(z_scores)
+        level = "high" if z_avg >= 0.3 else "low" if z_avg <= -0.7 else "moderate"
+
+    if level is None:
+        return JSONResponse(content={
+            "level": "unknown",
+            "reasons": [],
+            "suggestion": None,
+            "message": "Not enough recent data yet — about two weeks of readings lets us compare today with your normal.",
+        })
+
+    if sleep:
+        hours = sleep["latest"] / 60
+        reasons.append(f"Slept {hours:.1f} h")
+        if hours < 6 and level == "high":
+            level = "moderate"
+
+    return JSONResponse(content={
+        "level": level,
+        "score": score,
+        "reasons": reasons[:4],
+        "suggestion": SUGGESTIONS[level],
+        "as_of": (recovery or hrv or rhr)["date"].isoformat() if (recovery or hrv or rhr) else None,
+    })

@@ -40,6 +40,25 @@ MIN_EFFECT = {
 DEFAULT_MIN_EFFECT = 0.5
 
 
+# With ~40 hypotheses tested on the same person's data, a plain "p < 0.10"
+# bar is expected to be cleared by several of them by pure chance. Moderate
+# and strong confidence therefore also have to survive a Benjamini-Hochberg
+# false-discovery correction across every hypothesis estimated in the run;
+# anything that doesn't is shown as an "early signal" instead.
+FDR_Q = 0.10
+
+
+def _bh_threshold(p_values: list[float], q: float = FDR_Q) -> float:
+    """Largest p-value that survives Benjamini-Hochberg at level q (0.0 if none do)."""
+    ps = sorted(p for p in p_values if p is not None and p == p)  # p == p drops NaN
+    m = len(ps)
+    threshold = 0.0
+    for rank, p in enumerate(ps, start=1):
+        if p <= rank / m * q:
+            threshold = p
+    return threshold
+
+
 def _scaled(result: dict, hyp: Hypothesis) -> dict:
     """Re-express a per-one-raw-unit effect per hyp.treatment_scale units
     (see Hypothesis.treatment_scale). The scale is always positive, so the
@@ -132,15 +151,26 @@ def run_all_hypotheses(df: pd.DataFrame, extra_hypotheses: Optional[list[Hypothe
     Return a sorted list of Insight objects.
     """
     insights: list[Insight] = []
+    p_values: list[float] = []  # every estimate made this run, shown or not
 
     for hyp in HYPOTHESES + (extra_hypotheses or []):
         try:
-            insight = _run_one(df, hyp)
+            insight = _run_one(df, hyp, p_values)
             if insight is not None:
                 insights.append(insight)
         except Exception as exc:
             logger.warning("Hypothesis %s failed: %s", hyp.id, exc)
             continue
+
+    threshold = _bh_threshold(p_values)
+    for insight in insights:
+        if insight.confidence != ConfidenceLevel.WEAK and (insight.p_value is None or insight.p_value > threshold):
+            insight.confidence = ConfidenceLevel.WEAK
+            insight.confidence_label = "Early signal"
+            insight.confidence_description = (
+                "A hint of this pattern exists, but with this many things being tested it could still be chance. "
+                "Keep logging — it'll firm up or fade."
+            )
 
     # Sort: strong confidence first, then moderate, then weak
     order = {ConfidenceLevel.STRONG: 0, ConfidenceLevel.MODERATE: 1, ConfidenceLevel.WEAK: 2}
@@ -149,9 +179,11 @@ def run_all_hypotheses(df: pd.DataFrame, extra_hypotheses: Optional[list[Hypothe
     return insights
 
 
-def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
+def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = None) -> Optional[Insight]:
     """
     Run a single hypothesis. Returns None if data is insufficient or effect is trivially small.
+    p_sink collects the p-value of every estimate actually made (including
+    ones filtered out below) so the caller can correct for multiple testing.
     """
     # ── 1. Check required columns exist ───────────────────────────────────
     required = [hyp.treatment_col, hyp.outcome_col] + (hyp.covariate_cols or [])
@@ -195,6 +227,9 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis) -> Optional[Insight]:
     if result is None:
         logger.info("ESTIMATION_RETURNED_NONE hyp=%s rows=%d — see estimator.py logs above for the actual cause", hyp.id, len(sub))
         return None
+
+    if p_sink is not None and result.get("p_value") is not None:
+        p_sink.append(result["p_value"])
 
     result = _scaled(result, hyp)
 
