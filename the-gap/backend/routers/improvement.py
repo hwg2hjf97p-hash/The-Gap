@@ -36,13 +36,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from auth import get_current_user_id
-from utils.improvement_plan import generate_improvement_plan
+import json
+from typing import Optional
+
+from utils.improvement_plan import generate_insight_story, parse_story, flatten_story, STORY_VERSION
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/improvement", tags=["improvement"])
 
 DAILY_GENERATION_LIMIT = 15
-CACHE_HOURS = 24  # a confirmed insight's plan doesn't need re-generating every hour like an in-progress hypothesis might
+CACHE_HOURS = 72  # a confirmed finding's story doesn't change from day to day
 
 
 def _sb_url(table: str) -> str:
@@ -65,6 +68,12 @@ class ImprovementPlanRequest(BaseModel):
     headline: str
     existing_tip: str
     metric_direction: str
+    # Extra facts for the plain-English story; optional so older app builds
+    # that don't send them keep working.
+    metric_delta: Optional[str] = None
+    metric_unit: Optional[str] = None
+    confidence_label: Optional[str] = None
+    n_observations: Optional[int] = None
 
 
 async def _get_cached(user_id: str, hypothesis_id: str) -> dict | None:
@@ -139,11 +148,25 @@ async def _increment_today_count(user_id: str, current: int) -> None:
         logger.warning("Improvement plan usage increment failed (continuing anyway): %s", exc)
 
 
+def _response(cached_text: str | None, story: dict | None, cached: bool, limit_reached: bool) -> JSONResponse:
+    """`story` is the structured plain-English card; `plan_text` is a flat
+    text rendering of it (or the old-style plan text) for older app builds."""
+    plan_text = flatten_story(story) if story else cached_text
+    return JSONResponse(content={"plan_text": plan_text, "story": story, "cached": cached, "limit_reached": limit_reached})
+
+
 @router.post("")
 async def get_improvement_plan(body: ImprovementPlanRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """
+    The plain-English story for a confirmed finding. The cache table's
+    plan_text column now holds the story as JSON (version-tagged); a row
+    that's still old-style plain text is treated as a miss and regenerated,
+    but is still returned if we can't generate a new one right now.
+    """
     cached = await _get_cached(user_id, body.hypothesis_id)
+    cached_story = parse_story(cached["plan_text"]) if cached else None
 
-    if cached:
+    if cached_story and cached:
         try:
             age_hours = (
                 datetime.now(timezone.utc)
@@ -153,32 +176,37 @@ async def get_improvement_plan(body: ImprovementPlanRequest, user_id: str = Depe
             logger.warning("Could not parse cached generated_at (%r) — treating as stale: %s", cached.get("generated_at"), exc)
             age_hours = CACHE_HOURS
         if age_hours < CACHE_HOURS:
-            return JSONResponse(content={"plan_text": cached["plan_text"], "cached": True, "limit_reached": False})
+            return _response(cached["plan_text"], cached_story, True, False)
+
+    cached_text = cached["plan_text"] if cached else None
 
     today_count = await _get_today_count(user_id)
     if today_count >= DAILY_GENERATION_LIMIT:
         if cached:
-            return JSONResponse(content={"plan_text": cached["plan_text"], "cached": True, "limit_reached": True})
+            return _response(cached_text, cached_story, True, True)
         return JSONResponse(content={
-            "plan_text": "You've reached today's plan limit for now — check back tomorrow.",
+            "plan_text": "You've reached today's limit for now — check back tomorrow.",
+            "story": None,
             "cached": False,
             "limit_reached": True,
         })
 
-    plan_text = await generate_improvement_plan(
+    story = await generate_insight_story(
         treatment_label=body.treatment_label,
         outcome_label=body.outcome_label,
         headline=body.headline,
         existing_tip=body.existing_tip,
         metric_direction=body.metric_direction,
+        metric_delta=body.metric_delta or "",
+        metric_unit=body.metric_unit or "",
+        confidence_label=body.confidence_label or "",
+        n_observations=body.n_observations,
     )
 
-    if plan_text is None:
-        if cached:
-            return JSONResponse(content={"plan_text": cached["plan_text"], "cached": True, "limit_reached": False})
-        return JSONResponse(content={"plan_text": None, "cached": False, "limit_reached": False})
+    if story is None:
+        return _response(cached_text, cached_story, bool(cached), False)
 
-    await _save_cache(user_id, body.hypothesis_id, plan_text)
+    await _save_cache(user_id, body.hypothesis_id, json.dumps(story))
     await _increment_today_count(user_id, today_count)
 
-    return JSONResponse(content={"plan_text": plan_text, "cached": False, "limit_reached": False})
+    return _response(None, story, False, False)

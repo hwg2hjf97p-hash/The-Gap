@@ -520,12 +520,16 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             experiments=experiments,
         )
 
-        for insight in newly_confirmed:
+        # The push deliberately doesn't say WHAT was found: a new discovery
+        # arrives sealed and the finding is revealed when it's opened in the
+        # app. One push for the batch, however many were found this run.
+        if newly_confirmed:
+            count = len(newly_confirmed)
             await send_push(
                 user_id,
-                title="New pattern found",
-                body=insight.get("headline") or insight.get("title") or "A new causal pattern just showed up in your data.",
-                data={"kind": "discovery", "hypothesis_id": insight["hypothesis_id"], "session_id": session_id},
+                title="You've unlocked a discovery" if count == 1 else f"You've unlocked {count} discoveries",
+                body="Something new about your body is waiting. Tap to open it.",
+                data={"kind": "discovery", "hypothesis_id": newly_confirmed[0]["hypothesis_id"], "session_id": session_id},
             )
 
         # Best-effort — proactive "expect this today" nudges and intervention
