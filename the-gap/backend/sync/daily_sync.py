@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from auth import get_current_user_id
 from db.supabase_client import save_results, get_latest_results
 from routers.experiments import get_user_hypotheses
-from utils.push import send_push
+from utils.push import send_push, flush_queue
 from utils.nudges import check_proactive_nudge
 from routers.interventions import get_active_hypothesis_ids, check_intervention_followups
 from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
@@ -198,6 +198,9 @@ async def run_sync(x_sync_secret: str = Header(default="")):
         logger.warning("SYNC_SECRET is not set: POST /sync/run is open to anyone. Set it in the environment.")
     elif not hmac.compare_digest(x_sync_secret.encode(), SYNC_SECRET.encode()):
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
+
+    # Release pushes held during someone's quiet hours that are now due.
+    await flush_queue()
 
     # Get all active connections via REST (not supabase-py)
     try:

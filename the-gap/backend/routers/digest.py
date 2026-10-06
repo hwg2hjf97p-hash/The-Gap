@@ -25,6 +25,7 @@ the same SYNC_SECRET.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
@@ -36,7 +37,8 @@ from fastapi.responses import JSONResponse
 from auth import get_current_user_id
 from db.supabase_client import get_latest_results
 from routers.journal import _get_streak as _get_journal_streak
-from utils.push import send_push
+from utils.push import send_push, flush_queue, get_prefs
+from utils.quiet_hours import local_now
 from utils.goals import compute_goal_progress
 
 logger = logging.getLogger(__name__)
@@ -148,7 +150,20 @@ async def _run_one_digest(user_id: str) -> dict:
         logger.error("Saving weekly digest failed for %s: %s", user_id[:8], exc)
         return {"user_id": user_id, "status": "save_failed"}
 
-    await send_push(user_id, title="Your weekly recap is ready", body=digest_text, data={"kind": "digest"})
+    # Lead with the review's one-line verdict if there is one: it says something about THEIR week.
+    body = digest_text
+    try:
+        from routers.review import build_review
+
+        prefs = await get_prefs(user_id)
+        now_local = local_now(datetime.now(timezone.utc), (prefs or {}).get("tz"))
+        review = await build_review(user_id, (now_local or datetime.now(timezone.utc)).date())
+        if review.get("ready"):
+            body = f"{review['headline']} Tap to see your week."
+    except Exception as exc:
+        logger.warning("Weekly review for the digest push failed for %s: %s", user_id[:8], exc)
+
+    await send_push(user_id, title="Your week in review is ready", body=body, data={"kind": "digest"})
 
     return {"user_id": user_id, "status": "sent"}
 
@@ -156,8 +171,12 @@ async def _run_one_digest(user_id: str) -> dict:
 @router.post("/run")
 async def run_weekly_digest(x_sync_secret: str = Header(default="")):
     """Generate + push this week's digest for every user with at least one saved result."""
-    if SYNC_SECRET and x_sync_secret != SYNC_SECRET:
+    if not SYNC_SECRET:
+        logger.warning("SYNC_SECRET is not set: POST /digest/run is open to anyone. Set it in the environment.")
+    elif not hmac.compare_digest(x_sync_secret.encode(), SYNC_SECRET.encode()):
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
+
+    await flush_queue()
 
     try:
         rows = await _supabase_get("results", {"select": "user_id"})

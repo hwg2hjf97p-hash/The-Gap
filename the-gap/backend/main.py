@@ -86,6 +86,8 @@ from routers import readiness
 from routers import health_plan
 from routers import suggestions
 from routers import consent
+from routers import review
+from routers import notifications
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
@@ -116,11 +118,13 @@ app.include_router(readiness.router)
 app.include_router(health_plan.router)
 app.include_router(suggestions.router)
 app.include_router(consent.router)
+app.include_router(review.router)
+app.include_router(notifications.router)
 
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "hardening-2"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "retention-1"}
 
 @app.get("/")
 def root():

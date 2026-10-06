@@ -17,8 +17,11 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 import httpx
+
+from utils.quiet_hours import in_quiet_hours
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +56,65 @@ async def _get_tokens_for_user(user_id: str) -> list[str]:
         return []
 
 
-async def send_push(user_id: str, title: str, body: str, data: dict | None = None) -> None:
+async def get_prefs(user_id: str) -> dict | None:
+    """The person's time zone and quiet hours, or None if they haven't set any
+    (or the table isn't there yet)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("notification_prefs"),
+                headers=_sb_headers(),
+                params={"user_id": f"eq.{user_id}", "select": "tz,quiet_start,quiet_end", "limit": "1"},
+            )
+            resp.raise_for_status()
+            rows = resp.json() or []
+            return rows[0] if rows else None
+    except Exception as exc:
+        logger.warning("Notification prefs lookup failed for %s: %s", user_id[:8], exc)
+        return None
+
+
+def _quiet_now(prefs: dict | None) -> bool:
+    if not prefs:
+        return False
+    start = prefs.get("quiet_start")
+    end = prefs.get("quiet_end")
+    return in_quiet_hours(
+        datetime.now(timezone.utc),
+        prefs.get("tz"),
+        float(22 if start is None else start),
+        float(7 if end is None else end),
+    )
+
+
+async def _enqueue(user_id: str, title: str, body: str, data: dict | None) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                _sb_url("push_queue"),
+                headers=_sb_headers("return=minimal"),
+                json={"user_id": user_id, "title": title, "body": body, "data": data or {}},
+            )
+            resp.raise_for_status()
+            return True
+    except Exception as exc:
+        logger.warning("Queueing a push failed for %s: %s", user_id[:8], exc)
+        return False
+
+
+async def send_push(user_id: str, title: str, body: str, data: dict | None = None, respect_quiet: bool = True) -> None:
     """
     Best-effort push to every device this user has registered. Never raises —
     a failed push shouldn't ever take down the sync/engine run that triggered it.
+
+    During the person's quiet hours the push is held and sent by flush_queue()
+    once they're past it, rather than waking them.
     """
+    if respect_quiet and _quiet_now(await get_prefs(user_id)):
+        if await _enqueue(user_id, title, body, data):
+            logger.info("PUSH_HELD user=%s title=%r", user_id[:8], title)
+        return
+
     tokens = await _get_tokens_for_user(user_id)
     if not tokens:
         return
@@ -74,3 +131,40 @@ async def send_push(user_id: str, title: str, body: str, data: dict | None = Non
             logger.info("PUSH_SENT user=%s count=%d title=%r", user_id[:8], len(tokens), title)
     except Exception as exc:
         logger.warning("Push send failed for %s: %s", user_id[:8], exc)
+
+
+QUEUE_MAX_AGE_HOURS = 24
+MAX_SENT_PER_PERSON_AFTER_QUIET = 3
+
+
+async def flush_queue() -> int:
+    """Send held pushes to people who are no longer in quiet hours. Anything
+    older than a day is dropped as stale. Returns how many were sent. Never raises."""
+    sent = 0
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=QUEUE_MAX_AGE_HOURS)).isoformat()
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.delete(_sb_url("push_queue"), headers=_sb_headers("return=minimal"), params={"created_at": f"lt.{cutoff}"})
+            resp = await client.get(
+                _sb_url("push_queue"), headers=_sb_headers(),
+                params={"select": "id,user_id,title,body,data", "order": "created_at.asc", "limit": "500"},
+            )
+            resp.raise_for_status()
+            rows = resp.json() or []
+
+            by_user: dict[str, list[dict]] = {}
+            for r in rows:
+                by_user.setdefault(r["user_id"], []).append(r)
+
+            for user_id, items in by_user.items():
+                if _quiet_now(await get_prefs(user_id)):
+                    continue
+                # Several at once would be a pile-up: send only the newest few.
+                for item in items[-MAX_SENT_PER_PERSON_AFTER_QUIET:]:
+                    await send_push(user_id, item["title"], item["body"], item.get("data"), respect_quiet=False)
+                    sent += 1
+                ids = ",".join(str(i["id"]) for i in items)
+                await client.delete(_sb_url("push_queue"), headers=_sb_headers("return=minimal"), params={"id": f"in.({ids})"})
+    except Exception as exc:
+        logger.warning("Flushing the push queue failed: %s", exc)
+    return sent
