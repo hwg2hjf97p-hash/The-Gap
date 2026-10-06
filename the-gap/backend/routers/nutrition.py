@@ -80,6 +80,8 @@ router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 USDA_BASE = "https://api.nal.usda.gov/fdc/v1"
 OFF_BASE = "https://world.openfoodfacts.org"
 OFF_HEADERS = {"User-Agent": "TheGap/1.0 (hello@causalme.com)"}
+OFF_SEARCH_URL = "https://search.openfoodfacts.org/search"
+OFF_SEARCH_FIELDS = "code,product_name,brands,nutriments,serving_size,serving_quantity"
 OFF_FIELDS = "code,product_name,brands,nutriments,serving_size,serving_quantity"
 MACRO_KEYS = ("calories", "protein_g", "carbs_g", "fat_g")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -202,10 +204,26 @@ def _off_per100(nutriments: dict) -> Optional[dict]:
     }
 
 
+def _plausible_per100(per100: dict) -> bool:
+    """Open Food Facts is crowd-sourced, and a common mistake is typing a
+    per-serving energy figure into the per-100 g field (a spread showing
+    6 kcal per 100 g next to 25 g of protein). When the calories are far below
+    what the macros add up to, or impossibly high, the entry is dropped rather
+    than logged with a wrong number. Only the low side is checked: alcohol adds
+    calories the macros don't show."""
+    kcal = per100["calories"]
+    if kcal < 0 or kcal > 950:
+        return False
+    computed = 4 * per100["protein_g"] + 4 * per100["carbs_g"] + 9 * per100["fat_g"]
+    if computed == 0:
+        return kcal <= 400
+    return kcal >= 0.6 * computed - 15
+
+
 def _off_to_item(product: dict) -> Optional[dict]:
     per100 = _off_per100(product.get("nutriments") or {})
     name = (product.get("product_name") or "").strip()
-    if not per100 or not name:
+    if not per100 or not name or not _plausible_per100(per100):
         return None
     serving_grams = None
     try:
@@ -214,19 +232,50 @@ def _off_to_item(product: dict) -> Optional[dict]:
     except (TypeError, ValueError):
         pass
     label = (product.get("serving_size") or "").strip() or None
-    brand = (product.get("brands") or "").split(",")[0].strip()
-    return _food_item("off", str(product.get("code") or name), name, brand, per100, serving_grams, label)
+    brands = product.get("brands")
+    if isinstance(brands, list):  # the newer search service returns a list
+        brand = str(brands[0]) if brands else ""
+    else:
+        brand = str(brands or "").split(",")[0]
+    return _food_item("off", str(product.get("code") or name), name, brand.strip(), per100, serving_grams, label)
 
 
-async def _off_search(client: httpx.AsyncClient, query: str) -> list[dict]:
+# Open Food Facts country tags for the regions people are most likely to be in.
+# A phone's region code (e.g. "AU") is mapped to one of these so products sold
+# in that country can be listed first. Unknown regions just search worldwide.
+OFF_COUNTRY_TAGS = {
+    "AU": "en:australia", "NZ": "en:new-zealand", "US": "en:united-states", "GB": "en:united-kingdom",
+    "IE": "en:ireland", "CA": "en:canada", "DE": "en:germany", "FR": "en:france", "ES": "en:spain",
+    "IT": "en:italy", "NL": "en:netherlands", "BE": "en:belgium", "CH": "en:switzerland", "AT": "en:austria",
+    "SE": "en:sweden", "NO": "en:norway", "DK": "en:denmark", "FI": "en:finland", "PT": "en:portugal",
+    "PL": "en:poland", "CZ": "en:czech-republic", "JP": "en:japan", "KR": "en:south-korea",
+    "SG": "en:singapore", "MY": "en:malaysia", "TH": "en:thailand", "ID": "en:indonesia",
+    "PH": "en:philippines", "IN": "en:india", "AE": "en:united-arab-emirates", "SA": "en:saudi-arabia",
+    "ZA": "en:south-africa", "BR": "en:brazil", "MX": "en:mexico", "AR": "en:argentina", "CL": "en:chile",
+}
+
+
+async def _off_search(client: httpx.AsyncClient, query: str, country_tag: Optional[str] = None, page_size: int = 10) -> list[dict]:
+    """Open Food Facts' search service (the older cgi search is slow and often
+    returns 503). With a country tag only products sold there come back."""
+    # The service reads field:value syntax, so strip anything a typed search
+    # could use to change the meaning of the query.
+    text = re.sub(r"[^\w\s'&%.-]", " ", query).strip()
+    if not text:
+        return []
+    q = f'{text} countries_tags:"{country_tag}"' if country_tag else text
     resp = await client.get(
-        f"{OFF_BASE}/cgi/search.pl",
-        params={"search_terms": query, "search_simple": 1, "action": "process", "json": 1, "page_size": 8, "fields": OFF_FIELDS},
+        OFF_SEARCH_URL,
+        params={"q": q, "page_size": page_size, "fields": OFF_SEARCH_FIELDS},
         headers=OFF_HEADERS,
         timeout=6,
     )
     resp.raise_for_status()
-    return [i for i in (_off_to_item(p) for p in resp.json().get("products", [])) if i]
+    return [i for i in (_off_to_item(p) for p in resp.json().get("hits", [])) if i]
+
+
+async def _none() -> list[dict]:
+    return []
 
 
 async def _safe(coro, what: str, failures: list[str]) -> list[dict]:
@@ -239,18 +288,35 @@ async def _safe(coro, what: str, failures: list[str]) -> list[dict]:
 
 
 @router.get("/search")
-async def search_foods(q: str = Query(..., min_length=2, max_length=80), user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+async def search_foods(
+    q: str = Query(..., min_length=2, max_length=80),
+    country: Optional[str] = Query(default=None, min_length=2, max_length=2),
+    user_id: str = Depends(get_current_user_id),
+) -> JSONResponse:
+    # country is the phone's region code. Where there's a country we know,
+    # products sold there come first, ahead of the (US-centred) USDA branded list.
+    country_code = (country or "").upper() or None
+    tag = OFF_COUNTRY_TAGS.get(country_code or "")
+    us_like = country_code in (None, "US")
+
     failures: list[str] = []
     async with httpx.AsyncClient(timeout=10) as client:
-        generic, branded, off = await asyncio.gather(
+        generic, branded, off_local, off_world = await asyncio.gather(
             _safe(_usda_search(client, q, "Foundation,SR Legacy", 6), "usda_generic", failures),
-            _safe(_usda_search(client, q, "Branded", 8), "usda_branded", failures),
-            _safe(_off_search(client, q), "off", failures),
+            _safe(_usda_search(client, q, "Branded", 8 if us_like else 3), "usda_branded", failures),
+            _safe(_off_search(client, q, tag, 10), "off_local", failures) if tag else _none(),
+            _safe(_off_search(client, q, None, 8), "off", failures),
         )
+
+    ordered = (
+        generic + branded + off_local + off_world
+        if us_like
+        else off_local + generic + off_world + branded
+    )
 
     seen: set[tuple[str, str]] = set()
     results: list[dict] = []
-    for item in generic + branded + off:
+    for item in ordered:
         key = (item["name"].lower(), (item["brand"] or "").lower())
         if key in seen:
             continue
@@ -260,7 +326,7 @@ async def search_foods(q: str = Query(..., min_length=2, max_length=80), user_id
     # "degraded" tells the app to say search is limited right now (usually
     # the shared USDA demo key hitting its rate limit) instead of silently
     # showing a thin result list as if nothing matched.
-    degraded = "usda_generic" in failures and "usda_branded" in failures
+    degraded = "usda_generic" in failures and "usda_branded" in failures and not (off_local or off_world)
     return JSONResponse(content={"results": results[:20], "degraded": degraded})
 
 
