@@ -2,11 +2,26 @@ name: CI
 
 # Runs on every push and pull request: the backend's unit tests, a static
 # check of the backend's Python, and a build of the website. A red cross on a
-# commit means something broke.
+# commit means something broke. When a step fails, the end of its output is
+# also shown as an annotation on the run, so the reason is visible without
+# opening the full log.
 
 on:
   push:
   pull_request:
+
+env:
+  # Runs a command, prints its output, and on failure adds the tail of the output as an annotation.
+  ANNOTATE: |
+    run_annotated() {
+      out=$("$@" 2>&1); code=$?
+      printf '%s\n' "$out" | tail -n 60
+      if [ $code -ne 0 ]; then
+        msg=$(printf '%s' "$out" | tail -c 1800 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+        echo "::error title=$1 failed::$msg"
+      fi
+      return $code
+    }
 
 jobs:
   backend-tests:
@@ -20,9 +35,13 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install what the tests need
-        run: pip install fastapi httpx pydantic pandas numpy python-multipart pytest
+        run: |
+          eval "$ANNOTATE"
+          run_annotated pip install fastapi httpx pydantic pandas numpy python-multipart pytest
       - name: Run tests
-        run: python -m pytest -q
+        run: |
+          eval "$ANNOTATE"
+          run_annotated python -m pytest -q
 
   backend-typecheck:
     runs-on: ubuntu-latest
@@ -47,7 +66,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: the-gap/frontend/package-lock.json
-      - run: npm ci
-      - run: npx next build
+      - name: Install
+        run: |
+          eval "$ANNOTATE"
+          run_annotated npm ci
+      - name: Build
+        run: |
+          eval "$ANNOTATE"
+          run_annotated npx next build
