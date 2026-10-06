@@ -14,7 +14,8 @@ env:
   # Runs a command, prints its output, and on failure adds the tail of the output as an annotation.
   ANNOTATE: |
     run_annotated() {
-      out=$("$@" 2>&1); code=$?
+      code=0
+      out=$("$@" 2>&1) || code=$?
       printf '%s\n' "$out" | tail -n 60
       if [ $code -ne 0 ]; then
         msg=$(printf '%s' "$out" | tail -c 1800 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
