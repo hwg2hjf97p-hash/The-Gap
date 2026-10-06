@@ -22,6 +22,7 @@ back as "Authorization: Bearer <secret>" on every webhook call.
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from datetime import datetime, timezone
@@ -62,7 +63,10 @@ def _sb_headers(prefer: str = "") -> dict:
 
 @router.post("/webhook")
 async def revenuecat_webhook(request_body: dict, authorization: str = Header(default="")) -> JSONResponse:
-    if REVENUECAT_WEBHOOK_SECRET and authorization != f"Bearer {REVENUECAT_WEBHOOK_SECRET}":
+    # Fails closed: with no secret configured nothing is accepted, so this
+    # can never be used to grant someone an active subscription.
+    expected = f"Bearer {REVENUECAT_WEBHOOK_SECRET}"
+    if not REVENUECAT_WEBHOOK_SECRET or not hmac.compare_digest(authorization.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="Invalid webhook secret.")
 
     event = request_body.get("event") or {}

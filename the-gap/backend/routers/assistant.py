@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -88,11 +89,38 @@ def _build_context(results_row: dict | None) -> str:
     return "\n".join(lines)
 
 
+MAX_QUESTIONS_PER_DAY = 40
+
+
+async def _questions_in_last_day(user_id: str) -> int:
+    """How many questions this person has asked in the last 24 hours. If the
+    count can't be read, returns 0: the limit protects spend, and shouldn't be
+    able to take the assistant down for everyone."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{base}/rest/v1/assistant_questions",
+                headers={"apikey": key, "Authorization": f"Bearer {key}", "Prefer": "count=exact"},
+                params={"user_id": f"eq.{user_id}", "created_at": f"gte.{since}", "select": "id", "limit": "1"},
+            )
+            resp.raise_for_status()
+            return int(resp.headers.get("content-range", "0/0").split("/")[-1] or 0)
+    except Exception as exc:
+        logger.warning("Assistant usage count failed: %s", exc)
+        return 0
+
+
 @router.post("/ask")
 async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="Assistant isn't configured yet.")
+
+    if await _questions_in_last_day(user_id) >= MAX_QUESTIONS_PER_DAY:
+        raise HTTPException(status_code=429, detail="You've reached today's question limit for Gappy. Try again tomorrow.")
 
     results_row = get_latest_results(user_id)
     context = _build_context(results_row)

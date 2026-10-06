@@ -65,6 +65,11 @@ def _sb_headers() -> dict:
     return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
 
+def _auth_admin_url() -> str:
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    return f"{base}/auth/v1/admin/users"
+
+
 @router.get("/export")
 async def export_my_data(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """Everything stored for this user, across every table, as one JSON download."""
@@ -122,12 +127,39 @@ async def delete_my_account(user_id: str = Depends(get_current_user_id)) -> JSON
         logger.error("ACCOUNT_DELETE_INCOMPLETE user=%s failed=%s", user_id[:8], failed)
         raise HTTPException(status_code=500, detail="Deletion didn't fully complete. Please try again.")
 
-    logger.info("ACCOUNT_DELETED user=%s result=%s", user_id[:8], deleted)
-    return JSONResponse(content={"deleted": True, "tables": deleted})
+    # The sign-in itself goes too, not just the rows. Otherwise "delete my
+    # account" would leave an account that can simply be signed back into.
+    auth_deleted = False
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.delete(f"{_auth_admin_url()}/{user_id}", headers=_sb_headers())
+            auth_deleted = resp.status_code in (200, 204, 404)
+            if not auth_deleted:
+                logger.error("ACCOUNT_AUTH_DELETE_FAILED user=%s status=%s", user_id[:8], resp.status_code)
+    except Exception as exc:
+        logger.error("ACCOUNT_AUTH_DELETE_ERROR user=%s: %s", user_id[:8], exc)
+
+    logger.info("ACCOUNT_DELETED user=%s auth_deleted=%s result=%s", user_id[:8], auth_deleted, deleted)
+    return JSONResponse(content={"deleted": True, "auth_deleted": auth_deleted, "tables": deleted})
 
 
 class ClaimRequest(BaseModel):
     old_user_id: str
+
+
+async def _is_real_account(client: httpx.AsyncClient, candidate_id: str) -> bool | None:
+    """Is this id a real signed-up user? True = yes, False = no (a legacy
+    anonymous device id), None = couldn't tell."""
+    try:
+        resp = await client.get(f"{_auth_admin_url()}/{candidate_id}", headers=_sb_headers())
+    except Exception as exc:
+        logger.warning("Account lookup failed: %s", exc)
+        return None
+    if resp.status_code == 200:
+        return True
+    if resp.status_code in (400, 404):
+        return False
+    return None
 
 
 @router.post("/claim")
@@ -146,6 +178,13 @@ async def claim_old_identity(body: ClaimRequest, user_id: str = Depends(get_curr
     claimed: dict[str, str] = {}
     try:
         async with httpx.AsyncClient(timeout=20) as client:
+            # This exists to adopt the random id an install used to make for
+            # itself before sign-in existed. Without this check, anyone signed
+            # in could "claim" another person's real account id and take all
+            # of their data. Only ids that belong to no real account qualify.
+            if await _is_real_account(client, old_user_id) is not False:
+                logger.warning("ACCOUNT_CLAIM_REFUSED new=%s old=%s", user_id[:8], old_user_id[:8])
+                raise HTTPException(status_code=403, detail="That identity can't be claimed.")
             for table in TABLES:
                 resp = await client.patch(
                     _sb_url(table),
@@ -154,6 +193,8 @@ async def claim_old_identity(body: ClaimRequest, user_id: str = Depends(get_curr
                     json={"user_id": user_id},
                 )
                 claimed[table] = "ok" if resp.status_code in (200, 204) else f"status={resp.status_code}"
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Account claim failed for old=%s new=%s: %s", old_user_id[:8], user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Could not migrate old data. Please try again.")

@@ -1,4 +1,7 @@
-from fastapi import FastAPI, Request
+import hmac
+import uuid
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
@@ -42,14 +45,25 @@ app.add_middleware(
 # Global exception handler — returns JSON instead of HTML 500
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # The full traceback goes to the server log only. It used to be sent back
+    # to whoever made the request, which hands out file paths, library
+    # versions and sometimes data. The error id lets a report be matched to
+    # its log entry.
+    error_id = uuid.uuid4().hex[:8]
+    logging.getLogger("app").error("UNHANDLED %s %s [%s]\n%s", request.method, request.url.path, error_id, traceback.format_exc())
     return JSONResponse(
         status_code=500,
-        content={
-            "error": type(exc).__name__,
-            "detail": str(exc),
-            "traceback": traceback.format_exc()
-        }
+        content={"error": "InternalServerError", "detail": "Something went wrong on our side. Please try again.", "error_id": error_id},
     )
+
+
+def _require_debug_secret(x_debug_secret: str = Header(default="")) -> None:
+    """The /debug-* pages reveal how the server is set up, so they're off
+    (they answer 404) unless a DEBUG_SECRET is set in the environment, and then
+    only for requests that send it in an X-Debug-Secret header."""
+    expected = os.getenv("DEBUG_SECRET", "").strip()
+    if not expected or not hmac.compare_digest(x_debug_secret.encode(), expected.encode()):
+        raise HTTPException(status_code=404, detail="Not Found")
 
 from routers import analyse
 from routers import connect
@@ -111,13 +125,13 @@ app.include_router(suggestions.router)
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "food-search-2"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "audit-1"}
 
 @app.get("/")
 def root():
     return {"message": "The Gap API is running. POST /analyse to begin."}
 
-@app.get("/debug-oauth")
+@app.get("/debug-oauth", dependencies=[Depends(_require_debug_secret)])
 async def debug_oauth():
     """Debug OAuth env vars and test Whoop token endpoint reachability."""
     import httpx, os
@@ -153,7 +167,7 @@ async def debug_oauth():
     return result
 
 
-@app.get("/debug-network")
+@app.get("/debug-network", dependencies=[Depends(_require_debug_secret)])
 async def debug_network():
     """Test DNS and network connectivity from Railway."""
     import httpx, socket, os
@@ -201,7 +215,7 @@ async def debug_network():
     return results
 
 
-@app.get("/debug-tables")
+@app.get("/debug-tables", dependencies=[Depends(_require_debug_secret)])
 async def debug_tables():
     """
     Which per-user tables exist in Supabase? Every feature that stores data
@@ -248,7 +262,7 @@ async def debug_tables():
     return {"key_role": key_role, "missing": [t for t, s in tables.items() if s != "ok"], "tables": tables}
 
 
-@app.get("/debug-imports")
+@app.get("/debug-imports", dependencies=[Depends(_require_debug_secret)])
 def debug_imports():
     """Check which packages are available on this server."""
     import os

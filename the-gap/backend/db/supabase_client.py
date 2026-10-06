@@ -102,7 +102,7 @@ def save_results(
             timeout=15,
         )
         resp.raise_for_status()
-        logger.info("Results saved to Supabase (session: %s, user: %s)", session_id, user_id[:8])
+        logger.info("Results saved to Supabase (session: %s, user: %s)", session_id, (user_id or "anonymous")[:8])
     except Exception as exc:
         logger.error("Supabase insert failed: %s", exc)
         # Don't raise — return session_id anyway so user still gets results

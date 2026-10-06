@@ -8,6 +8,8 @@ Can also be triggered manually or via a cron job (Railway cron or external).
 
 from __future__ import annotations
 
+import asyncio
+import hmac
 import logging
 import os
 import time
@@ -190,7 +192,11 @@ async def run_sync(x_sync_secret: str = Header(default="")):
     Run the daily sync for all connected users.
     Protected by X-Sync-Secret header.
     """
-    if SYNC_SECRET and x_sync_secret != SYNC_SECRET:
+    if not SYNC_SECRET:
+        # Left open when no secret is configured, so an existing scheduled job
+        # keeps working, but anyone could then start a sync of every user.
+        logger.warning("SYNC_SECRET is not set: POST /sync/run is open to anyone. Set it in the environment.")
+    elif not hmac.compare_digest(x_sync_secret.encode(), SYNC_SECRET.encode()):
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
 
     # Get all active connections via REST (not supabase-py)
@@ -398,7 +404,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     # until now, so hypotheses like alcohol_hrv had no data to run against.
     try:
         health_df.index = pd.to_datetime(health_df.index)
-        checkin_df = get_checkin_dataframe(user_id)
+        checkin_df = await asyncio.to_thread(get_checkin_dataframe, user_id)
         if checkin_df is not None and not checkin_df.empty:
             checkin_df.index = pd.to_datetime(checkin_df.index)
             # REAL BUG FIXED HERE: "left" join meant a Quick Entry logged
@@ -414,7 +420,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     # Merge planned/logged workouts (workout_completed_flag) — same outer-join
     # pattern as check-ins, new column name so no collision risk.
     try:
-        workout_df = get_workout_dataframe(user_id)
+        workout_df = await asyncio.to_thread(get_workout_dataframe, user_id)
         if workout_df is not None and not workout_df.empty:
             workout_df.index = pd.to_datetime(workout_df.index)
             health_df = health_df.join(workout_df, how="outer")
@@ -428,7 +434,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     # for people who log in both places) while Apple Health still fills any
     # day with no in-app log. water_ml and last_meal_hour are new columns.
     try:
-        nutrition_df = get_nutrition_dataframe(user_id)
+        nutrition_df = await asyncio.to_thread(get_nutrition_dataframe, user_id)
         if nutrition_df is not None and not nutrition_df.empty:
             nutrition_df.index = pd.to_datetime(nutrition_df.index)
             health_df = nutrition_df.combine_first(health_df)
@@ -491,13 +497,13 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     # Run causal engine
     try:
         logger.info("ENGINE_START user=%s days=%d", user_id[:8], len(health_df))
-        df = clean_dataframe(health_df)
+        df = await asyncio.to_thread(clean_dataframe, health_df)
         await _persist_metric_history(user_id, df)
         extra_hypotheses = await get_user_hypotheses(user_id)
-        insights = run_all_hypotheses(df, extra_hypotheses)
+        insights = await asyncio.to_thread(run_all_hypotheses, df, extra_hypotheses)
         insights_dicts = [i.to_dict() for i in insights]
-        snapshot = build_snapshot(df)
-        experiments = get_experiments_in_progress(df, extra_hypotheses)
+        snapshot = await asyncio.to_thread(build_snapshot, df)
+        experiments = await asyncio.to_thread(get_experiments_in_progress, df, extra_hypotheses)
         logger.info("ENGINE_DONE user=%s insights=%d experiments_in_progress=%d elapsed=%.1fs",
                     user_id[:8], len(insights_dicts), len(experiments), time.perf_counter() - t0)
 
@@ -506,7 +512,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         # is genuinely newly confirmed this run — not one that was already
         # confirmed last time and simply reappears.
         try:
-            previous = get_latest_results(user_id)
+            previous = await asyncio.to_thread(get_latest_results, user_id)
             # Only previously CONFIRMED insights count as already-known: a
             # hypothesis that was an early signal last time and has now
             # graduated to confirmed is exactly what should trigger a push.
@@ -526,7 +532,8 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             if i["hypothesis_id"] not in previous_ids and i.get("confidence") != "weak"
         ]
 
-        session_id = save_results(
+        session_id = await asyncio.to_thread(
+            save_results,
             user_id=user_id,
             data_source=",".join(providers_synced),
             data_period_days=len(df),

@@ -15,11 +15,13 @@ Flow:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
+from collections import defaultdict, deque
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from auth import get_current_user_id
@@ -37,9 +39,32 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# POST /analyse is the website's anonymous "upload your export" flow. It reads
+# the whole file into memory and runs the full engine, so it's limited in two
+# ways: one analysis at a time, and a few per hour per address. (Both are
+# per server process, which is enough for a single Render instance.)
+_analyse_slot = asyncio.Semaphore(1)
+_ANALYSE_PER_HOUR = 5
+_analyse_hits: dict[str, deque] = defaultdict(deque)
+
+
+def _rate_limited(ip: str) -> bool:
+    now = time.time()
+    hits = _analyse_hits[ip]
+    while hits and now - hits[0] > 3600:
+        hits.popleft()
+    if len(hits) >= _ANALYSE_PER_HOUR:
+        return True
+    hits.append(now)
+    if len(_analyse_hits) > 5000:  # forget addresses with nothing recent
+        for k in [k for k, v in _analyse_hits.items() if not v]:
+            _analyse_hits.pop(k, None)
+    return False
+
 
 @router.post("/analyse")
 async def analyse(
+    request: Request,
     file: Annotated[UploadFile, File(description="Apple Health .xml/.zip, Whoop .csv, or Oura .csv export")],
     data_source: Annotated[str, Form(description="'apple_health', 'whoop', or 'oura'")],
     calendar_file: Annotated[Optional[UploadFile], File(description="Optional Google Calendar .ics export")] = None,
@@ -63,6 +88,17 @@ async def analyse(
     """
     t0 = time.perf_counter()
 
+    forwarded = request.headers.get("x-forwarded-for", "")
+    client_ip = (forwarded.split(",")[0].strip() if forwarded else "") or (request.client.host if request.client else "unknown")
+    if _rate_limited(client_ip):
+        raise HTTPException(status_code=429, detail={"error_code": "RATE_LIMITED", "message": "Too many uploads from this connection. Please try again in an hour."})
+    if _analyse_slot.locked():
+        raise HTTPException(status_code=503, detail={"error_code": "BUSY", "message": "Another analysis is running right now. Please try again in a minute."})
+    async with _analyse_slot:
+        return await _analyse_locked(file, data_source, calendar_file, t0)
+
+
+async def _analyse_locked(file, data_source, calendar_file, t0) -> JSONResponse:
     # ── 1. Read file bytes ─────────────────────────────────────────────────
     try:
         file_bytes = await file.read()
@@ -90,11 +126,11 @@ async def analyse(
     # ── 3. Parse health data ───────────────────────────────────────────────
     try:
         if data_source == "apple_health":
-            df = parse_apple_health(file_bytes)
+            df = await asyncio.to_thread(parse_apple_health, file_bytes)
         elif data_source == "whoop":
-            df = parse_whoop(file_bytes)
+            df = await asyncio.to_thread(parse_whoop, file_bytes)
         elif data_source == "oura":
-            df = parse_oura(file_bytes)
+            df = await asyncio.to_thread(parse_oura, file_bytes)
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported data_source: {data_source}")
     except HTTPException:
@@ -132,7 +168,7 @@ async def analyse(
         # clean_dataframe()'s .shift()-based lag/next columns need row
         # order to match calendar order to mean anything.
         df = df.sort_index()
-        df = clean_dataframe(df)
+        df = await asyncio.to_thread(clean_dataframe, df)
     except Exception as exc:
         logger.exception("Data cleaning failed: %s", exc)
         raise HTTPException(
@@ -160,7 +196,7 @@ async def analyse(
 
     # ── 6. Causal engine ───────────────────────────────────────────────────
     try:
-        insights: list[Insight] = run_all_hypotheses(df)
+        insights: list[Insight] = await asyncio.to_thread(run_all_hypotheses, df)
     except Exception as exc:
         logger.exception("Causal engine failed: %s", exc)
         raise HTTPException(
@@ -279,4 +315,6 @@ async def get_results(session_id: str) -> JSONResponse:
                 "message": "Results not found. They may have expired.",
             },
         )
+    # The share link is public, so it shouldn't carry the owner's internal id.
+    row.pop("user_id", None)
     return JSONResponse(content=row)
