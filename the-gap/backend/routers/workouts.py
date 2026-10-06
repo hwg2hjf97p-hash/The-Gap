@@ -82,10 +82,25 @@ async def get_workout_types() -> JSONResponse:
 
 
 class SetModel(BaseModel):
+    # reps / weight_kg / duration_min are the PLANNED values (what was
+    # intended). What actually happened is in the actual_* fields; older
+    # workouts have no actual_* values and are read as "actual == planned".
     reps: Optional[int] = Field(default=None, ge=0, le=1000)
     weight_kg: Optional[float] = Field(default=None, ge=0, le=1000)
     duration_min: Optional[float] = Field(default=None, ge=0, le=1000)
     done: bool = False
+
+    actual_reps: Optional[int] = Field(default=None, ge=0, le=1000)
+    actual_weight_kg: Optional[float] = Field(default=None, ge=0, le=1000)
+    actual_duration_min: Optional[float] = Field(default=None, ge=0, le=1000)
+    # When the set was started and stopped (UTC instants, ISO 8601).
+    started_at: Optional[str] = Field(default=None, max_length=40)
+    ended_at: Optional[str] = Field(default=None, max_length=40)
+    # Heart rate read from Apple Health over the set's time window.
+    hr_avg: Optional[float] = Field(default=None, ge=0, le=260)
+    hr_peak: Optional[float] = Field(default=None, ge=0, le=260)
+    # The suggestion shown for this set, kept so it can be shown again.
+    tip: Optional[str] = Field(default=None, max_length=400)
 
 
 class ExerciseModel(BaseModel):
@@ -269,12 +284,18 @@ async def delete_workout(workout_id: str, user_id: str = Depends(get_current_use
 
 
 def _volume_kg(exercises: list[dict]) -> float:
-    """Total weight x reps over the sets that were checked off."""
+    """Total weight x reps over the sets that were checked off, using what
+    was actually done (falling back to the planned numbers for sets that
+    have no separate actual values, i.e. older workouts)."""
     total = 0.0
     for ex in exercises or []:
         for s in ex.get("sets") or []:
-            if s.get("done") and s.get("reps") and s.get("weight_kg"):
-                total += float(s["reps"]) * float(s["weight_kg"])
+            if not s.get("done"):
+                continue
+            reps = s.get("actual_reps") if s.get("actual_reps") is not None else s.get("reps")
+            weight = s.get("actual_weight_kg") if s.get("actual_weight_kg") is not None else s.get("weight_kg")
+            if reps and weight:
+                total += float(reps) * float(weight)
     return total
 
 
