@@ -78,7 +78,8 @@ const SECTIONS: LegalSection[] = [
   {
     heading: "Where your information is processed",
     paragraphs: [
-      "Some of our providers process information outside Australia, including in the United States. Before sending information overseas we take reasonable steps to make sure the provider handles it in a way consistent with the Australian Privacy Principles, for example through their contractual terms.",
+      "Your information is processed and stored outside Australia. Our database and sign-in system (Supabase) are hosted in Tokyo, Japan. Our server (Render) runs in Oregon, in the United States. The AI service (Anthropic) is based in the United States, and our other providers operate in the United States and other countries.",
+      "Before sending information overseas we take reasonable steps to make sure the provider handles it in a way consistent with the Australian Privacy Principles, for example through their contractual terms. By using The Gap you understand your information will be handled in these countries.",
     ],
   },
   {
