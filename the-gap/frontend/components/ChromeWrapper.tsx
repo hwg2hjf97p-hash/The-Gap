@@ -1,63 +1,64 @@
-"use client";
+import type { ReactNode } from "react";
+import { Logo } from "./Logo";
 
-import { usePathname } from "next/navigation";
-import BottomNav from "./BottomNav";
-
-const APP_SHELL_PREFIXES = ["/results/live", "/journal", "/insights", "/assistant", "/settings"];
-
-export default function ChromeWrapper({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isAppShell = APP_SHELL_PREFIXES.some(
-    (p) => pathname === p || pathname?.startsWith(p + "/") || pathname?.startsWith(p + "?")
-  );
-
-  if (isAppShell) {
-    return (
-      <>
-        <main className="pb-24">{children}</main>
-        <BottomNav />
-      </>
-    );
-  }
-
+/** The site frame: a slim top bar and a footer. The site is information only, with no app to use here. */
+export default function ChromeWrapper({ children }: { children: ReactNode }) {
   return (
     <>
-      {/* Top nav bar */}
-      <nav
-        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4"
-        style={{ background: "linear-gradient(to bottom, rgba(10,23,16,0.95), transparent)" }}
+      <header
+        className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md"
+        style={{ background: "rgba(11,16,21,0.72)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       >
-        <a href="/" className="flex items-center gap-2">
-          <span className="text-xl font-semibold tracking-tight" style={{ color: "#eef3f0" }}>
-            The Gap
-          </span>
-          <span
-            className="text-xs px-2 py-0.5 rounded-full font-mono"
-            style={{ background: "#132c1f", color: "#34d399", border: "1px solid #1a3d2b" }}
-          >
-            beta
-          </span>
-        </a>
-        <a
-          href="https://www.causalme.com"
-          className="text-sm font-medium transition-colors"
-          style={{ color: "#a2bcaf" }}
-        >
-          causalme.com
-        </a>
-      </nav>
-
-      <main className="pt-16">{children}</main>
-
-      {/* Footer */}
-      <footer className="mt-24 pb-12 text-center" style={{ color: "#a2bcaf", fontSize: "0.75rem" }}>
-        <p>
-          © 2026 The Gap · Samuel Roberts ·{" "}
-          <a href="mailto:hello@causalme.com" className="hover:text-text transition-colors" style={{ color: "#c9a84c" }}>
-            hello@causalme.com
+        <nav className="mx-auto max-w-5xl flex items-center justify-between px-5 py-3">
+          <a href="/" className="flex items-center gap-2.5" aria-label="The Gap home">
+            <Logo size={30} />
+            <span className="text-lg font-semibold tracking-tight" style={{ color: "#f2f6f8" }}>
+              The Gap
+            </span>
           </a>
-        </p>
-        <p className="mt-1 opacity-60">Causal inference powered by EconML (Microsoft Research)</p>
+          <div className="flex items-center gap-5 text-sm" style={{ color: "#9aa8b2" }}>
+            <a href="/privacy" className="hidden sm:inline hover:text-white transition-colors">
+              Privacy
+            </a>
+            <a href="/terms" className="hidden sm:inline hover:text-white transition-colors">
+              Terms
+            </a>
+            <a
+              href="mailto:hello@causalme.com?subject=Early%20access%20to%20The%20Gap"
+              className="rounded-full px-4 py-1.5 font-semibold transition-opacity hover:opacity-90"
+              style={{ background: "#22d3ee", color: "#04141a" }}
+            >
+              Early access
+            </a>
+          </div>
+        </nav>
+      </header>
+
+      <main className="pt-14">{children}</main>
+
+      <footer className="mt-24 px-5 pb-12" style={{ color: "#9aa8b2" }}>
+        <div className="mx-auto max-w-5xl pt-8 text-xs leading-relaxed" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p>
+              © 2026 The Gap · Samuel Roberts, Queensland, Australia ·{" "}
+              <a href="mailto:hello@causalme.com" style={{ color: "#22d3ee" }}>
+                hello@causalme.com
+              </a>
+            </p>
+            <p className="flex gap-4">
+              <a href="/privacy" className="hover:text-white">
+                Privacy Policy
+              </a>
+              <a href="/terms" className="hover:text-white">
+                Terms of Service
+              </a>
+            </p>
+          </div>
+          <p className="mt-4 opacity-70">
+            The Gap provides general information about your own data. It is not medical advice and does not diagnose, treat or prevent any condition. Apple, Apple Health, Apple Watch,
+            Whoop, Oura, Strava, Withings, Polar and Google are trademarks of their respective owners. The Gap is not affiliated with or endorsed by them.
+          </p>
+        </div>
       </footer>
     </>
   );

@@ -1,34 +1,33 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ChromeWrapper from "../components/ChromeWrapper";
 
+const TITLE = "The Gap: don't just know what. Know why.";
+const DESCRIPTION =
+  "The Gap finds the habits that actually move your sleep, recovery and energy, using your own data from Apple Health, Whoop, Oura and more. In private testing on iPhone.";
+
 export const metadata: Metadata = {
-  title: "The Gap — Your Personal Causal Intelligence Layer",
-  description:
-    "Upload your Apple Health or Whoop data and discover verified cause-and-effect patterns in your own health. Not correlations — actual causation.",
+  title: TITLE,
+  description: DESCRIPTION,
   metadataBase: new URL("https://causalme.com"),
   openGraph: {
-    title: "The Gap",
-    description: "Discover verified cause-and-effect patterns in your health data.",
+    title: TITLE,
+    description: DESCRIPTION,
     url: "https://causalme.com",
     siteName: "The Gap",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-      },
-    ],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "The Gap" }],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "The Gap",
-    description: "Verified cause-and-effect in your health data.",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/og-image.png"],
   },
-  icons: {
-    icon: "/favicon.ico",
-  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0b1015",
 };
 
 export default function RootLayout({
@@ -38,7 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen" style={{ backgroundColor: "#0a1710" }}>
+      <body className="min-h-screen" style={{ backgroundColor: "#0b1015" }}>
         <ChromeWrapper>{children}</ChromeWrapper>
       </body>
     </html>
