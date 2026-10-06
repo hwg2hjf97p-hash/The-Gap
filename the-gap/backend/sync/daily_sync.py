@@ -461,6 +461,21 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     except Exception as exc:
         logger.warning("Assistant signal merge failed (continuing without it): %s", exc)
 
+    # An explicit check-in answer about arguments or travel beats the same
+    # thing inferred from free-text journal entries. Writing it into the
+    # journal's own columns means the existing conflict/travel hypotheses
+    # automatically get the better data, instead of a second near-duplicate
+    # finding appearing alongside them.
+    try:
+        for explicit, inferred in (("argument_flag", "conflict_event"), ("travel_flag", "travel_event")):
+            if explicit in health_df.columns:
+                if inferred in health_df.columns:
+                    health_df[inferred] = health_df[explicit].combine_first(health_df[inferred])
+                else:
+                    health_df[inferred] = health_df[explicit]
+    except Exception as exc:
+        logger.warning("Explicit check-in override of journal signals failed (continuing): %s", exc)
+
     # REAL BUG FIXED HERE: outer joins (checkin/journal/calendar above)
     # don't guarantee the resulting index stays sorted by date — a new
     # date introduced by one of those joins can land anywhere in the

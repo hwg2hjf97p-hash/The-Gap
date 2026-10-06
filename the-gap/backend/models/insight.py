@@ -55,6 +55,11 @@ class Insight:
     treatment_col: str = ""
     outcome_col: str = ""
 
+    # Sensitive findings (see PRIVATE_HYPOTHESIS_IDS in causal/hypotheses.py):
+    # the app keeps these off lock-screen pushes, share cards and the PDF
+    # report. Still shown to the user inside the app.
+    is_private: bool = False
+
     def to_dict(self) -> dict:
         d = asdict(self)
         # Convert ConfidenceLevel enum to string for JSON serialisation

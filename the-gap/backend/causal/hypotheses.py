@@ -664,4 +664,184 @@ HYPOTHESES: list[Hypothesis] = [
         outcome_label="Deep sleep that night (minutes)",
         category="lifestyle",
     ),
+    # ── CHECK-IN CATEGORIES (alcohol amount, energy drinks, cigarettes,
+    # gambling, other substances, work, travel). Every treatment here is an
+    # explicit check-in answer, so a day nobody answered is NaN (skipped),
+    # never counted as a zero.
+
+    # 41. Number of alcoholic drinks → Next-day HRV (dose, not just yes/no)
+    Hypothesis(
+        id="alcohol_drinks_hrv",
+        treatment_col="alcohol_drinks",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Alcoholic drinks (per drink)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+
+    # 42. Energy drinks → Sleep that night
+    Hypothesis(
+        id="energy_drinks_sleep",
+        treatment_col="energy_drinks",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Energy drinks (per drink)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+
+    # 43. Energy drink in the evening/late → Deep sleep that night
+    Hypothesis(
+        id="late_energy_drink_deep_sleep",
+        treatment_col="energy_drink_late_flag",
+        outcome_col="sleep_deep_min",
+        covariate_cols=["sleep_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=8,
+        treatment_label="Energy drink in the evening or later (yes/no)",
+        outcome_label="Deep sleep that night (minutes)",
+        category="lifestyle",
+    ),
+
+    # 44-45. Cigarettes → Next-day HRV / resting heart rate
+    Hypothesis(
+        id="cigarettes_hrv",
+        treatment_col="cigarettes",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Cigarettes (per 5)",
+        outcome_label="Next-day HRV (ms)",
+        category="health",
+        treatment_scale=5.0,
+    ),
+    Hypothesis(
+        id="cigarettes_rhr",
+        treatment_col="cigarettes",
+        outcome_col="resting_hr_next",
+        covariate_cols=["resting_hr", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Cigarettes (per 5)",
+        outcome_label="Next-day resting heart rate (bpm)",
+        category="health",
+        treatment_scale=5.0,
+    ),
+
+    # 46-47. Gambling day → Sleep that night / Next-day HRV (private)
+    Hypothesis(
+        id="gambling_sleep",
+        treatment_col="gambling_flag",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=6,
+        treatment_label="Day you gambled (yes/no)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="gambling_hrv",
+        treatment_col="gambling_flag",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=6,
+        treatment_label="Day you gambled (yes/no)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+
+    # 48-49. Other substances → Next-day HRV / Deep sleep (private)
+    Hypothesis(
+        id="substance_hrv",
+        treatment_col="substance_flag",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=6,
+        treatment_label="Day you used other substances (yes/no)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="substance_deep_sleep",
+        treatment_col="substance_flag",
+        outcome_col="sleep_deep_min",
+        covariate_cols=["sleep_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=6,
+        treatment_label="Day you used other substances (yes/no)",
+        outcome_label="Deep sleep that night (minutes)",
+        category="lifestyle",
+    ),
+
+    # 50-52. Work → HRV / Sleep
+    Hypothesis(
+        id="work_hours_hrv",
+        treatment_col="work_hours",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Hours worked (per hour)",
+        outcome_label="Next-day HRV (ms)",
+        category="work",
+    ),
+    Hypothesis(
+        id="work_hours_sleep",
+        treatment_col="work_hours",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Hours worked (per hour)",
+        outcome_label="Sleep duration that night (min)",
+        category="work",
+    ),
+    Hypothesis(
+        id="late_work_sleep",
+        treatment_col="work_late_flag",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=8,
+        treatment_label="Working until 8 pm or later (yes/no)",
+        outcome_label="Sleep duration that night (min)",
+        category="work",
+    ),
+
+    # 53-54. Travel time → Sleep that night / Next-day HRV
+    Hypothesis(
+        id="travel_hours_sleep",
+        treatment_col="travel_hours",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Time spent travelling (per hour)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="travel_hours_hrv",
+        treatment_col="travel_hours",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Time spent travelling (per hour)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
 ]
+
+# Sensitive findings. They still appear inside the app for the person who
+# logged them, but never on a lock-screen push (nudges), a share card, the
+# PDF report, or "today's one thing" on Home.
+PRIVATE_HYPOTHESIS_IDS = {"substance_hrv", "substance_deep_sleep", "gambling_sleep", "gambling_hrv"}
+

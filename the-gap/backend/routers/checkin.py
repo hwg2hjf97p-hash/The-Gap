@@ -1,12 +1,16 @@
 """
 Manual daily check-in router for The Gap.
 Captures lifestyle variables that wearables don't track:
-  - alcohol (yes/no)
+  - alcohol (yes/no, plus number of drinks and time of day)
   - afternoon caffeine after 2pm (yes/no)
   - stress score (1-10)
+  - energy drinks, cigarettes, gambling, other substances (private), work,
+    arguments, travel — each an amount and/or a time of day / duration
 
-Stored in Supabase daily_checkins table.
-Merged into health data during analysis to unlock lifestyle hypotheses.
+Stored in Supabase daily_checkins table, one row per (user, date). Saving a
+date that already has a row overwrites it — that is how editing yesterday's
+check-in works. Merged into health data during analysis to unlock
+lifestyle hypotheses.
 
 Table DDL:
   CREATE TABLE IF NOT EXISTS daily_checkins (
@@ -20,6 +24,9 @@ Table DDL:
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, date)
   );
+  -- The extra categories (alcohol_drinks, energy_drinks, ...) are added by
+  -- checkin_phase1.sql. Until that has been run the router keeps working:
+  -- it falls back to saving only the original columns.
 """
 
 from __future__ import annotations
@@ -61,12 +68,47 @@ def _sb_headers(prefer: str = "") -> dict:
 
 # ── Request / Response models ─────────────────────────────────────────────────
 
+TIME_OF_DAY = {"morning", "afternoon", "evening", "late"}
+WORK_FINISH = {"before_5pm", "5_8pm", "8_10pm", "after_10pm"}
+TRAVEL_MODES = {"car", "plane", "train_bus", "other"}
+
+# Columns added by checkin_phase1.sql — everything beyond the original four.
+EXTENDED_FIELDS = (
+    "alcohol_drinks", "alcohol_time", "energy_drinks", "energy_drink_time",
+    "cigarettes", "gambling_minutes", "gambling_time", "substance_use",
+    "substance_time", "work_hours", "work_finish", "argument_count",
+    "argument_intensity", "travel_hours", "travel_mode",
+)
+
+
+def _one_of(allowed: set[str], value):
+    return value if value in allowed else None
+
+
 class CheckInRequest(BaseModel):
     date: str = Field(default_factory=lambda: date.today().isoformat())
     alcohol: bool = False
     afternoon_caffeine: bool = False
     stress_score: Optional[int] = Field(None, ge=1, le=10)
     notes: Optional[str] = None
+
+    # None means "not asked / not answered", which is different from 0
+    # ("none") — the engine only treats an explicit 0 as a real zero.
+    alcohol_drinks: Optional[int] = Field(None, ge=0, le=40)
+    alcohol_time: Optional[str] = None
+    energy_drinks: Optional[int] = Field(None, ge=0, le=20)
+    energy_drink_time: Optional[str] = None
+    cigarettes: Optional[int] = Field(None, ge=0, le=100)
+    gambling_minutes: Optional[int] = Field(None, ge=0, le=1440)
+    gambling_time: Optional[str] = None
+    substance_use: Optional[bool] = None
+    substance_time: Optional[str] = None
+    work_hours: Optional[float] = Field(None, ge=0, le=24)
+    work_finish: Optional[str] = None
+    argument_count: Optional[int] = Field(None, ge=0, le=20)
+    argument_intensity: Optional[int] = Field(None, ge=1, le=3)
+    travel_hours: Optional[float] = Field(None, ge=0, le=48)
+    travel_mode: Optional[str] = None
 
     @validator("date")
     def validate_date(cls, v):
@@ -75,6 +117,18 @@ class CheckInRequest(BaseModel):
         except ValueError:
             raise ValueError("date must be YYYY-MM-DD format")
         return v
+
+    @validator("alcohol_time", "energy_drink_time", "gambling_time", "substance_time")
+    def validate_time_of_day(cls, v):
+        return _one_of(TIME_OF_DAY, v)
+
+    @validator("work_finish")
+    def validate_work_finish(cls, v):
+        return _one_of(WORK_FINISH, v)
+
+    @validator("travel_mode")
+    def validate_travel_mode(cls, v):
+        return _one_of(TRAVEL_MODES, v)
 
 
 class CheckInResponse(BaseModel):
@@ -87,28 +141,45 @@ class CheckInResponse(BaseModel):
 
 @router.post("/")
 async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
-    """Submit or update a daily check-in."""
-    payload = {
+    """Submit or update a daily check-in. Saving a date that already has one
+    replaces it (same row), so correcting yesterday never creates a duplicate."""
+    alcohol = body.alcohol
+    if body.alcohol_drinks is not None:
+        # The drink count is the source of truth when it's given.
+        alcohol = body.alcohol_drinks > 0
+
+    base_payload = {
         "user_id": user_id,
         "date": body.date,
-        "alcohol": body.alcohol,
+        "alcohol": alcohol,
         "afternoon_caffeine": body.afternoon_caffeine,
         "stress_score": body.stress_score,
         "notes": body.notes,
     }
+    # Every extended field is sent, null included, so clearing a value on an
+    # edit actually clears it rather than leaving the old number behind.
+    extended = {f: getattr(body, f) for f in EXTENDED_FIELDS}
 
+    # Without on_conflict, PostgREST upserts on the primary key (id), which a
+    # fresh row never collides with — a second save for the same day then hit
+    # the UNIQUE(user_id, date) constraint and failed. Naming the real key
+    # makes an edit replace the existing row.
+    params = {"on_conflict": "user_id,date"}
+    headers = _sb_headers(prefer="resolution=merge-duplicates,return=minimal")
+
+    extended_saved = True
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
-                _sb_url("daily_checkins"),
-                headers=_sb_headers(prefer="resolution=merge-duplicates,return=minimal"),
-                # Without on_conflict, PostgREST upserts on the primary key (id),
-                # which a fresh row never collides with — so re-saving a day hit
-                # the UNIQUE(user_id, date) constraint and failed instead of
-                # overwriting. Naming the real key makes an edit replace the row.
-                params={"on_conflict": "user_id,date"},
-                json=payload,
+                _sb_url("daily_checkins"), headers=headers, params=params,
+                json={**base_payload, **extended},
             )
+            if resp.status_code == 400 and any(k in resp.text for k in ("PGRST204", "column")):
+                # checkin_phase1.sql hasn't been run yet — keep the check-in
+                # working with the original columns instead of failing.
+                logger.warning("daily_checkins is missing the extended columns — run checkin_phase1.sql. Saving original fields only.")
+                extended_saved = False
+                resp = await client.post(_sb_url("daily_checkins"), headers=headers, params=params, json=base_payload)
             resp.raise_for_status()
     except Exception as exc:
         logger.error("Check-in save failed: %s", exc)
@@ -120,6 +191,7 @@ async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_curren
         "success": True,
         "date": body.date,
         "streak": streak,
+        "extended_saved": extended_saved,
     })
 
 
@@ -153,7 +225,7 @@ async def get_recent_checkins(user_id: str = Depends(get_current_user_id), days:
                 params={
                     "user_id": f"eq.{user_id}",
                     "date": f"gte.{since}",
-                    "select": "date,alcohol,afternoon_caffeine,stress_score,notes",
+                    "select": "*",
                     "order": "date.desc",
                 },
             )
@@ -166,12 +238,16 @@ async def get_recent_checkins(user_id: str = Depends(get_current_user_id), days:
 
 @router.get("/today")
 async def get_today_checkin(user_id: str = Depends(get_current_user_id), local_date: Optional[str] = None) -> JSONResponse:
-    """Get today's check-in if it exists."""
-    # REAL BUG FIXED HERE: date.today() is the server's own clock, not
-    # the user's — same class of bug confirmed in journal.py tonight.
-    # Prefer the client-supplied local date; fall back to server date
-    # only for an un-updated app version.
+    """Get the check-in for local_date (the device's own calendar date — today
+    by default, or yesterday when editing it), if one exists."""
+    # date.today() is the server's own clock, not the user's — prefer the
+    # client-supplied local date; fall back to server date only for an
+    # un-updated app version.
     today = local_date or date.today().isoformat()
+    try:
+        datetime.strptime(today, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="local_date must be YYYY-MM-DD.")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
@@ -217,9 +293,8 @@ async def _get_streak(user_id: str, local_date: Optional[str] = None) -> int:
             return 1
 
         streak = 1
-        # REAL BUG FIXED HERE: date.today() is the server's own clock —
-        # prefer the client-supplied local date instead, same fix as
-        # journal.py's streak logic.
+        # Prefer the client-supplied local date instead of the server clock,
+        # same fix as journal.py's streak logic.
         today = datetime.strptime(local_date, "%Y-%m-%d").date() if local_date else date.today()
         expected = today if dates[0] == today else today - timedelta(days=1)
 
@@ -237,10 +312,16 @@ async def _get_streak(user_id: str, local_date: Optional[str] = None) -> int:
 
 def get_checkin_dataframe(user_id: str, days: int = 180):
     """
-    Fetch check-in data as a DataFrame for merging into health analysis.
-    Returns DataFrame with columns: alcohol_flag, afternoon_caffeine,
-    stress_score, high_stress_flag indexed by date.
+    Fetch check-in data as a DataFrame for merging into health analysis,
+    indexed by date. Columns (those with no data are simply absent/NaN, and
+    a day nobody answered is NaN, never 0):
+
+      alcohol_flag, alcohol_drinks, afternoon_caffeine, stress_score,
+      high_stress_flag, energy_drinks, energy_drink_late_flag, cigarettes,
+      gambling_minutes, gambling_flag, substance_flag, work_hours,
+      work_late_flag, argument_flag, travel_hours, travel_flag
     """
+    import numpy as np
     import pandas as pd
 
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
@@ -251,7 +332,7 @@ def get_checkin_dataframe(user_id: str, days: int = 180):
             params={
                 "user_id": f"eq.{user_id}",
                 "date": f"gte.{since}",
-                "select": "date,alcohol,afternoon_caffeine,stress_score",
+                "select": "*",
             },
             timeout=10,
         )
@@ -260,23 +341,73 @@ def get_checkin_dataframe(user_id: str, days: int = 180):
         if not rows:
             return pd.DataFrame()
 
-        df = pd.DataFrame(rows)
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.set_index("date").sort_index()
+        raw = pd.DataFrame(rows)
+        raw["date"] = pd.to_datetime(raw["date"])
+        raw = raw.set_index("date").sort_index()
 
-        # Rename to The Gap column names
-        df = df.rename(columns={
-            "alcohol": "alcohol_flag",
-            "afternoon_caffeine": "afternoon_caffeine",
-        })
-        df["alcohol_flag"] = df["alcohol_flag"].astype(int)
-        df["afternoon_caffeine"] = df["afternoon_caffeine"].astype(int)
+        def num(name):
+            if name in raw.columns:
+                return pd.to_numeric(raw[name], errors="coerce")
+            return pd.Series(np.nan, index=raw.index)
 
-        if "stress_score" in df.columns:
-            df["stress_score"] = pd.to_numeric(df["stress_score"], errors="coerce")
-            df["high_stress_flag"] = (df["stress_score"] >= 7).astype(int)
+        def text(name):
+            if name in raw.columns:
+                return raw[name].astype("object")
+            return pd.Series(None, index=raw.index, dtype="object")
 
-        return df
+        def flag(condition, answered):
+            """1.0 / 0.0 where the question was answered, NaN where it wasn't."""
+            return condition.astype(float).where(answered)
+
+        out = pd.DataFrame(index=raw.index)
+
+        # Original fields. Alcohol is a yes/no that a drink count refines:
+        # any drinks at all means yes.
+        drinks = num("alcohol_drinks")
+        alcohol_bool = raw["alcohol"].fillna(False).astype(bool) if "alcohol" in raw.columns else pd.Series(False, index=raw.index)
+        out["alcohol_flag"] = (alcohol_bool | (drinks.fillna(0) > 0)).astype(int)
+        # Older rows have no count: a "no" is a known zero, a "yes" is unknown.
+        out["alcohol_drinks"] = drinks.where(drinks.notna(), np.where(alcohol_bool, np.nan, 0.0))
+        out["afternoon_caffeine"] = (
+            raw["afternoon_caffeine"].fillna(False).astype(int) if "afternoon_caffeine" in raw.columns else 0
+        )
+        stress = num("stress_score")
+        out["stress_score"] = stress
+        out["high_stress_flag"] = (stress >= 7).astype(int).where(stress.notna()) if stress.notna().any() else np.nan
+
+        energy = num("energy_drinks")
+        out["energy_drinks"] = energy
+        out["energy_drink_late_flag"] = flag(
+            (energy > 0) & text("energy_drink_time").isin(["evening", "late"]), energy.notna()
+        )
+
+        out["cigarettes"] = num("cigarettes")
+
+        gambling = num("gambling_minutes")
+        out["gambling_minutes"] = gambling
+        out["gambling_flag"] = flag(gambling > 0, gambling.notna())
+
+        substance = raw["substance_use"] if "substance_use" in raw.columns else pd.Series(np.nan, index=raw.index)
+        substance_num = pd.to_numeric(substance.map(lambda v: np.nan if v is None or (isinstance(v, float) and np.isnan(v)) else float(bool(v))), errors="coerce")
+        out["substance_flag"] = substance_num
+
+        work = num("work_hours")
+        out["work_hours"] = work
+        out["work_late_flag"] = flag(
+            (work > 0) & text("work_finish").isin(["8_10pm", "after_10pm"]), work.notna()
+        )
+
+        arguments = num("argument_count")
+        out["argument_flag"] = flag(arguments > 0, arguments.notna())
+
+        travel = num("travel_hours")
+        out["travel_hours"] = travel
+        out["travel_flag"] = flag(travel > 0, travel.notna())
+
+        # Drop columns nobody has ever answered, so the engine's
+        # "missing column" skip applies instead of an all-NaN column.
+        out = out.dropna(axis=1, how="all")
+        return out
     except Exception as exc:
         logger.error("Check-in DataFrame fetch failed: %s", exc)
         return pd.DataFrame()

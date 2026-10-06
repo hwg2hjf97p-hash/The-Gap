@@ -64,7 +64,7 @@ async def get_todays_focus(user_id: str = Depends(get_current_user_id), local_da
     # Confirmed findings only: "today's one thing" is advice to act on, and
     # it shouldn't be built on a pattern that's still just an early signal.
     candidate = next(
-        (i for i in insights if i.get("hypothesis_id") not in active_ids and i.get("confidence") != "weak"),
+        (i for i in insights if i.get("hypothesis_id") not in active_ids and i.get("confidence") != "weak" and not i.get("is_private")),
         None,
     )
 

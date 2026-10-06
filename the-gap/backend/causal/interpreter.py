@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from causal.hypotheses import Hypothesis
+from causal.hypotheses import Hypothesis, PRIVATE_HYPOTHESIS_IDS
 from models.insight import Insight, ConfidenceLevel
 
 # REAL BUG FIXED HERE: metric_direction (which drives the app's green/red
@@ -538,6 +538,187 @@ def interpret_result(
             else "Eating later is cutting into your deep sleep — try finishing dinner 2-3 hours before bed."
         )
 
+    # CHECK-IN CATEGORIES
+    elif hid == "alcohol_drinks_hrv":
+        title = "How Much You Drink & Recovery"
+        headline = (
+            f"Each extra drink {'raises' if is_positive else 'lowers'} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "The more you drink, the more your overnight recovery drops. Capping a night at fewer drinks should show up the next morning."
+            if not is_positive
+            else "Your HRV isn't falling with the number of drinks in your data so far."
+        )
+
+    elif hid == "energy_drinks_sleep":
+        title = "Energy Drinks & Sleep"
+        headline = (
+            f"Each energy drink {'adds' if is_positive else 'costs you'} "
+            f"{abs_effect} minutes of sleep that night"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Energy drinks are shortening your sleep. Try having your last one before midday."
+            if not is_positive
+            else "Energy drinks don't seem to be costing you sleep."
+        )
+
+    elif hid == "late_energy_drink_deep_sleep":
+        title = "Late Energy Drinks & Deep Sleep"
+        headline = (
+            f"On days you had an energy drink in the evening, your deep sleep "
+            f"{'increased' if is_positive else 'dropped'} by {abs_effect} minutes"
+        )
+        metric_unit = "min deep sleep"
+        tip = (
+            "Evening energy drinks are cutting into your deep sleep. Keep them to the morning."
+            if not is_positive
+            else "A late energy drink doesn't seem to hurt your deep sleep."
+        )
+
+    elif hid == "cigarettes_hrv":
+        title = "Cigarettes & Recovery"
+        headline = (
+            f"Every 5 cigarettes {direction_word} your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Smoking days go with a lower HRV for you. Cutting back is one of the more direct things you can do for recovery."
+            if not is_positive
+            else "Your HRV isn't dropping on heavier smoking days in your data so far."
+        )
+
+    elif hid == "cigarettes_rhr":
+        title = "Cigarettes & Heart Rate"
+        headline = (
+            f"Every 5 cigarettes {direction_word} your next-day resting heart rate by {abs_effect} bpm"
+        )
+        metric_unit = "bpm"
+        tip = (
+            "Heavier smoking days go with a higher resting heart rate for you."
+            if is_positive
+            else "Your resting heart rate isn't rising with smoking in your data so far."
+        )
+
+    elif hid == "gambling_sleep":
+        title = "Gambling & Sleep"
+        headline = (
+            f"On days you gambled, you slept {'more' if is_positive else 'less'} "
+            f"that night — by {abs_effect} minutes"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Gambling days are costing you sleep. Setting a hard stop time may help."
+            if not is_positive
+            else "Gambling days aren't costing you sleep in your data so far."
+        )
+
+    elif hid == "gambling_hrv":
+        title = "Gambling & Recovery"
+        headline = (
+            f"After days you gambled, your next-morning HRV "
+            f"{'was higher' if is_positive else 'was lower'} by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Gambling days are showing up in your recovery."
+            if not is_positive
+            else "Gambling days aren't showing up as a recovery cost in your data so far."
+        )
+
+    elif hid == "substance_hrv":
+        title = "Other Substances & Recovery"
+        headline = (
+            f"After days you used other substances, your next-morning HRV "
+            f"{'was higher' if is_positive else 'was lower'} by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "These days are showing up in your recovery."
+            if not is_positive
+            else "These days aren't showing up as a recovery cost in your data so far."
+        )
+
+    elif hid == "substance_deep_sleep":
+        title = "Other Substances & Deep Sleep"
+        headline = (
+            f"On days you used other substances, your deep sleep that night "
+            f"{'increased' if is_positive else 'dropped'} by {abs_effect} minutes"
+        )
+        metric_unit = "min deep sleep"
+        tip = (
+            "These days are cutting into your deep sleep."
+            if not is_positive
+            else "These days aren't cutting into your deep sleep in your data so far."
+        )
+
+    elif hid == "work_hours_hrv":
+        title = "Work Hours & Recovery"
+        headline = (
+            f"Each extra hour of work {'raises' if is_positive else 'lowers'} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Longer work days are costing you recovery. Protect the evening after a long day."
+            if not is_positive
+            else "Longer work days aren't costing you recovery in your data so far."
+        )
+
+    elif hid == "work_hours_sleep":
+        title = "Work Hours & Sleep"
+        headline = (
+            f"Each extra hour of work {'adds' if is_positive else 'costs you'} "
+            f"{abs_effect} minutes of sleep that night"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Long work days are eating into your sleep. A firm finish time or a wind-down buffer may help."
+            if not is_positive
+            else "Longer work days aren't costing you sleep."
+        )
+
+    elif hid == "late_work_sleep":
+        title = "Late Finishes & Sleep"
+        headline = (
+            f"On days you worked until 8 pm or later, you slept "
+            f"{'more' if is_positive else 'less'} that night — by {abs_effect} minutes"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Working late is costing you sleep. Try to finish earlier on the days it matters."
+            if not is_positive
+            else "Working late doesn't seem to cost you sleep."
+        )
+
+    elif hid == "travel_hours_sleep":
+        title = "Travel & Sleep"
+        headline = (
+            f"Each extra hour of travel {'adds' if is_positive else 'costs you'} "
+            f"{abs_effect} minutes of sleep that night"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Travel days cost you sleep. Plan a lighter evening after a long trip."
+            if not is_positive
+            else "Travel doesn't seem to cost you sleep."
+        )
+
+    elif hid == "travel_hours_hrv":
+        title = "Travel & Recovery"
+        headline = (
+            f"Each extra hour of travel {'raises' if is_positive else 'lowers'} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Travel days cost you recovery. Build in an easier day afterwards."
+            if not is_positive
+            else "Travel isn't costing you recovery in your data so far."
+        )
+
     # Fallback for any future hypotheses
     else:
         title = hypothesis.treatment_label
@@ -575,6 +756,7 @@ def interpret_result(
         confidence_description=confidence_description,
         treatment_col=hypothesis.treatment_col,
         outcome_col=hypothesis.outcome_col,
+        is_private=hypothesis.id in PRIVATE_HYPOTHESIS_IDS,
         ate=round(effect, 4),
         ci_low=round(ci_low, 4),
         ci_high=round(ci_high, 4),

@@ -54,7 +54,7 @@ async def get_day_history(date: str, user_id: str = Depends(get_current_user_id)
                 params={
                     "user_id": f"eq.{user_id}",
                     "date": f"eq.{date}",
-                    "select": "alcohol,afternoon_caffeine,stress_score,notes",
+                    "select": "*",
                     "limit": "1",
                 },
             )
