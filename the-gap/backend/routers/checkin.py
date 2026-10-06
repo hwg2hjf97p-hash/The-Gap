@@ -102,6 +102,11 @@ async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_curren
             resp = await client.post(
                 _sb_url("daily_checkins"),
                 headers=_sb_headers(prefer="resolution=merge-duplicates,return=minimal"),
+                # Without on_conflict, PostgREST upserts on the primary key (id),
+                # which a fresh row never collides with — so re-saving a day hit
+                # the UNIQUE(user_id, date) constraint and failed instead of
+                # overwriting. Naming the real key makes an edit replace the row.
+                params={"on_conflict": "user_id,date"},
                 json=payload,
             )
             resp.raise_for_status()
