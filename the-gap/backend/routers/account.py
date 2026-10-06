@@ -47,7 +47,7 @@ USER_DATA_TABLES = TABLES + [
     "metric_insights", "metric_insight_usage",
     "active_interventions", "proactive_nudges",
     "assistant_questions", "assistant_extractions",
-    "workouts", "food_log", "water_log", "nutrition_goals",
+    "workouts", "food_log", "water_log", "nutrition_goals", "training_schedule",
 ]
 
 # Credentials never belong in a data export, even the user's own.

@@ -17,6 +17,7 @@ import logging
 import math
 import os
 from datetime import date, datetime, timedelta
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -66,9 +67,13 @@ def _latest_vs_baseline(series: list[tuple[date, float]], today: date) -> dict |
     return info
 
 
-@router.get("/today")
-async def readiness_today(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
-    today = date.today()
+async def compute_readiness(user_id: str, today: date) -> dict:
+    """Readiness for `today` (the user's own local date). Shared by the
+    Readiness card endpoint and the overall health suggestion
+    (routers/health_plan.py). Always returns a dict; level is "unknown" when
+    there isn't enough data. `signals` holds the raw comparisons (percent
+    above/below this person's normal) so callers can reason about them
+    without parsing the reason strings."""
     since = (today - timedelta(days=BASELINE_DAYS + 15)).isoformat()
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -88,7 +93,7 @@ async def readiness_today(user_id: str = Depends(get_current_user_id)) -> JSONRe
             rows = resp.json() or []
     except Exception as exc:
         logger.error("Readiness fetch failed for %s: %s", user_id[:8], exc)
-        return JSONResponse(content={"level": "unknown", "reasons": [], "suggestion": None, "message": "Couldn't check your readiness right now."})
+        return {"level": "unknown", "reasons": [], "suggestion": None, "signals": {}, "message": "Couldn't check your readiness right now."}
 
     series: dict[str, list[tuple[date, float]]] = {}
     for r in rows:
@@ -101,19 +106,23 @@ async def readiness_today(user_id: str = Depends(get_current_user_id)) -> JSONRe
 
     reasons: list[str] = []
     z_scores: list[float] = []
+    signals: dict = {}
     if hrv and hrv["mean"] is not None:
         z_scores.append((hrv["latest"] - hrv["mean"]) / hrv["sd"])
         pct = round((hrv["latest"] - hrv["mean"]) / hrv["mean"] * 100)
+        signals["hrv_pct"] = pct
         reasons.append(f"HRV {abs(pct)}% {'above' if pct >= 0 else 'below'} your 30-day average")
     if rhr and rhr["mean"] is not None:
         z_scores.append(-(rhr["latest"] - rhr["mean"]) / rhr["sd"])  # lower resting HR is better
         diff = round(rhr["latest"] - rhr["mean"])
+        signals["rhr_diff"] = diff
         reasons.append(f"Resting heart rate {abs(diff)} bpm {'above' if diff >= 0 else 'below'} your usual")
 
     level = None
     score = None
     if recovery:
         score = round(recovery["latest"])
+        signals["recovery_score"] = score
         level = "high" if score >= 67 else "moderate" if score >= 34 else "low"
         reasons.insert(0, f"Recovery score {score}%")
     elif z_scores:
@@ -121,23 +130,41 @@ async def readiness_today(user_id: str = Depends(get_current_user_id)) -> JSONRe
         level = "high" if z_avg >= 0.3 else "low" if z_avg <= -0.7 else "moderate"
 
     if level is None:
-        return JSONResponse(content={
+        return {
             "level": "unknown",
             "reasons": [],
             "suggestion": None,
+            "signals": signals,
             "message": "Not enough recent data yet — about two weeks of readings lets us compare today with your normal.",
-        })
+        }
 
     if sleep:
         hours = sleep["latest"] / 60
+        signals["sleep_hours"] = round(hours, 1)
+        if sleep["mean"] is not None and sleep["mean"] > 0:
+            signals["sleep_pct"] = round((sleep["latest"] - sleep["mean"]) / sleep["mean"] * 100)
         reasons.append(f"Slept {hours:.1f} h")
         if hours < 6 and level == "high":
             level = "moderate"
 
-    return JSONResponse(content={
+    return {
         "level": level,
         "score": score,
         "reasons": reasons[:4],
+        "signals": signals,
         "suggestion": SUGGESTIONS[level],
         "as_of": (recovery or hrv or rhr)["date"].isoformat() if (recovery or hrv or rhr) else None,
-    })
+    }
+
+
+@router.get("/today")
+async def readiness_today(user_id: str = Depends(get_current_user_id), local_date: Optional[str] = None) -> JSONResponse:
+    # The phone's own calendar date when given: the server's clock is UTC,
+    # which is a day behind for part of every day in Queensland.
+    today = date.today()
+    if local_date:
+        try:
+            today = datetime.strptime(local_date, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    return JSONResponse(content=await compute_readiness(user_id, today))

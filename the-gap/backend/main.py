@@ -76,6 +76,7 @@ from routers import goals
 from routers import workouts
 from routers import nutrition
 from routers import readiness
+from routers import health_plan
 from sync import daily_sync
 app.include_router(analyse.router)
 app.include_router(connect.router)
@@ -103,6 +104,7 @@ app.include_router(goals.router)
 app.include_router(workouts.router)
 app.include_router(nutrition.router)
 app.include_router(readiness.router)
+app.include_router(health_plan.router)
 
 @app.get("/health")
 def health_check():
