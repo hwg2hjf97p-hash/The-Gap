@@ -48,6 +48,7 @@ from sync.user_profile_store import get_user_profile
 from utils.metric_personal_insight import generate_personal_insight
 
 from utils.consent import ai_allowed  # noqa: E402
+from utils.entitlement import require_subscription  # noqa: E402
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/metric-insight", tags=["metric-insight"])
@@ -215,6 +216,8 @@ async def get_metric_insight(body: MetricInsightRequest, user_id: str = Depends(
 
     if not await ai_allowed(user_id):
         return JSONResponse(content={"insight_text": cached["insight_text"] if cached else None, "cached": bool(cached), "limit_reached": False, "ai_off": True})
+
+    await require_subscription(user_id)
 
     # 3. Under the cap — generate a fresh one, grounded in real hypothesis data.
     relevant = _relevant_hypothesis_labels(body.metric)

@@ -8,6 +8,7 @@ than computing anything new.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import date
@@ -57,7 +58,7 @@ async def get_todays_focus(user_id: str = Depends(get_current_user_id), local_da
     if not await _has_todays_checkin(user_id, today):
         return JSONResponse(content={"unlocked": False, "focus": None})
 
-    latest = get_latest_results(user_id)
+    latest = await asyncio.to_thread(get_latest_results, user_id)
     insights = (latest or {}).get("insights") or []
     active_ids = await get_active_hypothesis_ids(user_id)
 

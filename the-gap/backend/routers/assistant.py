@@ -9,6 +9,7 @@ general-purpose chatbot.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,7 @@ from db.supabase_client import get_latest_results
 from utils.assistant_signals import log_assistant_question
 
 from utils.consent import ai_allowed  # noqa: E402
+from utils.entitlement import require_subscription  # noqa: E402
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -123,11 +125,12 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
 
     if not await ai_allowed(user_id):
         raise HTTPException(status_code=403, detail="AI features are switched off. You can turn them on in Settings.")
+    await require_subscription(user_id)
 
     if await _questions_in_last_day(user_id) >= MAX_QUESTIONS_PER_DAY:
         raise HTTPException(status_code=429, detail="You've reached today's question limit for Gappy. Try again tomorrow.")
 
-    results_row = get_latest_results(user_id)
+    results_row = await asyncio.to_thread(get_latest_results, user_id)
     context = _build_context(results_row)
 
     try:

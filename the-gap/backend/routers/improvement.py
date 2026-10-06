@@ -42,6 +42,7 @@ from typing import Optional
 from utils.improvement_plan import generate_insight_story, parse_story, flatten_story, STORY_VERSION
 
 from utils.consent import ai_allowed  # noqa: E402
+from utils.entitlement import require_subscription  # noqa: E402
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/improvement", tags=["improvement"])
@@ -185,6 +186,8 @@ async def get_improvement_plan(body: ImprovementPlanRequest, user_id: str = Depe
     if not await ai_allowed(user_id):
         plan_text = flatten_story(cached_story) if cached_story else cached_text
         return JSONResponse(content={"plan_text": plan_text, "story": cached_story, "cached": bool(cached), "limit_reached": False, "ai_off": True})
+
+    await require_subscription(user_id)
 
     today_count = await _get_today_count(user_id)
     if today_count >= DAILY_GENERATION_LIMIT:

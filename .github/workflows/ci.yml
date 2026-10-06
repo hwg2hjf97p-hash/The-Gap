@@ -1,0 +1,53 @@
+name: CI
+
+# Runs on every push and pull request: the backend's unit tests, a static
+# check of the backend's Python, and a build of the website. A red cross on a
+# commit means something broke.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: the-gap/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install what the tests need
+        run: pip install fastapi httpx pydantic pandas numpy python-multipart pytest
+      - name: Run tests
+        run: python -m pytest -q
+
+  backend-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: the-gap/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check the Python for errors
+        run: npx --yes pyright
+
+  website-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: the-gap/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: the-gap/frontend/package-lock.json
+      - run: npm ci
+      - run: npx next build

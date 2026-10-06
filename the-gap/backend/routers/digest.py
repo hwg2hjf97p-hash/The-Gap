@@ -24,6 +24,7 @@ the same SYNC_SECRET.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
@@ -110,7 +111,7 @@ async def _build_goal_lines(user_id: str) -> list[str]:
 
 
 async def _run_one_digest(user_id: str) -> dict:
-    latest = get_latest_results(user_id)
+    latest = await asyncio.to_thread(get_latest_results, user_id)
     if not latest:
         return {"user_id": user_id, "status": "no_data"}
 

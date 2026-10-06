@@ -1,4 +1,3 @@
-import hmac
 import uuid
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -57,13 +56,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-def _require_debug_secret(x_debug_secret: str = Header(default="")) -> None:
-    """The /debug-* pages reveal how the server is set up, so they're off
-    (they answer 404) unless a DEBUG_SECRET is set in the environment, and then
-    only for requests that send it in an X-Debug-Secret header."""
-    expected = os.getenv("DEBUG_SECRET", "").strip()
-    if not expected or not hmac.compare_digest(x_debug_secret.encode(), expected.encode()):
-        raise HTTPException(status_code=404, detail="Not Found")
+from utils.debug_guard import require_debug_secret as _require_debug_secret  # noqa: E402
 
 from routers import analyse
 from routers import connect
@@ -127,7 +120,7 @@ app.include_router(consent.router)
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "consent-1"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "hardening-2"}
 
 @app.get("/")
 def root():

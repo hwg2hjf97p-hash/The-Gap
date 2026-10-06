@@ -307,9 +307,17 @@ def _allergy_tokens(allergies: Optional[str]) -> list[str]:
             tokens += ["almond", "cashew", "walnut", "pecan", "hazelnut", "pistachio", "macadamia", "brazil nut", "nut"]
             continue
         for word in t.split():
-            word = word[:-1] if word.endswith("s") and len(word) > 4 else word
-            if len(word) >= 3 and word not in skip:
-                tokens.append(word)
+            if len(word) < 3 or word in skip:
+                continue
+            tokens.append(word)
+            # Also look for the singular, so "eggs" catches "egg", "berries"
+            # catches "berry" and "peaches" catches "peach".
+            if word.endswith("ies") and len(word) > 4:
+                tokens.append(word[:-3] + "y")
+            elif word.endswith("es") and len(word) > 4:
+                tokens.append(word[:-2])
+            if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
+                tokens.append(word[:-1])
     return list(dict.fromkeys(tokens))
 
 
@@ -322,7 +330,7 @@ def _matches(low: str, term: str, prefix_only: bool) -> bool:
 def _violates(text: str, profile: dict) -> bool:
     low = text.lower()
     prefs = set(profile.get("diet_prefs") or [])
-    if any(_matches(low, t, True) for t in _allergy_tokens(profile.get("allergies"))):
+    if any(_matches(low, t, len(t) > 3) for t in _allergy_tokens(profile.get("allergies"))):
         return True
     banned: list[str] = []
     if "vegan" in prefs:

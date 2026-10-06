@@ -245,7 +245,8 @@ async def _analyse_locked(file, data_source, calendar_file, t0) -> JSONResponse:
 
     # ── 8. Persist ────────────────────────────────────────────────────────
     try:
-        session_id = save_results(
+        session_id = await asyncio.to_thread(
+            save_results,
             data_source=data_source,
             data_period_days=data_period_days,
             insights=insights_dicts,
@@ -295,7 +296,7 @@ async def get_latest_results_endpoint(user_id: str = Depends(get_current_user_id
     """
     from db.supabase_client import get_latest_results
 
-    row = get_latest_results(user_id)
+    row = await asyncio.to_thread(get_latest_results, user_id)
     if row is None:
         return JSONResponse(content={"found": False})
     return JSONResponse(content={"found": True, **row})
@@ -306,7 +307,7 @@ async def get_results(session_id: str) -> JSONResponse:
     """Retrieve previously computed results by session_id."""
     from db.supabase_client import get_results as db_get
 
-    row = db_get(session_id)
+    row = await asyncio.to_thread(db_get, session_id)
     if row is None:
         raise HTTPException(
             status_code=404,

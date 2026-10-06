@@ -1,0 +1,16 @@
+{
+  "include": ["."],
+  "exclude": ["**/node_modules", "**/__pycache__", "tests"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false,
+  "reportAttributeAccessIssue": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportOptionalSubscript": "warning",
+  "reportArgumentType": "warning",
+  "reportIndexIssue": "warning",
+  "reportReturnType": "warning",
+  "reportGeneralTypeIssues": "warning",
+  "reportRedeclaration": "warning"
+}

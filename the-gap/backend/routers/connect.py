@@ -154,7 +154,12 @@ def _supabase_rest_url(table: str) -> str:
 # Encodes user_id + provider + expiry into the state string using HMAC-SHA256.
 # No database or memory store needed — works across all Railway instances.
 
-_STATE_SECRET = (os.getenv("SYNC_SECRET") or "thegap-sync-2026").encode()
+# The signing key must be a secret. It used to fall back to a fixed string in
+# the source code when no secret was configured, which anyone reading the
+# repository could use to forge a state token. With nothing configured it is now
+# random for each run of the server instead (a sign-in already in progress when
+# the server restarts has to be started again, which is harmless).
+_STATE_SECRET = (os.getenv("OAUTH_STATE_SECRET") or os.getenv("SYNC_SECRET") or secrets.token_hex(32)).encode()
 
 
 def _store_state(state_unused: str, user_id: str, provider: str, platform: str = "web") -> str:
@@ -249,26 +254,12 @@ async def connection_status(user_id: str = Depends(get_current_user_id)):
         return JSONResponse(content={"connected": []})
 
 
-@router.get("/{provider}")
-async def start_oauth(
-    provider: str,
-    user_id: str = Query(..., description="Unique user identifier"),
-    platform: str = Query("web", description="'web' or 'mobile' — determines post-auth redirect target"),
-):
-    """
-    Redirect user to provider OAuth page.
-
-    Deliberately NOT behind get_current_user_id: the app opens this URL as a
-    direct browser navigation (WebBrowser.openAuthSessionAsync), which can't
-    attach an Authorization header. user_id here is now always the caller's
-    real authenticated Supabase id (lib/api.ts fetches it from the session
-    before building this URL) rather than an arbitrary client-supplied value
-    — the OAuth state token that carries it onward is still HMAC-signed
-    (see _store_state/_consume_state below) so it can't be tampered with
-    once issued.
-    """
+def _build_auth_url(provider: str, user_id: str, platform: str) -> str:
+    """The provider's sign-in address, carrying a signed state token that names
+    the user. user_id must already be known to be the real caller."""
     cfg = _get_provider_config(provider)
     client_id, _ = _get_client_credentials(provider)
+    platform = platform if platform in ("web", "mobile") else "web"
 
     state = _store_state("", user_id, provider, platform)  # stateless signed token
 
@@ -289,9 +280,44 @@ async def start_oauth(
     if provider == "strava":
         params["approval_prompt"] = "auto"
 
-    auth_url = cfg["auth_url"] + "?" + urlencode(params)
-    logger.info("OAuth start: provider=%s user=%s", provider, user_id)
-    return RedirectResponse(url=auth_url)
+    return cfg["auth_url"] + "?" + urlencode(params)
+
+
+@router.post("/{provider}/start")
+async def start_oauth_authenticated(
+    provider: str,
+    platform: str = Query("mobile", description="'web' or 'mobile'"),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Start connecting a device or service. The app calls this with the person's
+    sign-in token and then opens the returned address, so the user named in
+    the signed state is always the real, verified caller.
+    """
+    url = _build_auth_url(provider, user_id, platform)
+    logger.info("OAuth start (authenticated): provider=%s user=%s", provider, user_id[:8])
+    return JSONResponse(content={"url": url})
+
+
+@router.get("/{provider}")
+async def start_oauth(
+    provider: str,
+    user_id: str = Query(..., description="Unique user identifier"),
+    platform: str = Query("web", description="'web' or 'mobile' — determines post-auth redirect target"),
+):
+    """
+    LEGACY start: takes the user id from the address, which a browser can't
+    prove. Anyone who knew another person's id could use it to attach their own
+    wearable to that person's account. Older app versions still use it, so it
+    stays on until ALLOW_LEGACY_CONNECT=false is set in the environment, which
+    should be done once everyone has updated to a version that calls
+    POST /connect/{provider}/start.
+    """
+    if os.getenv("ALLOW_LEGACY_CONNECT", "true").strip().lower() in ("0", "false", "no"):
+        raise HTTPException(status_code=403, detail="Please update The Gap to connect a device.")
+    url = _build_auth_url(provider, user_id, platform)
+    logger.info("OAuth start (legacy): provider=%s user=%s", provider, user_id[:8])
+    return RedirectResponse(url=url)
 
 
 @router.get("/{provider}/callback")
