@@ -70,7 +70,8 @@ jobs:
       - name: Install
         run: |
           eval "$ANNOTATE"
-          run_annotated npm ci
+          # npm ci refuses the lock file here (it was last saved by a different npm version), so install normally.
+          run_annotated npm install --no-audit --no-fund
       - name: Build
         run: |
           eval "$ANNOTATE"

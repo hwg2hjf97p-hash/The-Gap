@@ -75,7 +75,7 @@ def test_oauth_state_round_trips_and_rejects_tampering():
 
     token = connect._store_state("", "user-123", "whoop", "mobile")
     data = connect._consume_state(token)
-    assert data is not None and data["u"] == "user-123" and data["p"] == "whoop" and data["m"] == "mobile"
+    assert data is not None and data["user_id"] == "user-123" and data["provider"] == "whoop" and data["platform"] == "mobile"
 
     body, sig = token.rsplit(".", 1)
     assert connect._consume_state(body + "." + ("0" * len(sig))) is None
