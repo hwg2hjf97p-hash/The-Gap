@@ -23,6 +23,8 @@ from auth import get_current_user_id
 from db.supabase_client import get_latest_results
 from utils.assistant_signals import log_assistant_question
 
+from utils.consent import ai_allowed  # noqa: E402
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -118,6 +120,9 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="Assistant isn't configured yet.")
+
+    if not await ai_allowed(user_id):
+        raise HTTPException(status_code=403, detail="AI features are switched off. You can turn them on in Settings.")
 
     if await _questions_in_last_day(user_id) >= MAX_QUESTIONS_PER_DAY:
         raise HTTPException(status_code=429, detail="You've reached today's question limit for Gappy. Try again tomorrow.")

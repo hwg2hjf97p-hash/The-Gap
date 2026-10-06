@@ -41,6 +41,8 @@ from pydantic import BaseModel
 from auth import get_current_user_id
 from routers.readiness import compute_readiness
 
+from utils.consent import ai_allowed  # noqa: E402
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/health-plan", tags=["health-plan"])
 
@@ -298,6 +300,8 @@ async def _claude_text(user_id: str, today: date, facts: dict) -> Optional[str]:
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         return None
+    if not await ai_allowed(user_id):
+        return None  # AI is off for this person: the plain written version is used
     count_key = (user_id, today.isoformat())
     if _generation_count.get(count_key, 0) >= MAX_GENERATIONS_PER_DAY:
         return None

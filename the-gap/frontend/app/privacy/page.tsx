@@ -23,7 +23,7 @@ const SECTIONS: LegalSection[] = [
       "Technical information: your notification token, and standard server logs (such as IP address, time, and error details) used to keep the service running and secure.",
     ],
     after: [
-      "A lot of this is health information, which the Privacy Act treats as sensitive. We collect it only with your consent, which you give by connecting a source, turning on a feature, or logging something. You can withdraw consent at any time by disconnecting a source, switching a check-in category off, or deleting your account (see section 8).",
+      "A lot of this is health information, which the Privacy Act treats as sensitive. We collect it only with your consent, which you give when you first open the app and by connecting a source, turning on a feature, or logging something. You can withdraw consent at any time by disconnecting a source, switching a check-in category off, or deleting your account (see section 8).",
     ],
   },
   {
@@ -40,13 +40,15 @@ const SECTIONS: LegalSection[] = [
   {
     heading: "AI processing",
     paragraphs: [
-      "Some features use an AI service, Claude, provided by Anthropic. When you use one of these features, the app's server sends Anthropic only the information needed for that feature. We don't send your name, email address or account id.",
+      "Some features use an AI service, Claude, provided by Anthropic. AI features are optional: the app asks you on first use and you can change your choice at any time in Settings. If you switch them off, nothing is sent to the AI service, and those features stop (the rest of the app keeps working).",
+      "When AI features are on, the app's server sends Anthropic only the information needed for the feature you use. We don't send your name, email address or account id.",
     ],
     bullets: [
       "Quick Entry notes: the text, so it can pick out things like stress, travel or illness.",
       "The assistant (Gappy): your question, plus a summary of your recent insights and metrics.",
       "Insight stories, plans and explanations: the details of an insight (what was compared, the size of the effect, how confident we are) and metric trends.",
       "Daily plan: your recovery readings compared with your own average, whether you've logged a workout, and how your food and water are going.",
+      "Metric explanations: the reading, how it compares with your recent average, and, if you've entered them, your age, height and weight.",
       "Food and recipe ideas: your diet goal, eating style, allergies or foods to avoid, and your calorie and protein goals.",
     ],
     after: [

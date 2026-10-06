@@ -38,6 +38,8 @@ from auth import get_current_user_id
 from causal.hypotheses import HYPOTHESES
 from utils.hypothesis_explanation import generate_hypothesis_explanation, generate_raw_signal_explanation
 
+from utils.consent import ai_allowed  # noqa: E402
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hypothesis-explanation", tags=["hypothesis-explanation"])
 
@@ -177,6 +179,9 @@ async def get_hypothesis_explanation(body: HypothesisExplanationRequest, user_id
             age_hours = CACHE_HOURS
         if age_hours < CACHE_HOURS:
             return JSONResponse(content={"explanation_text": cached["explanation_text"], "cached": True, "limit_reached": False})
+
+    if not await ai_allowed(user_id):
+        return JSONResponse(content={"explanation_text": cached["explanation_text"] if cached else None, "cached": bool(cached), "limit_reached": False, "ai_off": True})
 
     today_count = await _get_today_count(user_id)
     if today_count >= DAILY_GENERATION_LIMIT:

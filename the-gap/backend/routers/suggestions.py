@@ -58,6 +58,8 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 
+from utils.consent import ai_allowed  # noqa: E402
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/suggestions", tags=["suggestions"])
 
@@ -467,6 +469,14 @@ async def food_suggestions(local_date: Optional[str] = None, user_id: str = Depe
         cached = await _cache_get(client, user_id, week, "food", phash)
         if cached:
             return JSONResponse(content={**cached, "week_start": week.isoformat()})
+
+        if not await ai_allowed(user_id):
+            # AI is off for this person, so no recipe ideas are written; the
+            # videos still show. Not stored, so turning AI back on works at once.
+            return JSONResponse(content={
+                "foods": [], "recipes": [], "videos": pick_food_videos(profile, user_id, week),
+                "note": None, "ai_failed": False, "ai_off": True, "week_start": week.isoformat(),
+            })
 
         generated, note = await _generate_food(user_id, today, profile, goals)
         payload = {

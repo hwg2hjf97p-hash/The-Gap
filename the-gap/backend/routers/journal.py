@@ -47,6 +47,8 @@ from pydantic import BaseModel, Field
 from auth import get_current_user_id
 from utils.journal_extract import extract_daily_signals
 
+from utils.consent import ai_allowed  # noqa: E402
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/journal", tags=["journal"])
 
@@ -363,16 +365,17 @@ async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
         by_date.setdefault(d, []).append(r["entry_text"])
 
     cached = await _get_cached_extractions(user_id, since_date)
+    ai_on = await ai_allowed(user_id)  # when AI is off nothing is sent for extraction
 
     records = {}
     for d, entries in by_date.items():
         needs_extraction = d == today_str or d not in cached
-        if needs_extraction:
+        if needs_extraction and ai_on:
             signals = await extract_daily_signals(entries)
             if signals is not None:
                 await _save_extraction(user_id, d, len(entries), signals)
                 records[d] = {k: v for k, v in signals.items() if k != "summary"}
-        else:
+        elif d in cached:
             c = cached[d]
             records[d] = {
                 "mood_score": c.get("mood_score"),
