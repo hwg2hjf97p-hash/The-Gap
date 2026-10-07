@@ -49,7 +49,7 @@ def test_a_small_per_unit_effect_can_still_clear_the_bar_over_a_real_range():
 
 def test_fisher_exact_p_is_sensible():
     assert _fisher_p(0, 8, 8, 0) < 0.001
-    assert _fisher_p(4, 4, 4, 4) == 1.0
+    assert abs(_fisher_p(4, 4, 4, 4) - 1.0) < 1e-9
 
 
 def _two_habits(days=60, seed=5):
