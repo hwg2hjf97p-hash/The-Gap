@@ -21,7 +21,7 @@ def test_calories_burned_is_its_own_choice_separate_from_steps():
 
 
 def test_options_only_list_sources_that_really_report_the_reading():
-    assert "whoop" not in CAN_SUPPLY["activity"]          # Whoop has no steps
+    assert "whoop" in CAN_SUPPLY["activity"]              # Whoop reports steps per cycle
     assert "strava" not in CAN_SUPPLY["activity"] and "strava" not in CAN_SUPPLY["energy"]
     assert "whoop" in CAN_SUPPLY["energy"]
     assert CAN_SUPPLY["body"] == ["withings"]             # Apple Health has no weight here
@@ -45,14 +45,19 @@ def test_choosing_whoop_uses_whoop_and_lines_the_rest_up_to_it():
     assert (merged["steps"].values == frames["apple_health"]["steps"].values).all()  # steps still come from Apple
 
 
-def test_whoop_never_replaces_steps():
-    merged = merge_sources(_frames(), {"primary": {"activity": "whoop"}})
-    assert (merged["steps"].values == _frames()["apple_health"]["steps"].values).all()
+def test_whoop_steps_can_be_chosen_and_apple_fills_the_older_days():
+    frames = _frames()
+    whoop_steps = pd.DataFrame({"steps": 7000 + np.arange(20.0)}, index=frames["whoop"].index)
+    frames["whoop"] = frames["whoop"].join(whoop_steps)
+    merged = merge_sources(frames, {"primary": {"activity": "whoop"}})
+    assert np.allclose(merged.loc[whoop_steps.index, "steps"].values, whoop_steps["steps"].values)
+    assert merged["steps"].notna().all()                   # days before Whoop's history come from Apple Health
+    assert np.allclose(merged["steps"].iloc[:40].values, frames["apple_health"]["steps"].iloc[:40].values)  # steps differ by device only a little, so they aren't shifted
 
 
 def test_notes_explain_why_a_source_is_missing_or_different():
     steps = group_notes("activity", ["whoop", "strava", "apple_health"])
-    assert any("Whoop doesn't record" in n for n in steps) and any("Strava" in n for n in steps)
+    assert steps == ["Strava shares your workouts and training load (used automatically), not steps."]
     assert group_notes("activity", ["apple_health"]) == []
     assert any("whole day" in n for n in group_notes("energy", ["whoop", "apple_health"]))
     assert group_notes("energy", ["apple_health"]) == []

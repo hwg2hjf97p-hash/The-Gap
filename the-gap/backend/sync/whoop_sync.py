@@ -6,6 +6,7 @@ Uses stored OAuth tokens from Supabase user_connections table.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -75,6 +76,56 @@ async def _get_whoop_paginated(
     return _dedupe_by_id(records)
 
 
+def _parse_utc(value) -> Optional[datetime]:
+    """An ISO timestamp from Whoop (UTC, e.g. "2026-10-07T12:30:00.000Z") as an aware datetime, or None."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _offset(value) -> timedelta:
+    """Whoop's timezone_offset ("+10:00", "-05:00" or "Z") as a timedelta; zero when missing."""
+    m = re.match(r"^([+-])(\d{2}):?(\d{2})$", str(value or "").strip())
+    if not m:
+        return timedelta(0)
+    delta = timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+    return -delta if m.group(1) == "-" else delta
+
+
+def _local_date(value, offset) -> str:
+    """The calendar date, where the person was, of a UTC timestamp. Empty when it can't be read."""
+    dt = _parse_utc(value)
+    return (dt + _offset(offset)).date().isoformat() if dt else ""
+
+
+def _activity_date(cycle: dict) -> str:
+    """
+    The calendar day a Whoop cycle's activity (steps, calories, strain) belongs to.
+    A cycle runs from falling asleep to falling asleep again, so it starts the evening
+    before the day it describes. Its midpoint falls in the middle of that day for
+    anyone, whether they sleep at 10 pm or 2 am.
+    """
+    start = _parse_utc(cycle.get("start"))
+    if start is None:
+        return ""
+    end = _parse_utc(cycle.get("end"))
+    middle = start + (end - start) / 2 if end and end > start else start + timedelta(hours=12)
+    return (middle + _offset(cycle.get("timezone_offset"))).date().isoformat()
+
+
+def _recovery_date(recovery: dict, sleeps_by_id: dict, cycles_by_id: dict) -> str:
+    """The date the person woke up: the local date their night's sleep ended."""
+    sleep = sleeps_by_id.get(recovery.get("sleep_id"))
+    if sleep and sleep.get("end"):
+        return _local_date(sleep["end"], sleep.get("timezone_offset"))
+    cycle = cycles_by_id.get(recovery.get("cycle_id"))
+    return _local_date(recovery.get("created_at"), cycle.get("timezone_offset") if cycle else None)
+
+
 def _dedupe_by_id(records: list[dict]) -> list[dict]:
     """
     REAL BUG FIXED HERE: production logs showed Whoop returning the exact
@@ -121,6 +172,12 @@ async def fetch_whoop_data(
         len(recovery_records), len(sleep_records), len(cycle_records),
     )
     scored_counts = {"recovery": 0, "sleep": 0, "cycle": 0}
+    # Whoop dates everything in UTC. The days here are the person's own calendar days, to match
+    # Apple Health, their check-ins and their calendar, so each record's date is worked out where
+    # they were (its timezone_offset). Before this, anyone east of Greenwich had a night's recovery
+    # filed under the day before and an after-midnight sleep under the wrong day.
+    sleeps_by_id = {s.get("id"): s for s in sleep_records if s.get("id") is not None}
+    cycles_by_id = {c.get("id"): c for c in cycle_records if c.get("id") is not None}
 
     # Build daily rows
     rows: dict[str, dict] = {}
@@ -131,7 +188,9 @@ async def fetch_whoop_data(
         if r.get("score_state") != "SCORED":
             continue
         scored_counts["recovery"] += 1
-        date = r.get("created_at", "")[:10]
+        date = _recovery_date(r, sleeps_by_id, cycles_by_id)
+        if not date:
+            continue
         score = r.get("score", {}) or {}
         # v2 renamed hrv_rmssd_on_wakeup -> hrv_rmssd_milli (units unchanged: ms)
         rows.setdefault(date, {})["hrv"] = score.get("hrv_rmssd_milli")
@@ -147,7 +206,9 @@ async def fetch_whoop_data(
         if s.get("nap"):
             continue
         scored_counts["sleep"] += 1
-        date = s.get("start", "")[:10]
+        date = _local_date(s.get("start"), s.get("timezone_offset"))
+        if not date:
+            continue
         score = s.get("score", {}) or {}
         stage_summary = score.get("stage_summary", {}) or {}
         rows.setdefault(date, {})
@@ -190,14 +251,18 @@ async def fetch_whoop_data(
         if c.get("score_state") != "SCORED":
             continue
         scored_counts["cycle"] += 1
-        date = c.get("start", "")[:10]
+        date = _activity_date(c)
+        if not date:
+            continue
         score = c.get("score", {}) or {}
         rows.setdefault(date, {})
-        # Whoop's Cycle score has never included step_count in either v1 or v2 —
-        # it only exposes strain/kilojoule/heart-rate. Deliberately NOT setting a
-        # "steps" key here (rather than None/0) so that parsers/whoop.py's
-        # existing active_energy-based estimate still fires — that fallback only
-        # triggers when "steps" isn't already a column.
+        # Whoop's own step count for the cycle (a field on the cycle itself, not on its score;
+        # null, or 0 when the strap wasn't worn, means no data).
+        step_count = c.get("step_count")
+        if step_count:
+            rows[date]["steps"] = float(step_count)
+        # "kilojoule" is the whole day's energy use, resting included, so this reads much higher
+        # than the active calories Apple Health reports; the data-source merge lines the two up.
         active_kj = score.get("kilojoule") or 0
         rows[date]["active_energy"] = active_kj * 0.239 if active_kj else 0  # kJ → kcal
         # Strain (0-21): how hard the day was on the body, by Whoop's measure.

@@ -40,12 +40,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 # Which sources can supply each group at all.
-# Only sources that really report that reading (checked against each sync file): Whoop has no steps,
-# Strava shares workouts and training load only, and Apple Health has no weight here.
+# Only sources that really report that reading (checked against each sync file): Strava shares
+# workouts and training load only, and Apple Health has no weight here.
 CAN_SUPPLY = {
     "sleep": ["whoop", "oura", "withings", "polar", "apple_health"],
     "recovery": ["whoop", "oura", "withings", "polar", "apple_health"],
-    "activity": ["apple_health", "oura"],
+    "activity": ["apple_health", "whoop", "oura"],
     "energy": ["apple_health", "whoop", "oura"],
     "body": ["withings"],
 }
@@ -55,8 +55,6 @@ def group_notes(key: str, available: list[str]) -> list[str]:
     """Short explanations for a group, based on what the person has connected."""
     notes: list[str] = []
     if key == "activity":
-        if "whoop" in available:
-            notes.append("Whoop doesn't record or share steps, so it can't be used for this.")
         if "strava" in available:
             notes.append("Strava shares your workouts and training load (used automatically), not steps.")
     if key == "energy" and "whoop" in available:

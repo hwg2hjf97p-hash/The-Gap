@@ -130,7 +130,7 @@ app.include_router(app_config.router)
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "energy-1"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "whoop-steps-1"}
 
 @app.get("/")
 def root():
