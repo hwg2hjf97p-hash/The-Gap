@@ -58,6 +58,8 @@ jobs:
       - name: Install the full requirements
         run: |
           eval "$ANNOTATE"
+          # The same pins as build.sh, which is what the live server uses.
+          run_annotated pip install "numpy>=1.24,<2.0" "pandas>=2.0,<3.0"
           run_annotated pip install -r requirements.txt pytest
       - name: Run the engine tests
         run: |
