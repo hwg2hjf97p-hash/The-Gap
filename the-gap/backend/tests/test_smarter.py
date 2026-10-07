@@ -154,3 +154,52 @@ def test_screen_last_use_ignores_unknown_choices():
     body = checkin.CheckInRequest(date="2026-10-02", screen_hours=4, screen_last_use="whenever")
     assert body.screen_last_use is None
     assert checkin.CheckInRequest(date="2026-10-02", screen_last_use="11pm_1am").screen_last_use == "11pm_1am"
+
+
+# ── a column that isn't in the table yet must not lose the rest ─────────────
+
+def test_a_missing_column_only_drops_that_field(monkeypatch):
+    import asyncio
+    import json as jsonlib
+
+    posted = []
+
+    class _Resp:
+        def __init__(self, status=200, text="", rows=None):
+            self.status_code, self.text, self._rows = status, text, rows or []
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError("http error")
+
+        def json(self):
+            return self._rows
+
+    class _Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, headers=None, params=None, json=None):
+            posted.append(dict(json))
+            if "screen_hours" in json:
+                return _Resp(400, "PGRST204 Could not find the 'screen_hours' column of 'daily_checkins' in the schema cache")
+            return _Resp(201)
+
+        async def get(self, *args, **kwargs):
+            return _Resp(200, rows=[])
+
+    monkeypatch.setattr(checkin.httpx, "AsyncClient", lambda **kw: _Client())
+    body = checkin.CheckInRequest(date="2026-10-02", alcohol_drinks=6, screen_hours=4)
+    response = asyncio.run(checkin.submit_checkin(body, user_id="user-1"))
+    data = jsonlib.loads(response.body)
+
+    assert data["success"] is True and data["extended_saved"] is False
+    assert "screen_hours" in posted[0]
+    assert "screen_hours" not in posted[1]
+    assert posted[1]["alcohol_drinks"] == 6  # the other new fields were still saved

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -177,16 +178,27 @@ async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_curren
     extended_saved = True
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                _sb_url("daily_checkins"), headers=headers, params=params,
-                json={**base_payload, **extended},
-            )
-            if resp.status_code == 400 and any(k in resp.text for k in ("PGRST204", "column")):
-                # checkin_phase1.sql hasn't been run yet — keep the check-in
-                # working with the original columns instead of failing.
-                logger.warning("daily_checkins is missing the extended columns — run checkin_phase1.sql. Saving original fields only.")
-                extended_saved = False
-                resp = await client.post(_sb_url("daily_checkins"), headers=headers, params=params, json=base_payload)
+            payload = {**base_payload, **extended}
+            resp = None
+            # If a column hasn't been added to the table yet (its SQL file not run), leave out just
+            # that column and save the rest, rather than losing every newer field.
+            for _ in range(len(EXTENDED_FIELDS) + 1):
+                resp = await client.post(_sb_url("daily_checkins"), headers=headers, params=params, json=payload)
+                if resp.status_code == 400 and "PGRST204" in resp.text:
+                    missing = re.search(r"'([a-z_0-9]+)' column", resp.text)
+                    name = missing.group(1) if missing else None
+                    if name and name in payload and name in EXTENDED_FIELDS:
+                        logger.warning("daily_checkins has no %s column yet — saving without it. Run the latest SQL file.", name)
+                        payload.pop(name)
+                        extended_saved = False
+                        continue
+                    # Can't tell which one: fall back to the original fields only.
+                    logger.warning("daily_checkins is missing columns — saving original fields only.")
+                    extended_saved = False
+                    payload = dict(base_payload)
+                    continue
+                break
+            assert resp is not None
             resp.raise_for_status()
     except Exception as exc:
         logger.error("Check-in save failed: %s", exc)
