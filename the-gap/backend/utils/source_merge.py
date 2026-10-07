@@ -35,14 +35,16 @@ logger = logging.getLogger(__name__)
 GROUPS: dict[str, list[str]] = {
     "sleep": ["sleep_total_min", "sleep_deep_min", "sleep_score"],
     "recovery": ["hrv", "resting_hr", "recovery_score"],
-    "activity": ["steps", "active_energy", "vo2max"],
+    "activity": ["steps", "vo2max"],
+    "energy": ["active_energy"],
     "body": ["weight_kg"],
 }
 
 GROUP_LABELS = {
     "sleep": "Sleep",
     "recovery": "HRV, resting heart rate and recovery",
-    "activity": "Steps and activity",
+    "activity": "Steps",
+    "energy": "Calories burned",
     "body": "Weight",
 }
 
@@ -61,16 +63,19 @@ DEFAULT_PRIORITY: dict[str, list[str]] = {
     "sleep": ["whoop", "oura", "polar", "withings", "apple_health"],
     "recovery": ["whoop", "oura", "polar", "withings", "apple_health"],
     "activity": ["apple_health", "oura", "withings", "strava", "polar", "whoop"],
+    "energy": ["apple_health", "oura", "whoop", "withings", "strava", "polar"],
     "body": ["withings", "apple_health"],
 }
 GENERAL_ORDER = ["whoop", "oura", "polar", "withings", "strava", "apple_health"]
 
 # Whether a group fills days its main source is missing from the other sources.
-DEFAULT_FILL_GAPS = {"sleep": True, "recovery": True, "activity": True, "body": True}
+DEFAULT_FILL_GAPS = {"sleep": True, "recovery": True, "activity": True, "energy": True, "body": True}
 
 # Sleep and recovery readings differ by device (each defines them its own way),
 # so a filler source is lined up with the main one using the days both have.
-ALIGN_GROUPS = {"sleep", "recovery"}
+# Calories burned is here because Whoop reports the whole day's energy use while Apple Health and Oura report only
+# the active part: the level differs a lot, but day-to-day changes track each other, so a fixed shift lines them up.
+ALIGN_GROUPS = {"sleep", "recovery", "energy"}
 ALIGN_MIN_OVERLAP = 7
 RATIO_COLUMNS = {"hrv"}  # scales with the person's level; the rest differ by a roughly fixed amount
 

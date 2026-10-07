@@ -40,12 +40,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 # Which sources can supply each group at all.
+# Only sources that really report that reading (checked against each sync file): Whoop has no steps,
+# Strava shares workouts and training load only, and Apple Health has no weight here.
 CAN_SUPPLY = {
     "sleep": ["whoop", "oura", "withings", "polar", "apple_health"],
-    "recovery": ["whoop", "oura", "polar", "apple_health"],
-    "activity": ["apple_health", "oura", "withings", "strava", "polar"],
-    "body": ["withings", "apple_health"],
+    "recovery": ["whoop", "oura", "withings", "polar", "apple_health"],
+    "activity": ["apple_health", "oura"],
+    "energy": ["apple_health", "whoop", "oura"],
+    "body": ["withings"],
 }
+
+
+def group_notes(key: str, available: list[str]) -> list[str]:
+    """Short explanations for a group, based on what the person has connected."""
+    notes: list[str] = []
+    if key == "activity":
+        if "whoop" in available:
+            notes.append("Whoop doesn't record or share steps, so it can't be used for this.")
+        if "strava" in available:
+            notes.append("Strava shares your workouts and training load (used automatically), not steps.")
+    if key == "energy" and "whoop" in available:
+        notes.append("Whoop reports the calories you burn over the whole day, so its number reads higher than active calories from Apple Health. When sources are mixed it is lined up with your main one, so your trend doesn't jump.")
+    return notes
 
 
 def _sb_url(table: str) -> str:
@@ -109,6 +125,7 @@ async def get_sources(user_id: str = Depends(get_current_user_id)) -> JSONRespon
             "chosen": chosen,
             "in_use": chosen or default_first,
             "fill_gaps": bool(fill[key]),
+            "notes": group_notes(key, available),
         })
     return JSONResponse(content={"groups": groups})
 
