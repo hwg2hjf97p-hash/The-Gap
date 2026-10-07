@@ -44,6 +44,26 @@ jobs:
           eval "$ANNOTATE"
           run_annotated python -m pytest -q
 
+  backend-engine:
+    # Runs the sample data through the real analysis (the full requirements, so slower).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: the-gap/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the full requirements
+        run: |
+          eval "$ANNOTATE"
+          run_annotated pip install -r requirements.txt pytest
+      - name: Run the engine tests
+        run: |
+          eval "$ANNOTATE"
+          run_annotated python -m pytest -q tests/test_demo_engine.py
+
   backend-typecheck:
     runs-on: ubuntu-latest
     defaults:

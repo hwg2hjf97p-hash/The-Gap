@@ -74,7 +74,7 @@ async def _available_sources(user_id: str) -> list[str]:
             available = [c["provider"] for c in (conns.json() or []) if c.get("provider") in SOURCE_LABELS]
             apple = await client.get(
                 _sb_url("apple_health_daily"), headers=_sb_headers(),
-                params={"user_id": f"eq.{user_id}", "select": "date", "limit": "1"},
+                params={"user_id": f"eq.{user_id}", "select": "entry_date", "limit": "1"},
             )
             apple.raise_for_status()
             if apple.json():
@@ -121,6 +121,10 @@ async def put_sources(body: SourcePrefsBody, user_id: str = Depends(get_current_
     for key in body.fill_gaps:
         if key not in GROUPS:
             raise HTTPException(status_code=400, detail="Unknown reading group.")
+    # Keep anything else stored in the row (e.g. the sample-data flag); only the two settings change.
+    existing = dict(await load_source_prefs(user_id) or {})
+    existing["primary"] = body.primary
+    existing["fill_gaps"] = body.fill_gaps
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
@@ -129,7 +133,7 @@ async def put_sources(body: SourcePrefsBody, user_id: str = Depends(get_current_
                 params={"on_conflict": "user_id"},
                 json={
                     "user_id": user_id,
-                    "prefs": {"primary": body.primary, "fill_gaps": body.fill_gaps},
+                    "prefs": existing,
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
