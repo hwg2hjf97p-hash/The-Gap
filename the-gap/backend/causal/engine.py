@@ -28,16 +28,33 @@ logger = logging.getLogger(__name__)
 EARLY_READ_MIN_FRACTION = 0.5
 EARLY_READ_MIN_ABSOLUTE = 12
 
-# Minimum meaningful effect sizes — below these the result is noise, not signal.
-# Values are in the natural unit of each outcome column.
+# Smallest effect worth showing someone, in the natural unit of each outcome.
+# A result can be statistically real and still not worth a card: "you sleep 5
+# minutes longer on busier calendar days" is not something anyone can act on or
+# would notice. These floors keep trivial findings off the screen.
 MIN_EFFECT = {
-    "hrv_next":           0.8,   # ms  — less than 0.8ms HRV change is not meaningful
-    "sleep_deep_min":     1.5,   # min — less than 1.5 min deep sleep change is noise
-    "sleep_total_min":    3.0,   # min — less than 3 min total sleep change is noise
-    "resting_hr_next":    0.3,   # bpm — less than 0.3 bpm RHR change is noise
+    "hrv_next":           2.0,   # ms
+    "sleep_deep_min":     5.0,   # min
+    "sleep_total_min":   10.0,   # min
+    "resting_hr_next":    0.8,   # bpm
     "steps":            200.0,   # steps
 }
 DEFAULT_MIN_EFFECT = 0.5
+# ...and an effect also has to be a visible part of how much that outcome
+# normally varies for this person: at least this fraction of its standard deviation.
+MIN_EFFECT_SD_FRACTION = 0.2
+
+
+def min_effect_for(hyp: Hypothesis, sub: pd.DataFrame) -> float:
+    """The smallest effect worth reporting for this hypothesis on this person's data."""
+    floor = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)
+    try:
+        sd = float(sub[hyp.outcome_col].std())
+    except Exception:
+        sd = 0.0
+    if sd != sd:  # NaN (a single row)
+        sd = 0.0
+    return max(floor, MIN_EFFECT_SD_FRACTION * sd)
 
 
 # With ~40 hypotheses tested on the same person's data, a plain "p < 0.10"
@@ -117,7 +134,7 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
                 )
                 if result is not None:
                     result = _scaled(result, hyp)
-                    min_effect = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)
+                    min_effect = min_effect_for(hyp, sub)
                     if abs(result["effect"]) >= min_effect:
                         is_positive = result["effect"] > 0
                         higher_is_better = OUTCOME_HIGHER_IS_BETTER.get(hyp.outcome_col, True)
@@ -234,7 +251,7 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
     result = _scaled(result, hyp)
 
     # ── 6. Filter out near-zero / trivially small effects ─────────────────
-    min_effect = MIN_EFFECT.get(hyp.outcome_col, DEFAULT_MIN_EFFECT)
+    min_effect = min_effect_for(hyp, sub)
     if abs(result["effect"]) < min_effect:
         logger.info(
             "FILTERED_SMALL_EFFECT hyp=%s effect=%.4f threshold=%.4f n_obs=%d p_value=%s",

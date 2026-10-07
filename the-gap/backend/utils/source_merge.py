@@ -7,10 +7,16 @@ way. The old behaviour let whichever source happened to load first win, and
 let others fill the gaps, so a single sleep series could switch source from
 one night to the next, which makes trends meaningless.
 
-Now each group of readings (sleep, recovery, activity, body) comes from ONE
-source, chosen by the person or by a sensible default order. Another source
-is used for a group only if the main one has no data for it at all, or if the
-person has switched on "fill gaps from other sources" for that group.
+Now each group of readings (sleep, recovery, activity, body) has ONE main
+source, chosen by the person or by a sensible default order. Where the main
+source has no reading for a day, another source fills in (the person can
+switch that off per group). For sleep and recovery the filler is first lined
+up with the main source (see _aligned), so a switch of device doesn't show up
+as a sudden jump in someone's numbers.
+
+Filling gaps is the default because the analysis needs days: a person who
+connected Whoop three weeks ago but has a year of Apple Health would otherwise
+lose almost all of it for sleep and HRV, and most findings would disappear.
 Anything not in a group (workout stats, strain, and so on) is merged in the
 default order, as before.
 """
@@ -59,9 +65,14 @@ DEFAULT_PRIORITY: dict[str, list[str]] = {
 }
 GENERAL_ORDER = ["whoop", "oura", "polar", "withings", "strava", "apple_health"]
 
-# Mixing sources inside one series is bad for sleep and recovery (different
-# definitions); harmless for steps and weight. These are the defaults.
-DEFAULT_FILL_GAPS = {"sleep": False, "recovery": False, "activity": True, "body": True}
+# Whether a group fills days its main source is missing from the other sources.
+DEFAULT_FILL_GAPS = {"sleep": True, "recovery": True, "activity": True, "body": True}
+
+# Sleep and recovery readings differ by device (each defines them its own way),
+# so a filler source is lined up with the main one using the days both have.
+ALIGN_GROUPS = {"sleep", "recovery"}
+ALIGN_MIN_OVERLAP = 7
+RATIO_COLUMNS = {"hrv"}  # scales with the person's level; the rest differ by a roughly fixed amount
 
 
 def _ordered(group: str, frames: dict[str, pd.DataFrame], chosen: Optional[str]) -> list[str]:
@@ -76,6 +87,26 @@ def _ordered(group: str, frames: dict[str, pd.DataFrame], chosen: Optional[str])
         if s not in order:
             order.append(s)
     return order
+
+
+def _aligned(main: pd.Series, other: pd.Series, col: str) -> pd.Series:
+    """
+    The filler series, shifted (or scaled, for HRV) so that on the days both
+    sources reported, it matches the main source on average. With fewer than
+    ALIGN_MIN_OVERLAP shared days there's nothing to line up against, so it is
+    returned unchanged.
+    """
+    both = pd.concat([main, other], axis=1, keys=["main", "other"]).dropna()
+    if len(both) < ALIGN_MIN_OVERLAP:
+        return other
+    if col in RATIO_COLUMNS:
+        other_mean = float(both["other"].mean())
+        if other_mean <= 0:
+            return other
+        ratio = float(both["main"].mean()) / other_mean
+        return other * min(2.0, max(0.5, ratio))
+    shift = float((both["main"] - both["other"]).mean())
+    return (other + shift).clip(lower=0)
 
 
 def merge_sources(frames: dict[str, pd.DataFrame], prefs: Optional[dict]) -> Optional[pd.DataFrame]:
@@ -105,9 +136,13 @@ def merge_sources(frames: dict[str, pd.DataFrame], prefs: Optional[dict]) -> Opt
             if not sources:
                 continue
             series = prepared[sources[0]][col].reindex(out.index)
+            main_series = series
             if fill.get(group):
                 for other in sources[1:]:
-                    series = series.combine_first(prepared[other][col].reindex(out.index))
+                    filler = prepared[other][col].reindex(out.index)
+                    if group in ALIGN_GROUPS:
+                        filler = _aligned(main_series, filler, col)
+                    series = series.combine_first(filler)
             out[col] = series
 
     # Everything that isn't a group reading: first source in the general order wins, gaps filled by the rest.

@@ -370,6 +370,10 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         logger.error("Merging sources failed for %s: %s", user_id[:8], exc)
         health_df = next(iter(frames.values())) if frames else None
 
+    if health_df is not None:
+        coverage = {c: int(health_df[c].notna().sum()) for c in ("hrv", "resting_hr", "sleep_total_min", "steps") if c in health_df.columns}
+        logger.info("MERGED_COVERAGE user=%s sources=%s days_with_data=%s", user_id[:8], sorted(frames), coverage)
+
     # Merge weather/commute data — same pattern as Apple Health above.
     # A user with only environment data and no health data yet still
     # shouldn't hit this merge (weather alone can't produce insights),

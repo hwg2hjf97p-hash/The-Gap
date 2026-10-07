@@ -91,14 +91,14 @@ def test_default_takes_sleep_from_whoop_and_steps_from_apple():
     assert merged["strain"].tolist() == [10.0, 12.0, 9.0]  # not a group reading: merged in order
 
 
-def test_sleep_does_not_hop_between_sources_by_default():
+def test_a_night_the_main_source_missed_is_filled_from_another_by_default():
     merged = merge_sources(_frames(), None)
-    assert math.isnan(merged["sleep_total_min"].iloc[2])  # whoop has no third night; apple's is NOT mixed in
+    assert merged["sleep_total_min"].iloc[2] == 510.0  # whoop has no third night; apple's fills it
 
 
-def test_gap_filling_can_be_switched_on():
-    merged = merge_sources(_frames(), {"fill_gaps": {"sleep": True}})
-    assert merged["sleep_total_min"].iloc[2] == 510.0
+def test_gap_filling_can_be_switched_off():
+    merged = merge_sources(_frames(), {"fill_gaps": {"sleep": False}})
+    assert math.isnan(merged["sleep_total_min"].iloc[2])
 
 
 def test_the_persons_choice_wins():
