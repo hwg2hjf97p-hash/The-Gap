@@ -60,6 +60,11 @@ class Insight:
     # report. Still shown to the user inside the app.
     is_private: bool = False
 
+    # For findings about an amount (steps, screen time, calendar events): what
+    # the effect comes to between this person's lighter days and heavier days,
+    # in plain words (see causal/engine.py). Empty for yes/no findings.
+    contrast_text: str = ""
+
     def to_dict(self) -> dict:
         d = asdict(self)
         # Convert ConfidenceLevel enum to string for JSON serialisation
@@ -74,6 +79,7 @@ from typing import List
 
 
 class InsightOut(BaseModel):
+    contrast_text: str = ""
     hypothesis_id: str
     title: str
     headline: str

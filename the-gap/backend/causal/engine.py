@@ -57,6 +57,55 @@ def min_effect_for(hyp: Hypothesis, sub: pd.DataFrame) -> float:
     return max(floor, MIN_EFFECT_SD_FRACTION * sd)
 
 
+def _contrast(raw_effect: float, treatment: pd.Series) -> Optional[dict]:
+    """
+    What a one-unit effect comes to between this person's lighter and heavier
+    days: the 20th and 80th percentile of the treatment they actually had.
+    "5 minutes per calendar event" is easy to dismiss; "30 minutes less sleep on
+    your busiest days than your quietest" is the same finding in terms of days
+    they recognise. Stays inside the range seen in their data. None when the
+    treatment barely varies.
+    """
+    values = treatment.dropna().astype(float)
+    if len(values) < 5:
+        return None
+    low, high = float(values.quantile(0.2)), float(values.quantile(0.8))
+    if high - low <= 0:
+        return None
+    return {"low": low, "high": high, "effect": raw_effect * (high - low)}
+
+
+def _plain(label: str) -> str:
+    """"Total sleep (minutes)" -> "total sleep" """
+    base = label.split("(")[0].strip()
+    return base[:1].lower() + base[1:] if base and not base[:2].isupper() else base
+
+
+def _unit_word(label: str) -> str:
+    if "(" in label and ")" in label:
+        return label.split("(", 1)[1].split(")", 1)[0].strip()
+    return ""
+
+
+def _number(v: float) -> str:
+    if abs(v) >= 100:
+        return f"{round(v):,}"
+    text = f"{v:.1f}"
+    return text[:-2] if text.endswith(".0") else text
+
+
+def contrast_sentence(hyp: Hypothesis, contrast: dict) -> str:
+    """The contrast as one plain sentence, e.g. "Calendar events per day around 6 (vs 1 on your lighter days): your total sleep is about 24 minutes lower"."""
+    effect = contrast["effect"]
+    base = hyp.treatment_label.split("(")[0].strip()
+    unit = _unit_word(hyp.outcome_label)
+    amount = f"{_number(abs(effect))} {unit}".strip()
+    return (
+        f"{base} around {_number(contrast['high'])} (vs {_number(contrast['low'])} on your lighter days): "
+        f"your {_plain(hyp.outcome_label)} is about {amount} {'higher' if effect > 0 else 'lower'}."
+    )
+
+
 # With ~40 hypotheses tested on the same person's data, a plain "p < 0.10"
 # bar is expected to be cleared by several of them by pure chance. Moderate
 # and strong confidence therefore also have to survive a Benjamini-Hochberg
@@ -133,9 +182,11 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
                     binary_treatment=hyp.binary_treatment,
                 )
                 if result is not None:
+                    contrast = None if hyp.binary_treatment else _contrast(result["effect"], sub[hyp.treatment_col])
                     result = _scaled(result, hyp)
                     min_effect = min_effect_for(hyp, sub)
-                    if abs(result["effect"]) >= min_effect:
+                    material = abs(contrast["effect"]) if contrast else abs(result["effect"])
+                    if material >= min_effect:
                         is_positive = result["effect"] > 0
                         higher_is_better = OUTCOME_HIGHER_IS_BETTER.get(hyp.outcome_col, True)
                         early_read = {
@@ -248,11 +299,16 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
     if p_sink is not None and result.get("p_value") is not None:
         p_sink.append(result["p_value"])
 
+    contrast = None if hyp.binary_treatment else _contrast(result["effect"], sub[hyp.treatment_col])
     result = _scaled(result, hyp)
 
     # ── 6. Filter out near-zero / trivially small effects ─────────────────
+    # For an amount (steps, calendar events, screen hours) the size that matters
+    # is the difference between the person's lighter and heavier days, not the
+    # effect of one more unit.
     min_effect = min_effect_for(hyp, sub)
-    if abs(result["effect"]) < min_effect:
+    material = abs(contrast["effect"]) if contrast else abs(result["effect"])
+    if material < min_effect:
         logger.info(
             "FILTERED_SMALL_EFFECT hyp=%s effect=%.4f threshold=%.4f n_obs=%d p_value=%s",
             hyp.id, result["effect"], min_effect, result["n_obs"], result.get("p_value"),
@@ -260,7 +316,7 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
         return None
 
     # ── 7. Interpret → Insight ─────────────────────────────────────────────
-    return interpret_result(
+    insight = interpret_result(
         hypothesis=hyp,
         effect=result["effect"],
         ci_low=result["ci_low"],
@@ -268,3 +324,6 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
         n_obs=result["n_obs"],
         p_value=result.get("p_value"),
     )
+    if contrast:
+        insight.contrast_text = contrast_sentence(hyp, contrast)
+    return insight

@@ -31,6 +31,7 @@ from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
 from sync.polar_sync import fetch_polar_data
 from utils.data_cleaning import clean_dataframe
+from utils.patterns import build_patterns
 from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from routers.checkin import get_checkin_dataframe
@@ -526,6 +527,10 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         insights = await asyncio.to_thread(run_all_hypotheses, df, extra_hypotheses)
         insights_dicts = [i.to_dict() for i in insights]
         snapshot = await asyncio.to_thread(build_snapshot, df)
+        try:
+            snapshot["patterns"] = await asyncio.to_thread(build_patterns, df)
+        except Exception as exc:
+            logger.warning("Best-vs-worst patterns failed for %s (continuing without them): %s", user_id[:8], exc)
         experiments = await asyncio.to_thread(get_experiments_in_progress, df, extra_hypotheses)
         logger.info("ENGINE_DONE user=%s insights=%d experiments_in_progress=%d elapsed=%.1fs",
                     user_id[:8], len(insights_dicts), len(experiments), time.perf_counter() - t0)
