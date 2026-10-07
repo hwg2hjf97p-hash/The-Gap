@@ -101,9 +101,13 @@ def test_entitlement_check_is_off_until_switched_on(monkeypatch):
     asyncio.run(entitlement.require_subscription("user-1"))  # allowed: not required yet
 
     monkeypatch.setenv("REQUIRE_SUBSCRIPTION", "true")
+    monkeypatch.delenv("FREE_ACCESS", raising=False)
     with pytest.raises(HTTPException) as err:
         asyncio.run(entitlement.require_subscription("user-1"))
     assert err.value.status_code == 402
+
+    monkeypatch.setenv("FREE_ACCESS", "true")  # the testing switch lets everyone in
+    asyncio.run(entitlement.require_subscription("user-1"))
 
 
 def test_debug_pages_are_hidden_without_the_secret(monkeypatch):
