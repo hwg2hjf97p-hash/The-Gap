@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from utils.weekday_baseline import weekday_baseline
+
 # Metrics worth surfacing as "latest reading" cards, with display metadata.
 METRIC_DISPLAY = {
     "hrv": {"label": "HRV", "unit": "ms", "higher_is_better": True},
@@ -24,6 +26,7 @@ METRIC_DISPLAY = {
     "recovery_score": {"label": "Recovery score", "unit": "%", "higher_is_better": True},
     "sleep_score": {"label": "Sleep performance", "unit": "%", "higher_is_better": True},
     "steps": {"label": "Steps", "unit": "", "higher_is_better": True},
+    "strain": {"label": "Strain", "unit": "", "higher_is_better": None},
     "weight_kg": {"label": "Weight", "unit": "kg", "higher_is_better": None},
     "dietary_energy": {"label": "Calories", "unit": "kcal", "higher_is_better": None},
     "protein_g": {"label": "Protein", "unit": "g", "higher_is_better": None},
@@ -48,6 +51,32 @@ CANDIDATE_PAIRS = [
     ("is_weekend", "sleep_total_min", "Weekends seem to affect how long you sleep"),
     ("steps", "sleep_total_min", "How many steps you take seems to affect your sleep that night"),
 ]
+
+
+def _typical_for_weekday(clean: pd.Series, value: float, divide_by: float):
+    """(card info, latest date) comparing the latest reading with this person's
+    usual for that weekday. info is None when there aren't enough same-weekday
+    readings yet, in which case the caller keeps the old comparison."""
+    try:
+        points = [(ts.date(), float(v)) for ts, v in clean.items()]
+        latest_day = points[-1][0]
+    except Exception:
+        return None, None
+    base = weekday_baseline(points, latest_day)
+    if not base:
+        return None, latest_day.isoformat()
+    mean = base["mean"]
+    pct = (value - mean) / abs(mean) if mean else 0.0
+    return (
+        {
+            "weekday": base["weekday"],
+            "value": round(mean / divide_by, 1),
+            "delta": round((value - mean) / divide_by, 1),
+            "n": base["n"],
+            "trend": "up" if pct > 0.03 else "down" if pct < -0.03 else "flat",
+        },
+        latest_day.isoformat(),
+    )
 
 
 def _trend(series: pd.Series) -> str:
@@ -93,6 +122,10 @@ def build_snapshot(df: pd.DataFrame) -> dict:
         divide_by = meta.get("divide_by", 1)
         display_value = round(value / divide_by, 1) if divide_by != 1 else round(float(value), 1)
         trend = _trend(series)
+        typical, latest_date = _typical_for_weekday(clean, float(value), divide_by)
+        if typical:
+            # Weekday-aware: a Monday after a Sunday lie-in is compared with other Mondays.
+            trend = typical.pop("trend")
         is_improving = None
         if trend != "flat" and meta["higher_is_better"] is not None:
             went_up = trend == "up"
@@ -110,6 +143,8 @@ def build_snapshot(df: pd.DataFrame) -> dict:
                 "trend": trend,
                 "is_improving": is_improving,
                 "recent": recent,
+                "date": latest_date,
+                "typical": typical,
             }
         )
 

@@ -71,13 +71,14 @@ def _sb_headers(prefer: str = "") -> dict:
 TIME_OF_DAY = {"morning", "afternoon", "evening", "late"}
 WORK_FINISH = {"before_5pm", "5_8pm", "8_10pm", "after_10pm"}
 TRAVEL_MODES = {"car", "plane", "train_bus", "other"}
+SCREEN_LAST_USE = {"before_9pm", "9_11pm", "11pm_1am", "after_1am"}
 
 # Columns added by checkin_phase1.sql — everything beyond the original four.
 EXTENDED_FIELDS = (
     "alcohol_drinks", "alcohol_time", "energy_drinks", "energy_drink_time",
     "cigarettes", "gambling_minutes", "gambling_time", "substance_use",
     "substance_time", "work_hours", "work_finish", "argument_count",
-    "argument_intensity", "travel_hours", "travel_mode",
+    "argument_intensity", "travel_hours", "travel_mode", "screen_hours", "screen_last_use",
 )
 
 
@@ -109,6 +110,8 @@ class CheckInRequest(BaseModel):
     argument_intensity: Optional[int] = Field(None, ge=1, le=3)
     travel_hours: Optional[float] = Field(None, ge=0, le=48)
     travel_mode: Optional[str] = None
+    screen_hours: Optional[float] = Field(None, ge=0, le=24)
+    screen_last_use: Optional[str] = None
 
     @validator("date")
     def validate_date(cls, v):
@@ -129,6 +132,10 @@ class CheckInRequest(BaseModel):
     @validator("travel_mode")
     def validate_travel_mode(cls, v):
         return _one_of(TRAVEL_MODES, v)
+
+    @validator("screen_last_use")
+    def validate_screen_last_use(cls, v):
+        return _one_of(SCREEN_LAST_USE, v)
 
 
 class CheckInResponse(BaseModel):
@@ -319,7 +326,8 @@ def get_checkin_dataframe(user_id: str, days: int = 180):
       alcohol_flag, alcohol_drinks, afternoon_caffeine, stress_score,
       high_stress_flag, energy_drinks, energy_drink_late_flag, cigarettes,
       gambling_minutes, gambling_flag, substance_flag, work_hours,
-      work_late_flag, argument_flag, travel_hours, travel_flag
+      work_late_flag, argument_flag, travel_hours, travel_flag, screen_hours,
+      late_screen_flag
     """
     import numpy as np
     import pandas as pd
@@ -403,6 +411,10 @@ def get_checkin_dataframe(user_id: str, days: int = 180):
         travel = num("travel_hours")
         out["travel_hours"] = travel
         out["travel_flag"] = flag(travel > 0, travel.notna())
+
+        screen = num("screen_hours")
+        out["screen_hours"] = screen
+        out["late_screen_flag"] = flag((screen > 0) & text("screen_last_use").isin(["11pm_1am", "after_1am"]), screen.notna())
 
         # Drop columns nobody has ever answered, so the engine's
         # "missing column" skip applies instead of an all-NaN column.

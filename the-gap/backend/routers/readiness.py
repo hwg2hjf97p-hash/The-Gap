@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from auth import get_current_user_id
+from utils.weekday_baseline import weekday_baseline
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/readiness", tags=["readiness"])
@@ -57,14 +58,26 @@ def _latest_vs_baseline(series: list[tuple[date, float]], today: date) -> dict |
     if (today - latest_date).days > MAX_STALE_DAYS:
         return None
     prior = [v for d, v in series[:-1] if 0 < (latest_date - d).days <= BASELINE_DAYS]
-    info = {"date": latest_date, "latest": latest, "n": len(prior), "mean": None, "sd": None}
-    if len(prior) >= MIN_BASELINE_POINTS:
+    info = {"date": latest_date, "latest": latest, "n": len(prior), "mean": None, "sd": None, "weekday": None}
+    # Prefer "your usual for this weekday": someone who sleeps in on Sundays and
+    # works on Mondays shouldn't look low every Monday. Needs a few earlier
+    # same-weekday readings; otherwise the 30-day average is used as before.
+    same_day = weekday_baseline(series[:-1], latest_date)
+    if same_day:
+        mean, sd = same_day["mean"], same_day["sd"]
+        info["weekday"] = same_day["weekday"]
+        info["mean"], info["sd"] = mean, max(sd, abs(mean) * 0.05, 1e-6)
+    elif len(prior) >= MIN_BASELINE_POINTS:
         mean = sum(prior) / len(prior)
         sd = math.sqrt(sum((v - mean) ** 2 for v in prior) / (len(prior) - 1))
         # A very steady baseline would make a tiny wobble look dramatic;
         # never let the spread fall below 5% of the mean.
         info["mean"], info["sd"] = mean, max(sd, abs(mean) * 0.05, 1e-6)
     return info
+
+
+def _baseline_name(info: dict) -> str:
+    return f"usual {info['weekday']}" if info.get("weekday") else "30-day average"
 
 
 async def compute_readiness(user_id: str, today: date) -> dict:
@@ -74,7 +87,7 @@ async def compute_readiness(user_id: str, today: date) -> dict:
     there isn't enough data. `signals` holds the raw comparisons (percent
     above/below this person's normal) so callers can reason about them
     without parsing the reason strings."""
-    since = (today - timedelta(days=BASELINE_DAYS + 15)).isoformat()
+    since = (today - timedelta(days=70)).isoformat()  # 8 weeks, for the same-weekday comparison
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
@@ -111,7 +124,7 @@ async def compute_readiness(user_id: str, today: date) -> dict:
         z_scores.append((hrv["latest"] - hrv["mean"]) / hrv["sd"])
         pct = round((hrv["latest"] - hrv["mean"]) / hrv["mean"] * 100)
         signals["hrv_pct"] = pct
-        reasons.append(f"HRV {abs(pct)}% {'above' if pct >= 0 else 'below'} your 30-day average")
+        reasons.append(f"HRV {abs(pct)}% {'above' if pct >= 0 else 'below'} your {_baseline_name(hrv)}")
     if rhr and rhr["mean"] is not None:
         z_scores.append(-(rhr["latest"] - rhr["mean"]) / rhr["sd"])  # lower resting HR is better
         diff = round(rhr["latest"] - rhr["mean"])

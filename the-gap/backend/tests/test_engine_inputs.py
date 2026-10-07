@@ -9,6 +9,8 @@ NEW_CHECKIN_IDS = [
     "alcohol_drinks_hrv", "energy_drinks_sleep", "late_energy_drink_deep_sleep", "cigarettes_hrv",
     "cigarettes_rhr", "gambling_sleep", "gambling_hrv", "substance_hrv", "substance_deep_sleep",
     "work_hours_hrv", "work_hours_sleep", "late_work_sleep", "travel_hours_sleep", "travel_hours_hrv",
+    "screen_hours_sleep", "screen_hours_hrv", "late_screen_sleep", "late_screen_deep_sleep",
+    "strain_hrv", "strain_rhr", "strain_sleep",
 ]
 
 

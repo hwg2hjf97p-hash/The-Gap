@@ -120,8 +120,5 @@ async def fetch_oura_data(
     df.index.name = "date"
     df = df.sort_index()
 
-    # Default alcohol flag to 0
-    df["alcohol_flag"] = 0
-
     logger.info("Oura sync: %d days fetched", len(df))
     return df

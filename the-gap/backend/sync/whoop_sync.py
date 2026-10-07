@@ -200,6 +200,11 @@ async def fetch_whoop_data(
         # triggers when "steps" isn't already a column.
         active_kj = score.get("kilojoule") or 0
         rows[date]["active_energy"] = active_kj * 0.239 if active_kj else 0  # kJ → kcal
+        # Strain (0-21): how hard the day was on the body, by Whoop's measure.
+        # It is the closest thing its public API gives to a "load" reading.
+        strain = score.get("strain")
+        if strain is not None:
+            rows[date]["strain"] = float(strain)
 
     if not rows:
         return pd.DataFrame()
@@ -208,9 +213,6 @@ async def fetch_whoop_data(
     df.index = pd.to_datetime(df.index)
     df.index.name = "date"
     df = df.sort_index()
-
-    # Default alcohol flag to 0 — not available via API
-    df["alcohol_flag"] = 0
 
     logger.info(
         "Whoop sync: %d distinct days | scored: recovery=%d sleep=%d cycle=%d (of %d/%d/%d raw)",

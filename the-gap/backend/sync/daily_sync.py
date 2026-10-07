@@ -39,6 +39,7 @@ from routers.workouts import get_workout_dataframe
 from routers.nutrition import get_nutrition_dataframe
 from utils.assistant_signals import get_assistant_signal_dataframe
 from sync.apple_health_store import get_apple_health_dataframe
+from utils.source_merge import merge_sources, load_source_prefs
 from sync.device_calendar_store import get_device_calendar_dataframe
 from sync.environment_store import get_environment_dataframe
 
@@ -235,6 +236,8 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     """Sync one user — fetch all their data, run causal engine, save results."""
     t0 = time.perf_counter()
     health_df = None
+    # Each source's own daily table, kept apart until they're merged below with one main source per kind of reading.
+    frames: dict[str, pd.DataFrame] = {}
     calendar_df = None
     providers_synced = []
 
@@ -292,25 +295,25 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                 fetched = await fetch_whoop_data(access_token)
                 logger.info("FETCH_DONE provider=whoop rows=%d", len(fetched) if fetched is not None else 0)
                 if fetched is not None and not fetched.empty:
-                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    frames[provider] = fetched
                     providers_synced.append(provider)
             elif provider == "oura":
                 fetched = await fetch_oura_data(access_token)
                 logger.info("FETCH_DONE provider=oura rows=%d", len(fetched) if fetched is not None else 0)
                 if fetched is not None and not fetched.empty:
-                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    frames[provider] = fetched
                     providers_synced.append(provider)
             elif provider == "strava" and fetch_strava_data is not None:
                 fetched = await fetch_strava_data(access_token)
                 logger.info("FETCH_DONE provider=strava rows=%d", len(fetched) if fetched is not None else 0)
                 if fetched is not None and not fetched.empty:
-                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    frames[provider] = fetched
                     providers_synced.append(provider)
             elif provider == "withings":
                 fetched = await fetch_withings_data(access_token)
                 logger.info("FETCH_DONE provider=withings rows=%d", len(fetched) if fetched is not None else 0)
                 if fetched is not None and not fetched.empty:
-                    health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                    frames[provider] = fetched
                     providers_synced.append(provider)
             elif provider == "polar":
                 # Polar's user_id was stashed in refresh_token at connect time
@@ -323,7 +326,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                     fetched = await fetch_polar_data(access_token, polar_user_id)
                     logger.info("FETCH_DONE provider=polar rows=%d", len(fetched) if fetched is not None else 0)
                     if fetched is not None and not fetched.empty:
-                        health_df = fetched if health_df is None else health_df.combine_first(fetched)
+                        frames[provider] = fetched
                         providers_synced.append(provider)
 
             # Update last_synced_at
@@ -338,7 +341,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
 
     logger.info("SYNC_DATA_COLLECTED user=%s health_df_rows=%s providers=%s elapsed=%.1fs",
                 user_id[:8],
-                len(health_df) if health_df is not None else 0,
+                sum(len(f) for f in frames.values()),
                 providers_synced,
                 time.perf_counter() - t0)
 
@@ -350,15 +353,22 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         apple_df = await get_apple_health_dataframe(user_id)
         if apple_df is not None and not apple_df.empty:
             apple_df.index = pd.to_datetime(apple_df.index)
-            if health_df is None:
-                health_df = apple_df
-            else:
-                health_df.index = pd.to_datetime(health_df.index)
-                health_df = health_df.combine_first(apple_df)
+            frames["apple_health"] = apple_df
             if "apple_health" not in providers_synced:
                 providers_synced.append("apple_health")
     except Exception as exc:
         logger.warning("Apple Health merge failed (continuing without it): %s", exc)
+
+    # One main source per kind of reading (sleep, recovery, activity, body),
+    # as the person chose in Settings or by default. Before this the first
+    # source to load won and the others filled gaps, so one series could hop
+    # between sources from night to night.
+    try:
+        prefs = await load_source_prefs(user_id)
+        health_df = await asyncio.to_thread(merge_sources, frames, prefs) if frames else None
+    except Exception as exc:
+        logger.error("Merging sources failed for %s: %s", user_id[:8], exc)
+        health_df = next(iter(frames.values())) if frames else None
 
     # Merge weather/commute data — same pattern as Apple Health above.
     # A user with only environment data and no health data yet still
@@ -416,6 +426,12 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             # analysis — not deprioritized, just invisible, since
             # health_df's own date index determined which days could
             # exist at all. "outer" keeps every date from either side.
+            # A source can carry a column of the same name (older Whoop/Oura syncs added a fake
+            # "no alcohol" column). The join raises on a name clash, which silently threw away
+            # EVERY check-in answer; the person's own answers win.
+            clash = [c for c in checkin_df.columns if c in health_df.columns]
+            if clash:
+                health_df = health_df.drop(columns=clash)
             health_df = health_df.join(checkin_df, how="outer")
     except Exception as exc:
         logger.warning("Check-in merge failed (continuing without it): %s", exc)

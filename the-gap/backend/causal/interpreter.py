@@ -719,6 +719,97 @@ def interpret_result(
             else "Travel isn't costing you recovery in your data so far."
         )
 
+    elif hid == "screen_hours_sleep":
+        title = "Screen Time & Sleep"
+        headline = (
+            f"Each extra hour of screen time {'adds' if is_positive else 'costs you'} "
+            f"{abs_effect} minutes of sleep that night"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "More screen time goes with less sleep for you. Try a cut-off an hour before bed."
+            if not is_positive
+            else "Screen time isn't costing you sleep in your data so far."
+        )
+
+    elif hid == "screen_hours_hrv":
+        title = "Screen Time & Recovery"
+        headline = (
+            f"Each extra hour of screen time {'raises' if is_positive else 'lowers'} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Heavy screen days show up in your recovery. Build in screen-free time on busy days."
+            if not is_positive
+            else "Screen time isn't showing up as a recovery cost in your data so far."
+        )
+
+    elif hid == "late_screen_sleep":
+        title = "Late Phone Use & Sleep"
+        headline = (
+            f"On nights you were on your phone after 11 pm, you slept "
+            f"{'more' if is_positive else 'less'} — by {abs_effect} minutes"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Late phone use is costing you sleep. Try putting it down by 10:30 for a week."
+            if not is_positive
+            else "Late phone use doesn't seem to cost you sleep."
+        )
+
+    elif hid == "late_screen_deep_sleep":
+        title = "Late Phone Use & Deep Sleep"
+        headline = (
+            f"On nights you were on your phone after 11 pm, your deep sleep "
+            f"{'increased' if is_positive else 'dropped'} by {abs_effect} minutes"
+        )
+        metric_unit = "min deep sleep"
+        tip = (
+            "Late phone use is cutting into your deep sleep."
+            if not is_positive
+            else "Late phone use doesn't seem to hurt your deep sleep."
+        )
+
+    elif hid == "strain_hrv":
+        title = "Strain & Recovery"
+        headline = (
+            f"Every 3 extra points of Whoop strain {'raises' if is_positive else 'lowers'} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Hard days cost you recovery. Plan an easier day after a high-strain one."
+            if not is_positive
+            else "Your HRV holds up well after hard days."
+        )
+
+    elif hid == "strain_rhr":
+        title = "Strain & Resting Heart Rate"
+        headline = (
+            f"Every 3 extra points of Whoop strain {direction_word} "
+            f"your next-day resting heart rate by {abs_effect} bpm"
+        )
+        metric_unit = "bpm"
+        tip = (
+            "High-strain days raise your resting heart rate the next day. A sign to ease off after them."
+            if is_positive
+            else "Your resting heart rate isn't rising after hard days."
+        )
+
+    elif hid == "strain_sleep":
+        title = "Strain & Sleep"
+        headline = (
+            f"Every 3 extra points of Whoop strain {'adds' if is_positive else 'costs you'} "
+            f"{abs_effect} minutes of sleep that night"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Harder days are costing you sleep. Wind down earlier after them."
+            if not is_positive
+            else "Harder days go with more sleep for you, which is your body recovering."
+        )
+
     # Fallback for any future hypotheses
     else:
         title = hypothesis.treatment_label
