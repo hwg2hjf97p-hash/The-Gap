@@ -3,6 +3,7 @@ Runs the sample data through the real analysis. Needs the full engine, so it is
 skipped where econml isn't installed (the quick CI job) and runs in the
 "engine" CI job and on any machine with the full requirements.
 """
+import logging
 from datetime import date
 
 import pandas as pd
@@ -37,10 +38,13 @@ def _frame(monkeypatch):
     return clean_dataframe(health_df.join(checkin_df, how="outer").sort_index())
 
 
-def test_the_sample_data_produces_real_looking_insights(monkeypatch):
-    insights = run_all_hypotheses(_frame(monkeypatch))
+def test_the_sample_data_produces_real_looking_insights(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    df = _frame(monkeypatch)
+    insights = run_all_hypotheses(df)
     ids = {i.hypothesis_id for i in insights}
-    assert len(insights) >= 4, ids
+    why = " | ".join(r.getMessage()[:110] for r in caplog.records if r.name.startswith("causal"))[:1400]
+    assert len(insights) >= 4, f"{sorted(ids)} rows={len(df)} cols={sorted(df.columns)[:40]} LOG: {why}"
     assert "alcohol_hrv" in ids
     alcohol = next(i for i in insights if i.hypothesis_id == "alcohol_hrv")
     assert alcohol.ate < 0
