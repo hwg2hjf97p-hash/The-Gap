@@ -44,6 +44,7 @@ type Card = {
   verified: boolean;
   can_approve: boolean;
   blocking_problems: string[];
+  mentions_medication?: string[];
   source: { pubmed_title: string | null; abstract: string | null; checks: Checks };
 };
 
@@ -315,6 +316,11 @@ export default function EvidenceReview() {
               <label style={{ display: "block", marginTop: 10, fontSize: 12, color: colors.muted }}>"Test it on yourself" behaviour (leave empty if it isn't a simple everyday habit; never a supplement)</label>
               <input style={input} value={card.experiment_label ?? ""} onChange={(e) => updateCard(card.id, { experiment_label: e.target.value })} disabled={card.verified} />
               <p style={{ color: colors.muted, fontSize: 12, marginTop: 8 }}>Matches goals on: {card.metric_tags.join(", ")}</p>
+              {!!card.mentions_medication?.length && !card.verified && (
+                <p style={{ color: "#f5a524", fontSize: 12.5, marginTop: 8 }}>
+                  The abstract mentions medicine ({card.mentions_medication.join(", ")}). Cards about medicines usually shouldn't be approved.
+                </p>
+              )}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
                 {badge(c.doi_ok, "DOI resolves")}

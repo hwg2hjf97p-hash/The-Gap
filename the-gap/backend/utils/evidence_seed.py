@@ -25,8 +25,9 @@ from typing import Optional
 import httpx
 
 from utils.evidence_checks import (
+    allowed_numbers,
+    medication_count,
     normalise_doi,
-    numbers_in,
     parse_pubmed_xml,
     study_type_from,
     text_checks,
@@ -50,7 +51,7 @@ GENERIC_CAUTION = "These are averages across groups of people, so results for an
 
 SYSTEM_PROMPT = """You turn one published research abstract into a short card for a health app.
 
-You may use ONLY information stated in the abstract you are given. Never add numbers, results, populations or claims that are not in it. Write plain English for a general reader. Describe what the research found. Never give advice, instructions or recommendations, and never address the reader. Do not use these words anywhere: you, your, we, our, should, must, recommend, advise, cure, prevent, treat, heal, boost, prove, proven, guarantee.
+You may use ONLY information stated in the abstract you are given. Never add numbers, results, populations or claims that are not in it. Copy every number exactly as it is written in the abstract: the same digits and decimals. Never round, convert, combine or work out a new number (no averages, differences or totals). Write plain English for a general reader. Describe what the research found. Never give advice, instructions or recommendations, and never address the reader. Do not use these words anywhere: you, your, we, our, should, must, recommend, advise, cure, prevent, treat, heal, boost, prove, proven, guarantee.
 
 Return a single JSON object and nothing else."""
 
@@ -145,6 +146,9 @@ def rank_candidates(articles: list[dict]) -> list[dict]:
         study_type = study_type_from(a["pub_types"])
         if not study_type or len(a["abstract"]) < MIN_ABSTRACT_CHARS or not a.get("year") or a["year"] < EARLIEST_YEAR:
             continue
+        # Medicines and weight-loss drugs are outside what this library is for.
+        if medication_count(a["title"]) or medication_count(a["abstract"]) >= 3:
+            continue
         usable.append({**a, "study_type": study_type})
     usable.sort(key=lambda a: (a["study_type"] != "meta-analysis", -(a["year"] or 0)))
     return usable
@@ -208,9 +212,8 @@ async def draft_card(client: httpx.AsyncClient, article: dict, topic: Topic) -> 
 
 def build_rows(article: dict, topic: Topic, draft: dict, doi_check: dict) -> tuple[dict, dict]:
     """(evidence_cards row, evidence_sources row) for a drafted article."""
-    allowed_numbers = numbers_in(article["abstract"])
     sample = draft.get("sample_size")
-    if not isinstance(sample, int) or isinstance(sample, bool) or str(sample) not in allowed_numbers:
+    if not isinstance(sample, int) or isinstance(sample, bool) or str(sample) not in allowed_numbers(article["abstract"]):
         sample = None  # only a figure printed in the abstract is kept
 
     caution = (draft.get("caution_notes") or "").strip() or GENERIC_CAUTION

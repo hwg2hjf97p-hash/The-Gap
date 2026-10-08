@@ -297,3 +297,54 @@ def test_an_approved_card_must_be_unapproved_before_it_can_be_edited(monkeypatch
     with pytest.raises(HTTPException) as err:
         asyncio.run(evidence_admin.edit_card("c1", evidence_admin.EditBody(title="New title")))
     assert err.value.status_code == 409
+
+
+# ── false alarms seen on real PubMed abstracts ───────────────────────────────
+
+REAL_ABSTRACT = (
+    "Twenty randomised controlled trials (RCTs) comprising 15\u2009782 participants met inclusion criteria. "
+    "Lean mass constituted 25%-39% of total weight lost (35.2% [95% CI: 31.5-38.9]; p\u2009=\u20090.42). "
+    "Lifestyle plus resistance training demonstrated the most favourable profile (17.5% [14.2-20.8]). Heterogeneity was moderate (I2\u2009=\u200968%)."
+)
+
+
+def _card(**fields):
+    return {**GOOD, **fields}
+
+
+def test_a_thousands_separator_written_as_a_thin_space_is_read_as_one_number():
+    assert numbers_in("15\u2009782 participants") == {"15782"}
+    card = _card(finding="Across the studies pooled, research found results in 15,782 participants.", population="Adults", sample_size=15782)
+    assert text_checks(card, REAL_ABSTRACT)["numbers_ok"]
+
+
+def test_a_number_spelled_out_in_the_abstract_may_be_written_as_digits():
+    card = _card(finding="Across the studies pooled, research found results from 20 trials.", population="Adults in 20 trials", sample_size=None)
+    assert text_checks(card, REAL_ABSTRACT)["numbers_ok"]
+    assert "21" in __import__("utils.evidence_checks", fromlist=["x"]).allowed_numbers("Twenty-one trials")
+
+
+def test_a_rounded_figure_is_still_caught():
+    card = _card(finding="Across the studies pooled, research found lean mass loss of 17% with resistance training.", population="Adults", sample_size=None)
+    checks = text_checks(card, REAL_ABSTRACT)  # the abstract says 17.5%
+    assert not checks["numbers_ok"] and "17" in checks["unsupported_numbers"]
+
+
+def test_describing_who_was_studied_with_diagnosed_is_allowed():
+    card = _card(population="Older adults diagnosed with sarcopenia", sample_size=None)
+    assert text_checks(card, REAL_ABSTRACT)["wording_ok"]
+
+
+def test_medicine_names_are_flagged():
+    from utils.evidence_checks import mentions_medication
+
+    assert mentions_medication("Tirzepatide and lean mass", "semaglutide, GLP-1 agonists") == ["glp-1", "semaglutide", "tirzepatide"]
+    assert mentions_medication("Resistance training and sleep") == []
+
+
+def test_drug_studies_are_not_collected():
+    base = {**ARTICLE, "abstract": "x" * 500, "pub_types": ["Meta-Analysis"], "year": 2024}
+    drug_title = {**base, "pubmed_id": "7", "title": "Tirzepatide and lean mass"}
+    drug_body = {**base, "pubmed_id": "8", "abstract": "semaglutide " * 3 + "x" * 500}
+    fine = {**base, "pubmed_id": "9", "abstract": "A mention of insulin therapy once. " + "x" * 500}
+    assert [a["pubmed_id"] for a in evidence_seed.rank_candidates([drug_title, drug_body, fine])] == ["9"]

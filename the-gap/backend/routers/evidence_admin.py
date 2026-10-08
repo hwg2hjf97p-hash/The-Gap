@@ -30,7 +30,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from utils import evidence_seed
-from utils.evidence_checks import blocking_problems, can_approve, text_checks
+from utils.evidence_checks import blocking_problems, can_approve, mentions_medication, text_checks
 from utils.evidence_topics import CATEGORY_KEYS, topics_for
 
 logger = logging.getLogger(__name__)
@@ -102,8 +102,10 @@ async def list_cards(status: str = "pending", category: Optional[str] = None, li
             sources = {s["card_id"]: s for s in src.json() or []}
     for card in cards:
         source = sources.get(card["id"], {})
-        checks = source.get("checks") or {}
+        # Checked again on every view, so a card is judged by the current rules, not the ones in force when it was drafted.
+        checks = _recheck(card, source)
         card["source"] = {"pubmed_title": source.get("pubmed_title"), "abstract": source.get("abstract"), "checks": checks, "drafted_by": source.get("drafted_by")}
+        card["mentions_medication"] = mentions_medication(card.get("title"), source.get("abstract"))
         card["can_approve"] = can_approve(checks)
         card["blocking_problems"] = blocking_problems(checks)
     return JSONResponse(content={"cards": cards})

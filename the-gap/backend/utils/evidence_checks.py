@@ -22,29 +22,89 @@ from typing import Optional
 BANNED_WORDS = re.compile(
     r"\b(should|must|ought|need to|needs to|have to|recommend\w*|advise\w*|"
     r"you|your|yours|we|our|"
-    r"cure[sd]?|cures|prevent(?:s|ed|ing)?|treat(?:s|ing)?|diagnos\w*|heal(?:s|ed|ing)?|"
+    r"cure[sd]?|cures|prevent(?:s|ed|ing)?|treat(?:s|ing)?|heal(?:s|ed|ing)?|"
     r"guarantee\w*|prove[sdn]?|proven|miracle|breakthrough|detox\w*|boost(?:s|ed|ing)?)\b",
     re.IGNORECASE,
 )
 EVIDENCE_VERB = re.compile(r"\b(found|reported|showed|observed|concluded|identified|linked|associated|pooled)\b", re.IGNORECASE)
-NUMBER = re.compile(r"(?<![\w])\d[\d,]*(?:\.\d+)?")
+# A number, with thousands separators written as a comma or as the thin / no-break spaces PubMed uses ("1,847", "15 782").
+NUMBER = re.compile(r"(?<![\w])(?:\d{1,3}(?:[,\u2009\u00a0\u202f]\d{3})+|\d+)(?:\.\d+)?")
+THOUSANDS_SEPARATORS = re.compile(r"[,\u2009\u00a0\u202f]")
+WORD_UNITS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+              "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+              "eighteen": 18, "nineteen": 19, "twenty": 20}
+WORD_TENS = {"thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+WORD_NUMBER = re.compile(
+    r"\b(?:(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[- ](?:one|two|three|four|five|six|seven|eight|nine)"
+    r"|" + "|".join(list(WORD_UNITS) + list(WORD_TENS)) + r"|hundred|thousand)\b",
+    re.IGNORECASE,
+)
 SENTENCE_END = re.compile(r"[.!?](?:\s|$)")
 
 # The fields that make claims, and so are held to the rules above.
 CLAIM_FIELDS = ("title", "plain_summary", "finding", "population", "caution_notes")
 
 
+def _plain(raw: str) -> str:
+    cleaned = THOUSANDS_SEPARATORS.sub("", raw).rstrip(".")
+    if "." in cleaned:
+        cleaned = cleaned.rstrip("0").rstrip(".")
+    return cleaned
+
+
 def numbers_in(text: Optional[str]) -> set[str]:
     """Every number in a piece of text, written plainly ("1,200" -> "1200", "0.50" -> "0.5")."""
-    found: set[str] = set()
-    for raw in NUMBER.findall(text or ""):
-        cleaned = raw.replace(",", "").rstrip(".")
-        if not cleaned:
-            continue
-        if "." in cleaned:
-            cleaned = cleaned.rstrip("0").rstrip(".")
-        found.add(cleaned)
-    return found
+    return {n for n in (_plain(raw) for raw in NUMBER.findall(text or "")) if n}
+
+
+def _word_value(phrase: str) -> Optional[int]:
+    parts = re.split(r"[- ]", phrase.lower())
+    if len(parts) == 2 and parts[0] in WORD_TENS and parts[1] in WORD_UNITS:
+        return WORD_TENS[parts[0]] + WORD_UNITS[parts[1]]
+    word = parts[0]
+    if word in WORD_UNITS:
+        return WORD_UNITS[word]
+    if word in WORD_TENS:
+        return WORD_TENS[word]
+    return {"hundred": 100, "thousand": 1000}.get(word)
+
+
+def allowed_numbers(abstract: Optional[str]) -> set[str]:
+    """
+    Numbers a card may quote from an abstract: the digits it prints, each piece of a
+    number split by a thin space ("15 782" also allows 15 and 782), and numbers it
+    spells out ("Twenty trials" allows 20), since writing "20" for "twenty" changes nothing.
+    """
+    text = abstract or ""
+    allowed = numbers_in(text)
+    for raw in NUMBER.findall(text):
+        for piece in THOUSANDS_SEPARATORS.split(raw):
+            if piece:
+                allowed.add(_plain(piece))
+    for match in WORD_NUMBER.finditer(text):
+        value = _word_value(match.group(0))
+        if value is not None:
+            allowed.add(str(value))
+    return allowed
+
+
+# Medicines and procedures: cards about these are not what the library is for.
+MEDICATION = re.compile(
+    r"\b(semaglutide|tirzepatide|liraglutide|GLP-1|incretin\w*|metformin|statins?|antidepressants?|SSRIs?|ketamine|psilocybin|"
+    r"testosterone (?:therapy|replacement)|anabolic|steroids?|insulin therapy|pharmacotherapy|pharmacological|bariatric|"
+    r"orlistat|benzodiazepines?|hypnotic drugs?|zolpidem|antipsychotics?|opioids?)\b",
+    re.IGNORECASE,
+)
+
+
+def medication_count(text: Optional[str]) -> int:
+    """How many times a medicine is named (so a passing mention can be told from a study about one)."""
+    return len(MEDICATION.findall(text or ""))
+
+
+def mentions_medication(*texts: Optional[str]) -> list[str]:
+    """Medicine names found in the given texts (empty when none)."""
+    return sorted({m.group(0).lower() for t in texts for m in MEDICATION.finditer(t or "")})
 
 
 def sentence_count(text: Optional[str]) -> int:
@@ -53,7 +113,7 @@ def sentence_count(text: Optional[str]) -> int:
 
 def text_checks(card: dict, abstract: str) -> dict:
     """The checks that depend only on the card's own words and the abstract it came from."""
-    allowed = numbers_in(abstract)
+    allowed = allowed_numbers(abstract)
     claimed: set[str] = set()
     for field in CLAIM_FIELDS:
         claimed |= numbers_in(card.get(field))
