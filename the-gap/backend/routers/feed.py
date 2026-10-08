@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from auth import get_current_user_id
 from utils.feed import attach_cards, list_feed, update_feed_item
-from utils.feed_selector import generate_for_user, users_with_active_goals
+from utils.feed_selector import build_round, generate_for_user, users_with_active_goals
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/feed", tags=["feed"])
@@ -60,8 +60,8 @@ async def dismiss(item_id: str, user_id: str = Depends(get_current_user_id)) -> 
 @router.post("/refresh")
 async def refresh(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """The person asks for research on their goals now. Same rules as the scheduled round (no repeats within 60 days), at most two cards a day."""
-    created = await generate_for_user(user_id, forced=True)
-    return JSONResponse(content={"created": len(created)})
+    created, reason = await build_round(user_id, forced=True)
+    return JSONResponse(content={"created": len(created), "reason": reason})
 
 
 @router.post("/run")

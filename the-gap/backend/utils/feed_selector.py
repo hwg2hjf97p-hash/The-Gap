@@ -129,26 +129,31 @@ async def weight_cards_allowed(user_id: str, today: date) -> bool:
     return bmi(points[-1][1], height) >= WEIGHT_CARD_MIN_BMI
 
 
-async def generate_for_user(user_id: str, forced: bool = False) -> list[dict]:
-    """Adds this round's cards to one person's feed. Returns the feed items created (never raises)."""
+async def build_round(user_id: str, forced: bool = False) -> tuple[list[dict], str]:
+    """
+    Adds this round's cards to one person's feed. Returns (the feed items created, why it is empty or "ok").
+    reason: ok | no_goals | not_due | no_cards | no_match | error. Never raises.
+    """
     try:
         today = await user_today(user_id)
         goals = [g for g in await list_goals(user_id, "active") if get_metric(g.get("metric_col", ""))]
         if not goals:
-            return []
+            return [], "no_goals"
         recent = await _recent_items(user_id, today)
         dates = [date.fromisoformat(r["local_date"]) for r in recent if r.get("local_date")]
         created_today = sum(1 for d in dates if d == today)
         if not due_for_round(dates, today, forced, created_today):
-            return []
+            return [], "not_due"
 
         tags = sorted({g["metric_col"] for g in goals})
         cards = await list_verified_cards(tags=tags, limit=300)
         if not cards:
-            return []
+            return [], "no_cards"
         weight_ok = await weight_cards_allowed(user_id, today) if any(c.get("weight_related") for c in cards) else False
         picks = pick_cards(goals, cards, {r["card_id"] for r in recent if r.get("card_id")}, weight_ok, seed=f"{user_id}|{today.isoformat()}")
 
+        if not picks:
+            return [], "no_match"
         items = []
         for card, goal in picks:
             metric = get_metric(goal["metric_col"])
@@ -168,10 +173,15 @@ async def generate_for_user(user_id: str, forced: bool = False) -> list[dict]:
             )
             if item:
                 items.append(item)
-        return items
+        return items, "ok" if items else "error"
     except Exception as exc:
         logger.warning("Building feed cards failed for %s: %s", user_id[:8], exc)
-        return []
+        return [], "error"
+
+
+async def generate_for_user(user_id: str, forced: bool = False) -> list[dict]:
+    items, _ = await build_round(user_id, forced)
+    return items
 
 
 async def users_with_active_goals() -> list[str]:
