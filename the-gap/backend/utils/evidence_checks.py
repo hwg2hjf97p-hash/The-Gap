@@ -112,6 +112,22 @@ def sentence_count(text: Optional[str]) -> int:
     return len(SENTENCE_END.findall((text or "").strip()))
 
 
+FIELD_NAMES = {"title": "the title", "plain_summary": "the summary", "finding": "the finding", "population": "who was studied", "caution_notes": "the caution"}
+
+
+def where_found(card: dict, number: str) -> str:
+    """Where a number appears on the card, with a little of the surrounding text, so it can be found and fixed."""
+    for field in CLAIM_FIELDS:
+        text = card.get(field) or ""
+        for m in NUMBER.finditer(text):
+            if _plain(m.group(0)) == number:
+                snippet = text[max(0, m.start() - 28) : m.end() + 28].replace(chr(10), " ").strip()
+                return f'{number} (in {FIELD_NAMES[field]}: "…{snippet}…")'
+    if card.get("sample_size") is not None and str(int(card["sample_size"])) == number:
+        return f"{number} (the participant count saved with the card)"
+    return number
+
+
 def text_checks(card: dict, abstract: str) -> dict:
     """The checks that depend only on the card's own words and the abstract it came from."""
     allowed = allowed_numbers(abstract)
@@ -139,7 +155,7 @@ def text_checks(card: dict, abstract: str) -> dict:
 
     problems: list[str] = []
     if unsupported:
-        problems.append("Numbers not in the abstract: " + ", ".join(unsupported))
+        problems.append("Numbers not in the abstract: " + "; ".join(where_found(card, n) for n in unsupported))
     if banned:
         problems.append("Wording that tells people what to do or makes a claim: " + ", ".join(banned))
     problems += wording_problems

@@ -348,3 +348,16 @@ def test_drug_studies_are_not_collected():
     drug_body = {**base, "pubmed_id": "8", "abstract": "semaglutide " * 3 + "x" * 500}
     fine = {**base, "pubmed_id": "9", "abstract": "A mention of insulin therapy once. " + "x" * 500}
     assert [a["pubmed_id"] for a in evidence_seed.rank_candidates([drug_title, drug_body, fine])] == ["9"]
+
+
+def test_a_failed_number_check_says_where_the_number_is():
+    card = _card(finding="Across the studies pooled, research found that 8 of the trials showed a benefit.", population="Adults", sample_size=None)
+    checks = text_checks(card, REAL_ABSTRACT)
+    assert not checks["numbers_ok"]
+    message = " ".join(checks["problems"])
+    assert "8 (in the finding:" in message and "8 of the trials" in message
+
+
+def test_the_saved_participant_count_is_named_when_it_is_the_problem():
+    checks = text_checks(_card(population="Adults", sample_size=8), REAL_ABSTRACT)
+    assert "participant count" in " ".join(checks["problems"])
