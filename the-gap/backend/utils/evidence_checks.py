@@ -59,8 +59,9 @@ def numbers_in(text: Optional[str]) -> set[str]:
 
 def _word_value(phrase: str) -> Optional[int]:
     parts = re.split(r"[- ]", phrase.lower())
-    if len(parts) == 2 and parts[0] in WORD_TENS and parts[1] in WORD_UNITS:
-        return WORD_TENS[parts[0]] + WORD_UNITS[parts[1]]
+    tens = {**WORD_TENS, "twenty": 20}
+    if len(parts) == 2 and parts[0] in tens and parts[1] in WORD_UNITS:
+        return tens[parts[0]] + WORD_UNITS[parts[1]]
     word = parts[0]
     if word in WORD_UNITS:
         return WORD_UNITS[word]
