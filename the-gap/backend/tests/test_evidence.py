@@ -369,4 +369,4 @@ def test_a_failed_number_check_lists_the_numbers_the_abstract_does_contain():
     checks = text_checks(card, abstract)
     assert not checks["numbers_ok"] and checks["unsupported_numbers"] == ["8"]
     assert checks["abstract_numbers"] == ["1", "7", "854"]  # so the person editing can write what the abstract actually says
-    assert text_checks(_card(population="Older adults", sample_size=None), abstract)["abstract_numbers"] == []
+    assert text_checks(_card(finding="Research found a benefit.", population="Older adults", sample_size=None), abstract)["abstract_numbers"] == []
