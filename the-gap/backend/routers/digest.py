@@ -101,8 +101,10 @@ async def _build_goal_lines(user_id: str) -> list[str]:
 
     lines = []
     for goal in goals:
+        if goal.get("status") in ("achieved", "archived"):
+            continue  # a goal already reached has had its own card
         progress = await compute_goal_progress(user_id, goal)
-        if progress["current_avg"] is None:
+        if progress["current_avg"] is None or progress["on_track"] is None:
             continue
         status = "on track" if progress["on_track"] else "not quite there yet"
         lines.append(

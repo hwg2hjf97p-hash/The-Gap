@@ -31,6 +31,8 @@ from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
 from sync.polar_sync import fetch_polar_data
 from utils.data_cleaning import clean_dataframe
+from utils.goal_catalog import GOAL_HISTORY_COLUMNS
+from utils.goals import check_goal_achievements
 from utils.patterns import build_patterns
 from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
@@ -146,7 +148,8 @@ async def _persist_metric_history(user_id: str, df: pd.DataFrame) -> None:
     # intervention tracking a sleep_deep_min outcome would have no history
     # to compute a baseline/current comparison from (see
     # routers/interventions.py's base_metric()).
-    history_columns = list(METRIC_DISPLAY) + ["sleep_deep_min"]
+    # Goals need their own readings saved too (stress, screen time, workouts, ...).
+    history_columns = list(dict.fromkeys(list(METRIC_DISPLAY) + ["sleep_deep_min"] + GOAL_HISTORY_COLUMNS))
 
     try:
         records = []
@@ -523,6 +526,7 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
         logger.info("ENGINE_START user=%s days=%d", user_id[:8], len(health_df))
         df = await asyncio.to_thread(clean_dataframe, health_df)
         await _persist_metric_history(user_id, df)
+        await check_goal_achievements(user_id)  # never raises; posts a card for any goal now reached
         extra_hypotheses = await get_user_hypotheses(user_id)
         insights = await asyncio.to_thread(run_all_hypotheses, df, extra_hypotheses)
         insights_dicts = [i.to_dict() for i in insights]
