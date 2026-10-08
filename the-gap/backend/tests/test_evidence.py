@@ -361,3 +361,12 @@ def test_a_failed_number_check_says_where_the_number_is():
 def test_the_saved_participant_count_is_named_when_it_is_the_problem():
     checks = text_checks(_card(population="Adults", sample_size=8), REAL_ABSTRACT)
     assert "participant count" in " ".join(checks["problems"])
+
+
+def test_a_failed_number_check_lists_the_numbers_the_abstract_does_contain():
+    abstract = "The review included 7 randomized controlled trials and 1 quasi-experimental study, encompassing 854 participants."
+    card = _card(plain_summary="The review pooled data from 8 studies. It covered 854 participants. Results varied.", finding="Research found a benefit.", population="Older adults", sample_size=None)
+    checks = text_checks(card, abstract)
+    assert not checks["numbers_ok"] and checks["unsupported_numbers"] == ["8"]
+    assert checks["abstract_numbers"] == ["1", "7", "854"]  # so the person editing can write what the abstract actually says
+    assert text_checks(_card(population="Older adults", sample_size=None), abstract)["abstract_numbers"] == []

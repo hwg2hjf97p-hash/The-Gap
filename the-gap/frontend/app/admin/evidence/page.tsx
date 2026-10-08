@@ -19,6 +19,7 @@ type Checks = {
   numbers_ok?: boolean;
   wording_ok?: boolean;
   unsupported_numbers?: string[];
+  abstract_numbers?: string[];
   banned_found?: string[];
   problems?: string[];
 };
@@ -334,6 +335,10 @@ export default function EvidenceReview() {
                     <li key={p}>{p}</li>
                   ))}
                 </ul>
+              )}
+
+              {!c.numbers_ok && !!c.abstract_numbers?.length && !card.verified && (
+                <p style={{ color: colors.muted, fontSize: 12.5, marginTop: 6 }}>Numbers the abstract does contain: {c.abstract_numbers.join(", ")}</p>
               )}
 
               <details style={{ marginTop: 12 }}>

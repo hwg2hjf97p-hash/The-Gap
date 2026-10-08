@@ -51,7 +51,7 @@ GENERIC_CAUTION = "These are averages across groups of people, so results for an
 
 SYSTEM_PROMPT = """You turn one published research abstract into a short card for a health app.
 
-You may use ONLY information stated in the abstract you are given. Never add numbers, results, populations or claims that are not in it. Copy every number exactly as it is written in the abstract: the same digits and decimals. Never round, convert, combine or work out a new number (no averages, differences or totals). Write plain English for a general reader. Describe what the research found. Never give advice, instructions or recommendations, and never address the reader. Do not use these words anywhere: you, your, we, our, should, must, recommend, advise, cure, prevent, treat, heal, boost, prove, proven, guarantee.
+You may use ONLY information stated in the abstract you are given. Never add numbers, results, populations or claims that are not in it. Copy every number exactly as it is written in the abstract: the same digits and decimals. Never round, convert, combine or work out a new number (no averages, differences or totals). If the abstract says "7 randomized controlled trials and 1 quasi-experimental study", write exactly that, never "8 studies". Write plain English for a general reader. Describe what the research found. Never give advice, instructions or recommendations, and never address the reader. Do not use these words anywhere: you, your, we, our, should, must, recommend, advise, cure, prevent, treat, heal, boost, prove, proven, guarantee.
 
 Return a single JSON object and nothing else."""
 

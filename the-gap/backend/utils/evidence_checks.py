@@ -163,6 +163,7 @@ def text_checks(card: dict, abstract: str) -> dict:
     return {
         "numbers_ok": not unsupported,
         "unsupported_numbers": unsupported,
+        "abstract_numbers": sorted(allowed, key=float)[:40] if unsupported else [],
         "wording_ok": not banned and not wording_problems,
         "banned_found": banned,
         "problems": problems,
