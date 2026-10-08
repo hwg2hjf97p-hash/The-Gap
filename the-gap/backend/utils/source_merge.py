@@ -53,6 +53,7 @@ SOURCE_LABELS = {
     "oura": "Oura",
     "polar": "Polar",
     "withings": "Withings",
+    "manual": "Logged in the app",
     "strava": "Strava",
     "apple_health": "Apple Health",
 }
@@ -64,7 +65,7 @@ DEFAULT_PRIORITY: dict[str, list[str]] = {
     "recovery": ["whoop", "oura", "polar", "withings", "apple_health"],
     "activity": ["apple_health", "oura", "withings", "strava", "polar", "whoop"],
     "energy": ["apple_health", "oura", "whoop", "withings", "strava", "polar"],
-    "body": ["withings", "apple_health"],
+    "body": ["manual", "withings", "apple_health"],
 }
 GENERAL_ORDER = ["whoop", "oura", "polar", "withings", "strava", "apple_health"]
 

@@ -42,6 +42,7 @@ from routers.journal import get_journal_dataframe
 from routers.workouts import get_workout_dataframe
 from routers.nutrition import get_nutrition_dataframe
 from utils.assistant_signals import get_assistant_signal_dataframe
+from sync.weight_store import get_weight_dataframe
 from sync.apple_health_store import get_apple_health_dataframe
 from utils.source_merge import merge_sources, load_source_prefs
 from sync.device_calendar_store import get_device_calendar_dataframe
@@ -363,6 +364,15 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
                 providers_synced.append("apple_health")
     except Exception as exc:
         logger.warning("Apple Health merge failed (continuing without it): %s", exc)
+
+    # Weight logged by hand in the app counts as a source like any other.
+    try:
+        logged_weight = await get_weight_dataframe(user_id)
+        if logged_weight is not None and not logged_weight.empty:
+            frames["manual"] = logged_weight
+            providers_synced.append("weight_log")
+    except Exception as exc:
+        logger.warning("Logged weight merge failed (continuing without it): %s", exc)
 
     # One main source per kind of reading (sleep, recovery, activity, body),
     # as the person chose in Settings or by default. Before this the first

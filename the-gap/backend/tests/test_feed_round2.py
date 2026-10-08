@@ -37,14 +37,14 @@ def test_a_card_shown_in_the_last_60_days_is_never_chosen_again():
 def test_at_most_two_cards_and_one_per_goal_first():
     goals = [_goal("steps"), _goal("hrv"), _goal("sleep_total_min")]
     cards = [_card("s1", ["steps"]), _card("s2", ["steps"]), _card("h1", ["hrv"]), _card("z1", ["sleep_total_min"])]
-    picks = pick_cards(goals, cards, set(), True, "s")
+    picks = pick_cards(goals, cards, set(), True, "s", limit=2)
     assert len(picks) == 2
     assert len({g["metric_col"] for _, g in picks}) == 2  # two different goals, not two for steps
 
 
 def test_a_second_card_for_a_goal_is_used_when_there_is_room():
     cards = [_card("s1", ["steps"]), _card("s2", ["steps"]), _card("s3", ["steps"])]
-    picks = pick_cards([_goal("steps")], cards, set(), True, "s")
+    picks = pick_cards([_goal("steps")], cards, set(), True, "s", limit=2)
     assert len(picks) == 2 and len({c["id"] for c, _ in picks}) == 2
 
 
@@ -73,7 +73,7 @@ def test_a_round_is_at_most_every_two_days():
     assert due_for_round([], TODAY, False)
     assert not due_for_round([TODAY - timedelta(days=1)], TODAY, False)
     assert due_for_round([TODAY - timedelta(days=2)], TODAY, False)
-    assert not due_for_round([TODAY], TODAY, True, created_today=2)  # asking for more is limited to two a day
+    assert not due_for_round([TODAY], TODAY, True, created_today=4)  # asking for more is limited to four a day
     assert due_for_round([TODAY], TODAY, True, created_today=0)
 
 
@@ -391,3 +391,75 @@ def test_a_test_another_check_already_finished_is_not_posted_twice(monkeypatch):
     out = _finish_env(monkeypatch, started=TODAY - timedelta(days=14), patch_rows=[])
     assert asyncio.run(experiments.check_card_experiments("u1")) == []
     assert out["feed"] == []
+
+
+# a bigger feed: mostly goals, some to learn from
+
+LIBRARY = [
+    _card(f"c{i}", [tag], category=cat)
+    for i, (tag, cat) in enumerate(
+        [
+            ("steps", "fitness"), ("steps", "fitness"), ("steps", "fitness"), ("steps", "fitness"), ("steps", "fitness"),
+            ("sleep_total_min", "sleep"), ("sleep_total_min", "sleep"), ("hrv", "recovery"), ("hrv", "recovery"),
+            ("stress_score", "stress_mood"), ("water_ml", "habits"), ("workout_completed_flag", "fitness"),
+        ]
+    )
+]
+
+
+def _plan(goals, recent=frozenset(), first=False, room=None, weight=True, seed="s"):
+    return feed_selector.plan_round(goals, LIBRARY, set(recent), weight, seed, first_round=first, room=room)
+
+
+def test_a_normal_round_is_three_goal_cards_and_one_to_learn_from():
+    plan = _plan([_goal("steps")])
+    assert len(plan) == 4
+    assert sum(1 for _, g in plan if g is not None) == 3 and sum(1 for _, g in plan if g is None) == 1
+
+
+def test_the_first_round_is_bigger_so_the_feed_is_not_empty():
+    plan = _plan([_goal("steps")], first=True)
+    assert len(plan) == 6 and sum(1 for _, g in plan if g is None) == 2
+
+
+def test_explore_cards_come_from_other_subjects_and_other_categories():
+    plan = _plan([_goal("steps")], first=True)
+    explore = [c for c, g in plan if g is None]
+    assert all("steps" not in c["metric_tags"] for c in explore)
+    assert len({c["category"] for c in explore}) == len(explore)
+
+
+def test_the_feed_order_mixes_goal_and_explore_cards():
+    plan = _plan([_goal("steps")])
+    assert [g is None for _, g in plan] == [False, False, True, False]
+    assert feed_selector.interleave([1, 2, 3, 4], ["a"]) == [1, 2, "a", 3, 4]
+    assert feed_selector.interleave([1], ["a", "b"]) == [1, "a", "b"]
+
+
+def test_nothing_repeats_within_a_round_or_from_recent_cards():
+    recent = {"c0", "c1"}
+    plan = _plan([_goal("steps"), _goal("hrv")], recent=recent, first=True)
+    ids = [c["id"] for c, _ in plan]
+    assert len(ids) == len(set(ids)) and not (set(ids) & recent)
+
+
+def test_someone_with_no_goals_still_gets_studies_to_read():
+    plan = _plan([])
+    assert len(plan) == 2 and all(g is None for _, g in plan)
+    assert len(_plan([], first=True)) == 3
+
+
+def test_when_few_cards_match_a_goal_other_studies_make_up_the_numbers():
+    plan = _plan([_goal("stress_score")])
+    assert len(plan) == 4 and sum(1 for _, g in plan if g is not None) == 1
+
+
+def test_asking_for_research_yourself_is_capped_by_what_is_left_today():
+    assert len(_plan([_goal("steps")], first=True, room=2)) == 2
+    assert len(_plan([_goal("steps")], room=1)) == 1
+    assert _plan([_goal("steps")], room=0) == []
+
+
+def test_weight_cards_are_not_used_to_pad_the_feed_unless_allowed():
+    heavy = [_card("w1", ["steps"], weight=True), _card("w2", ["hrv"], weight=True)]
+    assert feed_selector.plan_round([_goal("steps")], heavy, set(), False, "s", first_round=False) == []

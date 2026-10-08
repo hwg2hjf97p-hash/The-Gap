@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from auth import get_current_user_id
 from utils.feed import attach_cards, list_feed, update_feed_item
-from utils.feed_selector import build_round, generate_for_user, users_with_active_goals
+from utils.feed_selector import build_round, generate_for_user, users_for_feed
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/feed", tags=["feed"])
@@ -73,7 +73,7 @@ async def run_round(x_sync_secret: str = Header(default="")) -> JSONResponse:
     elif not hmac.compare_digest(x_sync_secret.encode(), expected.encode()):
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
     try:
-        users = await users_with_active_goals()
+        users = await users_for_feed()
     except Exception as exc:
         logger.error("Listing users for the feed round failed: %s", exc)
         raise HTTPException(status_code=503, detail="Database unavailable.")

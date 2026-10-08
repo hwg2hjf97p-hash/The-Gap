@@ -47,7 +47,7 @@ CAN_SUPPLY = {
     "recovery": ["whoop", "oura", "withings", "polar", "apple_health"],
     "activity": ["apple_health", "whoop", "oura"],
     "energy": ["apple_health", "whoop", "oura"],
-    "body": ["withings"],
+    "body": ["manual", "withings"],
 }
 
 
@@ -93,6 +93,13 @@ async def _available_sources(user_id: str) -> list[str]:
             apple.raise_for_status()
             if apple.json():
                 available.append("apple_health")
+            logged = await client.get(
+                _sb_url("weight_log"), headers=_sb_headers(),
+                params={"user_id": f"eq.{user_id}", "select": "local_date", "limit": "1"},
+            )
+            logged.raise_for_status()
+            if logged.json():
+                available.append("manual")
     except Exception as exc:
         logger.warning("Listing available sources failed for %s: %s", user_id[:8], exc)
     return available

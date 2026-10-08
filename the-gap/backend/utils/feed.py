@@ -61,7 +61,7 @@ async def create_feed_item(
         return None
 
 
-async def list_feed(user_id: str, limit: int = 20) -> list[dict]:
+async def list_feed(user_id: str, limit: int = 30) -> list[dict]:
     """The person's cards that they haven't dismissed, newest first."""
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
