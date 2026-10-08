@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from auth import get_current_user_id
 from utils.feed import attach_cards, list_feed, update_feed_item
-from utils.feed_selector import build_round, generate_for_user, users_for_feed
+from utils.feed_selector import build_round, generate_for_user, start_top_up_if_low, users_for_feed
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/feed", tags=["feed"])
@@ -33,7 +33,9 @@ async def get_feed(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     except Exception as exc:
         logger.warning("Loading feed failed for %s: %s", user_id[:8], exc)
         items = []
-    return JSONResponse(content={"items": items})
+    # A feed running low is topped up in the background; "filling" tells the app to look again shortly.
+    filling = await start_top_up_if_low(user_id)
+    return JSONResponse(content={"items": items, "filling": filling})
 
 
 async def _mark(user_id: str, item_id: str, field: str) -> JSONResponse:

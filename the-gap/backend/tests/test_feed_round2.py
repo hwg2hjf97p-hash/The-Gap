@@ -73,7 +73,6 @@ def test_a_round_is_at_most_every_two_days():
     assert due_for_round([], TODAY, False)
     assert not due_for_round([TODAY - timedelta(days=1)], TODAY, False)
     assert due_for_round([TODAY - timedelta(days=2)], TODAY, False)
-    assert not due_for_round([TODAY], TODAY, True, created_today=4)  # asking for more is limited to four a day
     assert due_for_round([TODAY], TODAY, True, created_today=0)
 
 
@@ -454,7 +453,7 @@ def test_when_few_cards_match_a_goal_other_studies_make_up_the_numbers():
     assert len(plan) == 4 and sum(1 for _, g in plan if g is not None) == 1
 
 
-def test_asking_for_research_yourself_is_capped_by_what_is_left_today():
+def test_asking_for_research_yourself_is_capped_by_what_is_left_today_old():
     assert len(_plan([_goal("steps")], first=True, room=2)) == 2
     assert len(_plan([_goal("steps")], room=1)) == 1
     assert _plan([_goal("steps")], room=0) == []

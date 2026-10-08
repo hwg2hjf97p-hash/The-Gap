@@ -12,9 +12,10 @@ Rules:
     preferring subjects that aren't about a goal they already have, from
     different categories. People with no goal get these only.
   - Never a card shown to them in the last 60 days.
-  - A round is at most every two days: 4 cards (3 goal, 1 explore), or 6 the
-    very first time so the feed isn't empty (4 goal, 2 explore). Asking for
-    research yourself is capped at 4 cards a day.
+  - The feed keeps a stock of cards the person hasn't looked at yet: whenever
+    fewer than 8 are waiting it is topped up to 12 (about three goal cards for
+    every other study). Otherwise a round of 4 (3 goal, 1 explore) is added at
+    most every two days. No more than 16 cards are added in a day.
   - Cards are created so they appear in the feed as goal, goal, explore, goal ...
   - Cards about body weight only reach people whose BMI is 25 or above.
   - Dates are the person's own calendar days (Australia/Brisbane when unknown).
@@ -48,7 +49,10 @@ FIRST_ROUND_EXPLORE_CARDS = 2
 NO_GOAL_ROUND_CARDS = 2
 NO_GOAL_FIRST_ROUND_CARDS = 3
 MAX_PER_ROUND = ROUND_GOAL_CARDS  # goal cards in a normal round (kept for older callers)
-MAX_FORCED_PER_DAY = 4
+MAX_FORCED_PER_DAY = 4  # older name, no longer used
+RESERVOIR_MIN = 8
+RESERVOIR_TARGET = 12
+DAILY_CAP = 16
 WEIGHT_CARD_MIN_BMI = 25.0
 
 
@@ -63,6 +67,27 @@ def _sb_headers() -> dict:
 
 
 # ── pure rules ───────────────────────────────────────────────────────────────
+
+def decide_round(unseen: int, created_today: int, last_dates: list[date], today: date, forced: bool, top_up: bool) -> tuple[bool, Optional[int]]:
+    """
+    (whether to add cards now, how many; None means the usual round size).
+
+    A feed running low is always topped up; a person asking for research gets at
+    least a normal round; otherwise a round comes at most every two days.
+    """
+    room = DAILY_CAP - created_today
+    if room <= 0:
+        return False, None
+    if unseen < RESERVOIR_MIN:
+        return True, min(RESERVOIR_TARGET - unseen, room)
+    if forced:
+        return True, min(max(4, RESERVOIR_TARGET - unseen), room)
+    if top_up:
+        return False, None
+    if any(today - d < timedelta(days=MIN_GAP_DAYS) for d in last_dates):
+        return False, None
+    return True, None
+
 
 def due_for_round(last_dates: list[date], today: date, forced: bool, created_today: int = 0) -> bool:
     """Whether a new round of cards may be added now."""
@@ -158,12 +183,16 @@ def interleave(goal_items: list, explore_items: list) -> list:
     return out
 
 
-def plan_round(goals: list[dict], cards: list[dict], recent_card_ids: set[str], weight_ok: bool, seed: str, first_round: bool, room: Optional[int] = None) -> list[tuple[dict, Optional[dict]]]:
+def plan_round(goals: list[dict], cards: list[dict], recent_card_ids: set[str], weight_ok: bool, seed: str, first_round: bool, room: Optional[int] = None, size: Optional[int] = None) -> list[tuple[dict, Optional[dict]]]:
     """
     This round's cards in the order they should appear in the feed, as (card, goal)
     where goal is None for an explore card. `room` caps how many may be added.
     """
-    if goals:
+    if size is not None:
+        # A top-up of a given size: about three goal cards for every other study.
+        explore_n = size // 4 if goals else size
+        goal_n = size - explore_n if goals else 0
+    elif goals:
         goal_n = FIRST_ROUND_GOAL_CARDS if first_round else ROUND_GOAL_CARDS
         explore_n = FIRST_ROUND_EXPLORE_CARDS if first_round else ROUND_EXPLORE_CARDS
     else:
@@ -199,6 +228,18 @@ async def _recent_items(user_id: str, today: date) -> list[dict]:
         return resp.json() or []
 
 
+async def unseen_count(user_id: str) -> int:
+    """How many research cards are waiting in the feed that the person hasn't looked at or dismissed."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            _sb_url("feed_items"),
+            headers=_sb_headers(),
+            params={"user_id": f"eq.{user_id}", "kind": "eq.check_this_out", "seen_at": "is.null", "dismissed_at": "is.null", "select": "id", "limit": "200"},
+        )
+        resp.raise_for_status()
+        return len(resp.json() or [])
+
+
 async def weight_cards_allowed(user_id: str, today: date) -> bool:
     """True only when height and a recent weight are known and the BMI is at least 25."""
     height = await get_height_cm(user_id)
@@ -210,7 +251,7 @@ async def weight_cards_allowed(user_id: str, today: date) -> bool:
     return bmi(points[-1][1], height) >= WEIGHT_CARD_MIN_BMI
 
 
-async def build_round(user_id: str, forced: bool = False) -> tuple[list[dict], str]:
+async def build_round(user_id: str, forced: bool = False, top_up: bool = False) -> tuple[list[dict], str]:
     """
     Adds this round's cards to one person's feed. Returns (the feed items created, why it is empty or "ok").
     reason: ok | not_due | no_cards | no_match | error. Never raises.
@@ -221,7 +262,8 @@ async def build_round(user_id: str, forced: bool = False) -> tuple[list[dict], s
         recent = await _recent_items(user_id, today)
         dates = [date.fromisoformat(r["local_date"]) for r in recent if r.get("local_date")]
         created_today = sum(1 for d in dates if d == today)
-        if not due_for_round(dates, today, forced, created_today):
+        due, size = decide_round(await unseen_count(user_id), created_today, dates, today, forced, top_up)
+        if not due:
             return [], "not_due"
 
         # Goal cards need a tag match; explore cards can be anything, so the whole approved library is read.
@@ -229,8 +271,8 @@ async def build_round(user_id: str, forced: bool = False) -> tuple[list[dict], s
         if not cards:
             return [], "no_cards"
         weight_ok = await weight_cards_allowed(user_id, today) if any(c.get("weight_related") for c in cards) else False
-        room = MAX_FORCED_PER_DAY - created_today if forced else None
-        plan = plan_round(goals, cards, {r["card_id"] for r in recent if r.get("card_id")}, weight_ok, f"{user_id}|{today.isoformat()}", first_round=not recent, room=room)
+        room = DAILY_CAP - created_today
+        plan = plan_round(goals, cards, {r["card_id"] for r in recent if r.get("card_id")}, weight_ok, f"{user_id}|{today.isoformat()}|{created_today}", first_round=not recent, room=room, size=size)
         if not plan:
             return [], "no_match"
 
@@ -271,6 +313,36 @@ async def users_for_feed() -> list[str]:
             resp.raise_for_status()
             ids |= {r["user_id"] for r in resp.json() or [] if r.get("user_id")}
     return sorted(ids)
+
+
+_TOP_UP_GAP_SECONDS = 600
+_last_top_up: dict[str, float] = {}
+_tasks: set = set()
+
+
+async def start_top_up_if_low(user_id: str) -> bool:
+    """
+    Opening the feed with fewer than a handful of unseen cards starts a top-up in
+    the background and says so, so the app can look again in a few seconds. Tried
+    at most every ten minutes per person, so a library with nothing left to show
+    isn't searched on every visit.
+    """
+    import asyncio
+    import time
+
+    now = time.time()
+    if now - _last_top_up.get(user_id, 0.0) < _TOP_UP_GAP_SECONDS:
+        return False
+    try:
+        if await unseen_count(user_id) >= RESERVOIR_MIN:
+            return False
+    except Exception:
+        return False
+    _last_top_up[user_id] = now
+    task = asyncio.create_task(build_round(user_id, top_up=True))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return True
 
 
 # Older name, kept so existing imports keep working.
