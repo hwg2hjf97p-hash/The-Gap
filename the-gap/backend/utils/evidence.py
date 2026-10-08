@@ -42,6 +42,16 @@ async def get_verified_card(card_id: str) -> Optional[dict]:
         return rows[0] if rows else None
 
 
+async def get_verified_cards(card_ids: list[str]) -> dict[str, dict]:
+    """Approved cards by id. An id that is missing, unapproved or rejected is simply absent from the result."""
+    if not card_ids:
+        return {}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(_sb_url("evidence_cards"), headers=_sb_headers(), params=verified_params({"id": f"in.({','.join(card_ids)})"}))
+        resp.raise_for_status()
+        return {c["id"]: c for c in resp.json() or []}
+
+
 async def list_verified_cards(tags: Optional[list[str]] = None, category: Optional[str] = None, limit: int = 100) -> list[dict]:
     extra: dict = {"limit": str(limit)}
     if tags:

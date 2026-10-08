@@ -31,6 +31,7 @@ from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
 from sync.polar_sync import fetch_polar_data
 from utils.data_cleaning import clean_dataframe
+from utils.experiments import check_card_experiments
 from utils.goal_catalog import GOAL_HISTORY_COLUMNS
 from utils.goals import check_goal_achievements
 from utils.patterns import build_patterns
@@ -593,6 +594,8 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             await check_proactive_nudge(user_id, df, insights_dicts, active_ids)
         except Exception as exc:
             logger.warning("Proactive nudge step failed for %s: %s", user_id[:8], exc)
+
+        await check_card_experiments(user_id)  # never raises
 
         try:
             await check_intervention_followups(user_id)

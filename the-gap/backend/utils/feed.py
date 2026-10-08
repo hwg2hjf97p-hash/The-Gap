@@ -73,6 +73,29 @@ async def list_feed(user_id: str, limit: int = 20) -> list[dict]:
         return resp.json() or []
 
 
+async def attach_cards(user_id: str, items: list[dict]) -> list[dict]:
+    """
+    Fills in the research card on "Check this out" items, read fresh from the
+    approved library. An item whose card has since been taken out of use
+    (unapproved or rejected) is dropped, so nothing unapproved is ever shown.
+    """
+    from routers.interventions import get_active_hypothesis_ids
+    from utils.evidence import DISCLAIMER, get_verified_cards
+
+    ids = sorted({i["card_id"] for i in items if i.get("kind") == "check_this_out" and i.get("card_id")})
+    cards = await get_verified_cards(ids)
+    active = await get_active_hypothesis_ids(user_id) if ids else set()
+    out = []
+    for item in items:
+        if item.get("kind") == "check_this_out":
+            card = cards.get(item.get("card_id") or "")
+            if not card:
+                continue
+            item = {**item, "card": card, "disclaimer": DISCLAIMER, "experiment_active": f"card:{card['id']}" in active}
+        out.append(item)
+    return out
+
+
 async def update_feed_item(user_id: str, item_id: str, fields: dict) -> bool:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.patch(

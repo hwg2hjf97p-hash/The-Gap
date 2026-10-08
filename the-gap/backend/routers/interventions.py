@@ -215,6 +215,8 @@ async def check_intervention_followups(user_id: str) -> None:
         return
 
     for iv in active:
+        if str(iv.get("hypothesis_id", "")).startswith("card:"):
+            continue  # tests started from a research card are finished (and worded) by utils/experiments.py
         try:
             started = datetime.strptime(iv["started_date"], "%Y-%m-%d").date()
             due = started + timedelta(days=iv.get("follow_up_days") or FOLLOW_UP_DAYS_DEFAULT)
