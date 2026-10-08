@@ -24,7 +24,7 @@ def test_options_only_list_sources_that_really_report_the_reading():
     assert "whoop" in CAN_SUPPLY["activity"]              # Whoop reports steps per cycle
     assert "strava" not in CAN_SUPPLY["activity"] and "strava" not in CAN_SUPPLY["energy"]
     assert "whoop" in CAN_SUPPLY["energy"]
-    assert CAN_SUPPLY["body"] == ["withings"]             # Apple Health has no weight here
+    assert CAN_SUPPLY["body"] == ["manual", "withings"]  # weight logged in the app, or a Withings scale; Apple Health has none here
 
 
 def test_the_default_for_calories_is_apple_health_and_steps_are_untouched():
