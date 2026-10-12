@@ -420,6 +420,60 @@ async def log_food(body: LogFoodRequest, user_id: str = Depends(get_current_user
     return JSONResponse(content={"entry": row})
 
 
+class EditFoodRequest(BaseModel):
+    """Any of these can be changed on an entry already logged. Left out means left as it was."""
+    servings: Optional[float] = Field(default=None, gt=0, le=50)
+    meal: Optional[Literal["breakfast", "lunch", "dinner", "snack"]] = None
+    local_hour: Optional[float] = Field(default=None, ge=0, lt=24)
+    local_date: Optional[str] = None
+
+
+def rescaled_totals(row: dict, new_servings: float) -> dict:
+    """The entry's totals for a new number of servings, worked out from what it was logged with."""
+    old = float(row.get("servings") or 0)
+    if old <= 0:
+        raise ValueError("entry has no servings to scale from")
+    return {k: round(float(row.get(k) or 0) / old * new_servings, 1) for k in MACRO_KEYS}
+
+
+@router.patch("/log/{entry_id}")
+async def edit_food_entry(entry_id: str, body: EditFoodRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    changes: dict = {}
+    if body.local_date is not None:
+        changes["local_date"] = _check_date(body.local_date)
+    if body.meal is not None:
+        changes["meal"] = body.meal
+    if body.local_hour is not None:
+        changes["local_hour"] = body.local_hour
+    if not changes and body.servings is None:
+        raise HTTPException(status_code=400, detail="Nothing to change.")
+    where = {"id": f"eq.{entry_id}", "user_id": f"eq.{user_id}"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            if body.servings is not None:
+                found = await client.get(_sb_url("food_log"), headers=_sb_headers(), params={**where, "select": "*", "limit": "1"})
+                found.raise_for_status()
+                rows = found.json() or []
+                if not rows:
+                    raise HTTPException(status_code=404, detail="That entry wasn't found.")
+                totals = rescaled_totals(rows[0], body.servings)
+                if totals["calories"] > 10000:
+                    raise HTTPException(status_code=400, detail="That's more than 10,000 kcal in one entry — check the amount.")
+                changes["servings"] = body.servings
+                changes.update(totals)
+            resp = await client.patch(_sb_url("food_log"), headers=_sb_headers("return=representation"), params=where, json=changes)
+            resp.raise_for_status()
+            updated = resp.json() or []
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Editing food entry failed for %s: %s", user_id[:8], exc)
+        raise HTTPException(status_code=500, detail="Couldn't save that — please try again.")
+    if not updated:
+        raise HTTPException(status_code=404, detail="That entry wasn't found.")
+    return JSONResponse(content={"entry": updated[0]})
+
+
 @router.delete("/log/{entry_id}")
 async def delete_food_entry(entry_id: str, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     try:
