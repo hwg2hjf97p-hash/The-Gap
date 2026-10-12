@@ -1,0 +1,291 @@
+"""
+One door for quick logs: something typed into Quick Entry now, and later
+something said to Siri or run from a Shortcut or the Action Button.
+
+  POST /log/text                      a sentence; it is sorted into water, saved foods and meals,
+                                      cigarettes, alcohol, coffee, energy drinks, weight, or a note
+  GET  /log/food-notes                foods mentioned that weren't saved, waiting to be logged in the app
+  POST /log/food-notes/{id}/resolve   mark one done
+
+The sorting itself is utils/log_router.py (plain word matching, no AI). Every
+sentence is also kept as a Quick Entry note with its exact time, whatever else
+was done with it, so a wrong guess never loses anything.
+
+Table DDL: see phase10.sql.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import date as date_type, datetime, timezone
+from typing import Optional
+from zoneinfo import ZoneInfo
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from auth import get_current_user_id
+from routers.journal import _count_today, _get_streak, save_note
+from routers.weight import save_weight
+from utils.local_time import DEFAULT_TZ
+from utils.log_router import Action, Parsed, parse_log, spoken_summary, time_bucket
+from utils.saved_logging import (
+    _sb_headers,
+    _sb_url,
+    bump_use,
+    insert_food_rows,
+    load_saved,
+    saved_food_rows,
+    saved_meal_rows,
+    too_big,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/log", tags=["log"])
+
+MAX_TEXT = 500
+COUNT_FIELDS = {
+    "cigarettes": "cigarettes",
+    "alcohol": "alcohol_drinks",
+    "caffeine": "caffeine_drinks",
+    "energy_drink": "energy_drinks",
+}
+
+
+class LogTextBody(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_TEXT)
+    local_date: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    tz: Optional[str] = Field(default=None, max_length=64)
+    source: Optional[str] = Field(default="app", max_length=20)
+
+
+def local_clock(occurred_at: Optional[datetime], tz_name: Optional[str]) -> tuple[datetime, datetime, str]:
+    """(the moment in UTC, the same moment where the person was, the time zone used)."""
+    moment = occurred_at or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    moment = moment.astimezone(timezone.utc)
+    for name in (tz_name, DEFAULT_TZ):
+        if not name:
+            continue
+        try:
+            return moment, moment.astimezone(ZoneInfo(name)), name
+        except Exception:
+            continue
+    return moment, moment, "UTC"
+
+
+def hour_of(local: datetime) -> float:
+    return round(local.hour + local.minute / 60.0, 2)
+
+
+# ── applying what was understood ─────────────────────────────────────────────
+
+async def _add_to_checkin(client: httpx.AsyncClient, user_id: str, day: str, hour: float, adds: dict[str, float], alcohol: bool, pm_caffeine: bool) -> dict[str, int]:
+    """
+    Adds to today's check-in counts without touching anything else in it. A day that has no
+    check-in yet gets a partial one, whose unanswered questions stay unanswered (null), not "no".
+    Returns the new totals for the counts that changed.
+    """
+    resp = await client.get(_sb_url("daily_checkins"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "date": f"eq.{day}", "select": "*", "limit": "1"})
+    resp.raise_for_status()
+    rows = resp.json() or []
+    existing = rows[0] if rows else None
+
+    payload: dict = {"user_id": user_id, "date": day}
+    totals: dict[str, int] = {}
+    for field, amount in adds.items():
+        total = int((existing or {}).get(field) or 0) + int(round(amount))
+        payload[field] = total
+        totals[field] = total
+    bucket = time_bucket(hour)
+    if "alcohol_drinks" in adds:
+        payload["alcohol"] = True
+        if not (existing or {}).get("alcohol_time"):
+            payload["alcohol_time"] = bucket
+    if "energy_drinks" in adds and not (existing or {}).get("energy_drink_time"):
+        payload["energy_drink_time"] = bucket
+    if pm_caffeine:
+        payload["afternoon_caffeine"] = True
+    if existing is None:
+        payload["partial"] = True
+        payload.setdefault("alcohol", None)
+        payload.setdefault("afternoon_caffeine", None)
+
+    droppable = {"partial", "caffeine_drinks", "alcohol_time", "energy_drink_time"}
+    for _ in range(len(droppable) + 1):
+        save = await client.post(
+            _sb_url("daily_checkins"),
+            headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
+            params={"on_conflict": "user_id,date"},
+            json=payload,
+        )
+        if save.status_code == 400 and "PGRST204" in save.text:
+            missing = next((c for c in droppable if f"'{c}'" in save.text and c in payload), None)
+            if missing:
+                payload.pop(missing)
+                totals.pop(missing, None)
+                continue
+        save.raise_for_status()
+        return totals
+    raise RuntimeError("daily_checkins rejected the log")
+
+
+async def _water_today(client: httpx.AsyncClient, user_id: str, day: str) -> int:
+    resp = await client.get(_sb_url("water_log"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "local_date": f"eq.{day}", "select": "amount_ml"})
+    resp.raise_for_status()
+    return sum(int(r["amount_ml"]) for r in resp.json() or [])
+
+
+async def _add_water(client: httpx.AsyncClient, user_id: str, day: str, hour: float, ml: int) -> int:
+    row = {"user_id": user_id, "local_date": day, "amount_ml": ml, "local_hour": hour}
+    resp = await client.post(_sb_url("water_log"), headers=_sb_headers("return=minimal"), json=row)
+    if resp.status_code == 400 and "PGRST204" in resp.text:
+        row.pop("local_hour")  # the time-of-day column isn't there yet
+        resp = await client.post(_sb_url("water_log"), headers=_sb_headers("return=minimal"), json=row)
+    resp.raise_for_status()
+    return await _water_today(client, user_id, day)
+
+
+async def apply_actions(user_id: str, parsed: Parsed, day: str, hour: float) -> tuple[list[dict], list[str]]:
+    """Does what was understood. Returns (what was logged, for the app; the same as short phrases for speaking)."""
+    logged: list[dict] = []
+    phrases: list[str] = []
+    count_adds: dict[str, float] = {}
+    count_actions: dict[str, Action] = {}
+    for action in parsed.actions:
+        if action.kind in COUNT_FIELDS:
+            count_adds[COUNT_FIELDS[action.kind]] = count_adds.get(COUNT_FIELDS[action.kind], 0) + action.amount
+            count_actions[COUNT_FIELDS[action.kind]] = action
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        # Check-in counts, together in one save
+        if count_adds:
+            try:
+                totals = await _add_to_checkin(client, user_id, day, hour, count_adds, "alcohol_drinks" in count_adds, "caffeine_drinks" in count_adds and hour >= 14)
+                for field, action in count_actions.items():
+                    if field not in totals:
+                        continue
+                    logged.append({"kind": action.kind, "summary": f"{action.label} ({totals[field]} today)"})
+                    phrases.append(f"{action.label}, {totals[field]} today" if len(count_actions) == 1 else action.label)
+            except Exception as exc:
+                logger.error("Adding to the check-in failed for %s: %s", user_id[:8], exc)
+
+        foods, meals = (None, None)
+        for action in parsed.actions:
+            try:
+                if action.kind == "water":
+                    total = await _add_water(client, user_id, day, hour, int(action.amount))
+                    logged.append({"kind": "water", "summary": f"{action.label} ({total} ml today)"})
+                    phrases.append(f"{action.label}, {total} ml today")
+                elif action.kind == "weight":
+                    await save_weight(user_id, day, float(action.amount))
+                    logged.append({"kind": "weight", "summary": f"Weight {action.label}"})
+                    phrases.append(f"your weight, {action.label}")
+                elif action.kind in ("saved_food", "saved_meal"):
+                    if foods is None:
+                        foods, meals = await load_saved(client, user_id)
+                    if action.kind == "saved_food":
+                        item = next((f for f in foods or [] if f["id"] == action.ref_id), None)
+                        rows = saved_food_rows(user_id, item, action.servings, day, hour, None) if item else []
+                        table = "saved_foods"
+                    else:
+                        item = next((m for m in meals or [] if m["id"] == action.ref_id), None)
+                        rows = saved_meal_rows(user_id, item, action.servings, day, hour, None) if item else []
+                        table = "saved_meals"
+                    if not item or not rows or too_big(rows):
+                        continue
+                    await insert_food_rows(client, rows)
+                    await bump_use(client, table, user_id, item)
+                    kcal = round(sum(r["calories"] for r in rows))
+                    name = action.label if action.servings == 1 else f"{action.servings:g} × {action.label}"
+                    logged.append({"kind": action.kind, "summary": f"{name} ({kcal} kcal)"})
+                    phrases.append(f"your {action.label}" if action.servings == 1 else f"{action.servings:g} {action.label}")
+            except Exception as exc:
+                logger.error("Applying a %s log failed for %s: %s", action.kind, user_id[:8], exc)
+    return logged, phrases
+
+
+async def process_log_text(user_id: str, text: str, local_date: Optional[str], occurred_at: Optional[datetime], tz: Optional[str], source: str) -> dict:
+    """Sorts one sentence, does what it understood, keeps the sentence as a note, and says what happened."""
+    text = " ".join(text.split())[:MAX_TEXT]
+    moment, local, tz_used = local_clock(occurred_at, tz)
+    day = local_date or local.date().isoformat()
+    try:
+        date_type.fromisoformat(day)
+    except ValueError:
+        day = local.date().isoformat()
+    hour = hour_of(local)
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        foods, meals = await load_saved(client, user_id)
+    parsed = parse_log(text, hour, foods, meals)
+
+    logged, phrases = await apply_actions(user_id, parsed, day, hour)
+    food_note = any(a.kind == "food_note" for a in parsed.actions)
+    try:
+        await save_note(
+            user_id, text, day, moment, tz_used, source,
+            routed_to=[{"kind": item["kind"], "summary": item["summary"]} for item in logged] or None,
+            food_note=food_note,
+        )
+    except Exception as exc:
+        logger.error("Saving the note failed for %s: %s", user_id[:8], exc)
+        raise HTTPException(status_code=500, detail="Could not save that. Please try again.")
+
+    count_today = await _count_today(user_id, day)
+    streak = await _get_streak(user_id, day)
+    return {
+        "success": True,
+        "count_today": count_today,
+        "streak": streak,
+        "logged": logged,
+        "food_note": food_note,
+        "spoken": spoken_summary(phrases, not logged, parsed.unsure, food_note and not logged),
+    }
+
+
+@router.post("/text")
+async def log_text(body: LogTextBody, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="Entry can't be empty.")
+    result = await process_log_text(user_id, body.text, body.local_date, body.occurred_at, body.tz, body.source or "app")
+    return JSONResponse(content=result)
+
+
+@router.get("/food-notes")
+async def food_notes(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """Foods said or typed that weren't saved foods, waiting to be logged properly."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _sb_url("quick_entries"),
+                headers=_sb_headers(),
+                params={"user_id": f"eq.{user_id}", "food_note": "eq.true", "resolved_at": "is.null", "select": "id,entry_text,local_date,occurred_at", "order": "created_at.desc", "limit": "10"},
+            )
+            resp.raise_for_status()
+            return JSONResponse(content={"notes": resp.json() or []})
+    except Exception as exc:
+        logger.info("Loading food notes failed (continuing without them): %s", exc)
+        return JSONResponse(content={"notes": []})
+
+
+@router.post("/food-notes/{note_id}/resolve")
+async def resolve_food_note(note_id: str, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.patch(
+                _sb_url("quick_entries"),
+                headers=_sb_headers("return=minimal"),
+                params={"id": f"eq.{note_id}", "user_id": f"eq.{user_id}"},
+                json={"resolved_at": datetime.now(timezone.utc).isoformat()},
+            )
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.error("Resolving a food note failed for %s: %s", user_id[:8], exc)
+        raise HTTPException(status_code=500, detail="Couldn't update that.")
+    return JSONResponse(content={"success": True})
+

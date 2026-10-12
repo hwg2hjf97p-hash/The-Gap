@@ -93,6 +93,8 @@ from routers import demo
 from routers import feed
 from routers import evidence
 from routers import weight
+from routers import log as log_router
+from routers import saved_foods
 from routers import evidence_admin
 from routers import app_config
 from sync import daily_sync
@@ -132,13 +134,15 @@ app.include_router(demo.router)
 app.include_router(feed.router)
 app.include_router(evidence.router)
 app.include_router(weight.router)
+app.include_router(log_router.router)
+app.include_router(saved_foods.router)
 app.include_router(evidence_admin.router)
 app.include_router(app_config.router)
 
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "feed-3"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "log-1"}
 
 @app.get("/")
 def root():

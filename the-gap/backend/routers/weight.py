@@ -77,6 +77,27 @@ async def _summary(user_id: str, today: date) -> dict:
     return {"latest": rows[0] if rows else None, "average_7d": None if average is None else round(average, 2), "points_7d": points}
 
 
+async def save_weight(user_id: str, day: str, kg: float) -> None:
+    """Saves one day's weight and puts it in the history the goals read. Raises if it couldn't be saved."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            _sb_url("weight_log"),
+            headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
+            params={"on_conflict": "user_id,local_date"},
+            json={"user_id": user_id, "local_date": day, "weight_kg": kg},
+        )
+        resp.raise_for_status()
+        # Goals read metric_history, so put it there now rather than waiting for the next sync.
+        history = await client.post(
+            _sb_url("metric_history"),
+            headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
+            params={"on_conflict": "user_id,date,metric"},
+            json=[{"user_id": user_id, "date": day, "metric": "weight_kg", "value": kg}],
+        )
+        history.raise_for_status()
+    await check_goal_achievements(user_id)
+
+
 @router.post("")
 async def log_weight(body: WeightBody, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     today = await user_today(user_id)
@@ -86,26 +107,10 @@ async def log_weight(body: WeightBody, user_id: str = Depends(get_current_user_i
     day = (body.local_date or today).isoformat()
     kg = round(body.weight_kg, 2)
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                _sb_url("weight_log"),
-                headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
-                params={"on_conflict": "user_id,local_date"},
-                json={"user_id": user_id, "local_date": day, "weight_kg": kg},
-            )
-            resp.raise_for_status()
-            # Goals read metric_history, so put it there now rather than waiting for the next sync.
-            history = await client.post(
-                _sb_url("metric_history"),
-                headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
-                params={"on_conflict": "user_id,date,metric"},
-                json=[{"user_id": user_id, "date": day, "metric": "weight_kg", "value": kg}],
-            )
-            history.raise_for_status()
+        await save_weight(user_id, day, kg)
     except Exception as exc:
         logger.error("Saving weight failed for %s: %s", user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Couldn't save that weight. Please try again.")
-    await check_goal_achievements(user_id)
     return JSONResponse(content={"saved": {"local_date": day, "weight_kg": kg}, **await _summary(user_id, today)})
 
 

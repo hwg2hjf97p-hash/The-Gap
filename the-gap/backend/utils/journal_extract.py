@@ -24,7 +24,7 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 # quality benefit.
 MODEL = "claude-haiku-4-5-20251001"
 
-EXTRACTION_SYSTEM_PROMPT = """You extract structured daily signals from a user's short, informal journal notes for a health-analytics app. You will receive several short notes a person jotted down over one day.
+EXTRACTION_SYSTEM_PROMPT = """You extract structured daily signals from a user's short, informal journal notes for a health-analytics app. You will receive several short notes a person jotted down over one day. Each note may begin with the time it was written in square brackets, like [2:15 pm]; use it to understand the order of the day, and never repeat it in the summary.
 
 Respond with ONLY a JSON object, no other text, no markdown fences. Exact shape:
 {

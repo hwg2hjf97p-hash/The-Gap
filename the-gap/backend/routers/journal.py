@@ -81,6 +81,48 @@ class QuickEntryRequest(BaseModel):
     # Optional for backward compatibility with an un-updated app version —
     # falls back to server-derived UTC date if not provided, same as before.
     local_date: Optional[str] = None
+    # The exact moment, and the time zone it was in, so the clock time where the person was is never lost.
+    occurred_at: Optional[datetime] = None
+    tz: Optional[str] = Field(default=None, max_length=64)
+
+
+async def save_note(
+    user_id: str,
+    text: str,
+    local_date: Optional[str],
+    occurred_at: Optional[datetime] = None,
+    tz: Optional[str] = None,
+    source: Optional[str] = None,
+    routed_to: Optional[list] = None,
+    food_note: bool = False,
+) -> None:
+    """
+    Saves one Quick Entry row. Columns added later (exact time, where it was routed) are left
+    out if the table doesn't have them yet, so a note is never lost to a missing column.
+    """
+    full = {
+        "user_id": user_id,
+        "entry_text": text,
+        "local_date": local_date,
+        "occurred_at": occurred_at.isoformat() if occurred_at else None,
+        "tz": tz,
+        "source": source,
+        "routed_to": routed_to or None,
+        "food_note": food_note,
+    }
+    optional = ["occurred_at", "tz", "source", "routed_to", "food_note"]
+    payload = dict(full)
+    async with httpx.AsyncClient(timeout=15) as client:
+        for _ in range(len(optional) + 1):
+            resp = await client.post(_sb_url("quick_entries"), headers=_sb_headers(prefer="return=minimal"), json=payload)
+            if resp.status_code == 400 and "PGRST204" in resp.text:
+                missing = next((c for c in optional if f"'{c}'" in resp.text and c in payload), None)
+                if missing:
+                    payload.pop(missing)
+                    continue
+            resp.raise_for_status()
+            return
+    raise RuntimeError("quick_entries rejected the entry")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -92,16 +134,8 @@ async def create_entry(body: QuickEntryRequest, user_id: str = Depends(get_curre
     if not text:
         raise HTTPException(status_code=400, detail="Entry can't be empty.")
 
-    payload = {"user_id": user_id, "entry_text": text, "local_date": body.local_date}
-
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                _sb_url("quick_entries"),
-                headers=_sb_headers(prefer="return=minimal"),
-                json=payload,
-            )
-            resp.raise_for_status()
+        await save_note(user_id, text, body.local_date, body.occurred_at, body.tz, "app")
     except Exception as exc:
         logger.error("Quick entry save failed: %s", exc)
         raise HTTPException(status_code=500, detail="Could not save entry.")
@@ -311,6 +345,24 @@ async def _save_extraction(user_id: str, entry_date: str, entry_count: int, sign
         logger.warning("Saving extraction failed (will re-extract next sync): %s", exc)
 
 
+def with_clock_time(row: dict) -> str:
+    """The entry text, led by the time it happened where the person was, e.g. "[2:15 pm] boss yelled at me"."""
+    text = row["entry_text"]
+    moment = row.get("occurred_at")
+    if not moment:
+        return text
+    try:
+        from zoneinfo import ZoneInfo
+
+        when = datetime.fromisoformat(str(moment).replace("Z", "+00:00"))
+        if row.get("tz"):
+            when = when.astimezone(ZoneInfo(row["tz"]))
+        clock = when.strftime("%I:%M %p").lstrip("0").lower()
+        return f"[{clock}] {text}"
+    except Exception:
+        return text
+
+
 async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """
     Fetch quick entries for the last N days, group by date, and return a
@@ -335,7 +387,7 @@ async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
                 params={
                     "user_id": f"eq.{user_id}",
                     "created_at": f"gte.{since}",
-                    "select": "entry_text,created_at,local_date",
+                    "select": "entry_text,created_at,local_date,occurred_at,tz",
                     "order": "created_at.asc",
                 },
             )
@@ -362,14 +414,16 @@ async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     by_date: dict[str, list[str]] = {}
     for r in rows:
         d = r.get("local_date") or r["created_at"][:10]
-        by_date.setdefault(d, []).append(r["entry_text"])
+        by_date.setdefault(d, []).append(with_clock_time(r))
 
     cached = await _get_cached_extractions(user_id, since_date)
     ai_on = await ai_allowed(user_id)  # when AI is off nothing is sent for extraction
 
     records = {}
     for d, entries in by_date.items():
-        needs_extraction = d == today_str or d not in cached
+        # A day is summarised again whenever its entries have changed (a new one was logged), whatever
+        # the server's own date says: for anyone ahead of UTC the server's "today" is the wrong day.
+        needs_extraction = d == today_str or d not in cached or int(cached[d].get("entry_count") or 0) != len(entries)
         if needs_extraction and ai_on:
             signals = await extract_daily_signals(entries)
             if signals is not None:
