@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "The Gap",
+    "slug": "the-gap",
+    "version": "1.2.0",
+    "scheme": "thegap",
+    "ios": {
+      "bundleIdentifier": "com.causalme.thegap",
+      "entitlements": { "com.apple.security.application-groups": ["group.com.causalme.thegap"] }
+    },
+    "plugins": [
+      "expo-router",
+      "./plugins/withQuickLog",
+      ["@bacons/apple-targets", { "appleTeamId": "A4JR7U9VZ3" }]
+    ]
+  }
+}

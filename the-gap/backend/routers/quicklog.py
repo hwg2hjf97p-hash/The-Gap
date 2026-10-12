@@ -71,8 +71,9 @@ async def _owner(token: str) -> str:
 
 @router.get("/check")
 async def check(x_quicklog_token: str = Header(default="")) -> JSONResponse:
-    await _owner(x_quicklog_token)
-    return JSONResponse(content={"valid": True})
+    user_id = await _owner(x_quicklog_token)
+    # The app compares this with who is signed in, so a key left behind by someone else is replaced, never used.
+    return JSONResponse(content={"valid": True, "user_id": user_id})
 
 
 @router.post("/entry")

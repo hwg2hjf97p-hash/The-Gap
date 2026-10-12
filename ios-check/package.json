@@ -1,0 +1,15 @@
+{
+  "name": "the-gap-ios-check",
+  "private": true,
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@bacons/apple-targets": "^0.2.1",
+    "expo": "~52.0.0",
+    "expo-dev-client": "~5.0.0",
+    "expo-router": "~4.0.0",
+    "react": "18.3.1",
+    "react-native": "0.76.5",
+    "xcode": "^3.0.1"
+  }
+}

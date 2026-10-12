@@ -1,0 +1,65 @@
+name: iOS check
+
+# The iPhone app's Siri / Shortcuts setup is built here (Linux: does the plugin put the files
+# in the right place; macOS: does the Swift compile) before an App Store build is spent on it.
+# ios-check/ holds copies of the files from the private mobile repo.
+
+on:
+  push:
+    paths:
+      - "ios-check/**"
+      - ".github/workflows/ios-check.yml"
+  workflow_dispatch:
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ios-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Generate the iOS project with the plugin
+        run: |
+          set +e
+          out=$(CI=1 npx expo prebuild --platform ios --no-install 2>&1); code=$?
+          printf '%s\n' "$out" | tail -n 60
+          if [ $code -ne 0 ]; then
+            msg=$(printf '%s' "$out" | tail -c 1800 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=expo prebuild failed::$msg"
+          fi
+          exit $code
+      - name: Check where the files landed
+        run: node verify.js
+      - name: Check the Keychain module is picked up by autolinking
+        run: |
+          set +e
+          out=$(npx expo-modules-autolinking resolve --platform ios 2>&1); code=$?
+          printf '%s\n' "$out" | tail -n 40
+          if ! printf '%s' "$out" | grep -q "QuickLogCredentials"; then
+            msg=$(printf '%s' "$out" | tail -c 1500 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=autolinking did not find QuickLogCredentials::$msg"
+            exit 1
+          fi
+
+  swift:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the Siri action for iOS
+        working-directory: ios-check/native/quicklog
+        run: |
+          set +e
+          xcodebuild -version
+          out=$(xcrun --sdk iphoneos swiftc -typecheck -target arm64-apple-ios16.0 -swift-version 5 *.swift 2>&1); code=$?
+          printf '%s\n' "$out" | tail -n 60
+          if [ $code -ne 0 ]; then
+            msg=$(printf '%s' "$out" | tail -c 1800 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=Swift did not compile::$msg"
+          fi
+          exit $code
