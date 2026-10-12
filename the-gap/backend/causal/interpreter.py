@@ -274,6 +274,58 @@ def interpret_result(
             else "Interestingly, afternoon caffeine doesn't seem to hurt your deep sleep."
         )
 
+    elif hid == "caffeine_drinks_sleep":
+        title = "Coffees & Sleep"
+        headline = (
+            f"Each extra coffee or caffeinated drink {'adds' if is_positive else 'costs you'} "
+            f"{abs_effect} minutes of sleep that night"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Days with more coffees go with shorter sleep for you. Try capping it a drink or two lower for a week."
+            if not is_positive
+            else "More coffees isn't costing you sleep in your data so far."
+        )
+
+    elif hid == "caffeine_drinks_deep_sleep":
+        title = "Coffees & Deep Sleep"
+        headline = (
+            f"Each extra coffee or caffeinated drink {'adds' if is_positive else 'costs you'} "
+            f"{abs_effect} minutes of deep sleep"
+        )
+        metric_unit = "min deep sleep"
+        tip = (
+            "More coffees goes with less deep sleep for you, whatever time of day you have them."
+            if not is_positive
+            else "More coffees isn't cutting your deep sleep in your data so far."
+        )
+
+    elif hid == "caffeine_drinks_hrv":
+        title = "Coffees & Recovery"
+        headline = (
+            f"Each extra coffee or caffeinated drink goes with your next-morning HRV "
+            f"{'rising' if is_positive else 'dropping'} by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Heavy coffee days go with lower HRV the next morning for you."
+            if not is_positive
+            else "Your coffee count isn't pulling your HRV down in your data so far."
+        )
+
+    elif hid == "high_caffeine_sleep":
+        title = "Heavy Caffeine Days & Sleep"
+        headline = (
+            f"On days with four or more caffeinated drinks you sleep {abs_effect} minutes "
+            f"{'more' if is_positive else 'less'}"
+        )
+        metric_unit = "min sleep"
+        tip = (
+            "Four-plus coffee days cost you sleep. Try keeping it to three for a week."
+            if not is_positive
+            else "Four-plus coffee days aren't costing you sleep in your data so far."
+        )
+
     elif hid == "alcohol_rhr":
         title = "Alcohol & Heart Rate"
         # REAL BUG FIXED HERE: both the headline's increased/decreased words

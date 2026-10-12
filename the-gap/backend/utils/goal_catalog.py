@@ -71,6 +71,7 @@ GOAL_METRICS: dict[str, GoalMetric] = {m.key: m for m in [
     # Habits
     GoalMetric("screen_hours", "Screen time", "hrs/day", "habits", 0.5, 14, 0.5, default_direction="decrease", min_points=4, decimals=1, directions=("decrease", "maintain"), hint="From your daily check-in."),
     GoalMetric("alcohol_drinks", "Alcoholic drinks per week", "drinks", "habits", 0, 40, 1, default_direction="decrease", per_week=True, min_points=4, decimals=1, directions=("decrease", "maintain"), hint="From your daily check-in."),
+    GoalMetric("caffeine_drinks", "Coffees and caffeinated drinks per day", "drinks", "habits", 0, 15, 1, default_direction="decrease", min_points=4, decimals=1, directions=("decrease", "maintain"), hint="From your daily check-in."),
     GoalMetric("afternoon_caffeine", "Days with caffeine after 2 pm", "days/week", "habits", 0, 7, 1, default_direction="decrease", per_week=True, min_points=4, decimals=1, directions=("decrease", "maintain"), hint="From your daily check-in."),
     GoalMetric("water_ml", "Water per day", "ml", "habits", 500, 6000, 250, min_points=4, directions=("increase", "maintain"), hint="From your water log."),
 ]}

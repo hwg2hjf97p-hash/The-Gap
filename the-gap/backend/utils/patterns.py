@@ -81,6 +81,7 @@ DRIVERS: list[dict] = [
     {"col": "steps", "kind": "amount", "noun": "Steps", "fmt": _amount("", 0)},
     {"col": "active_energy", "kind": "amount", "noun": "Active calories", "fmt": _amount("kcal", 0)},
     {"col": "screen_hours", "kind": "amount", "noun": "Screen time", "fmt": _amount("h", 1)},
+    {"col": "caffeine_drinks", "kind": "amount", "noun": "Coffees and caffeinated drinks", "fmt": _amount("", 1)},
     {"col": "work_hours", "kind": "amount", "noun": "Work hours", "fmt": _amount("h", 1)},
     {"col": "stress_score", "kind": "amount", "noun": "Stress rating", "fmt": _amount("/10", 1)},
     {"col": "calendar_events", "kind": "amount", "noun": "Calendar events", "fmt": _amount("", 1)},
@@ -92,7 +93,7 @@ DRIVERS: list[dict] = [
 LOGGABLE: list[tuple[str, str, str]] = [
     ("alcohol_flag", "Alcohol", "answer the alcohol question in your daily check-in"),
     ("screen_hours", "Screen time", "add your screen time in your daily check-in"),
-    ("afternoon_caffeine", "Caffeine", "answer the caffeine question in your daily check-in"),
+    ("caffeine_drinks", "Coffees", "add how many coffees you had in your daily check-in"),
     ("stress_score", "Stress", "rate your stress in your daily check-in"),
     ("last_meal_hour", "Meal times", "log your food, including what time you ate"),
     ("workout_completed_flag", "Workouts", "log your workouts"),

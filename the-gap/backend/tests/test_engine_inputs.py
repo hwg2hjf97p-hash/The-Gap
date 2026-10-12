@@ -11,6 +11,7 @@ NEW_CHECKIN_IDS = [
     "work_hours_hrv", "work_hours_sleep", "late_work_sleep", "travel_hours_sleep", "travel_hours_hrv",
     "screen_hours_sleep", "screen_hours_hrv", "late_screen_sleep", "late_screen_deep_sleep",
     "strain_hrv", "strain_rhr", "strain_sleep",
+    "caffeine_drinks_sleep", "caffeine_drinks_deep_sleep", "caffeine_drinks_hrv", "high_caffeine_sleep",
 ]
 
 

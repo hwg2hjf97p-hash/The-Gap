@@ -79,8 +79,10 @@ EXTENDED_FIELDS = (
     "alcohol_drinks", "alcohol_time", "energy_drinks", "energy_drink_time",
     "cigarettes", "gambling_minutes", "gambling_time", "substance_use",
     "substance_time", "work_hours", "work_finish", "argument_count",
-    "argument_intensity", "travel_hours", "travel_mode", "screen_hours", "screen_last_use",
+    "argument_intensity", "travel_hours", "travel_mode", "screen_hours", "screen_last_use", "caffeine_drinks",
 )
+# Also left out, rather than failing the save, if its column isn't there yet (see phase10.sql).
+OPTIONAL_COLUMNS = EXTENDED_FIELDS + ("partial",)
 
 
 def _one_of(allowed: set[str], value):
@@ -113,6 +115,8 @@ class CheckInRequest(BaseModel):
     travel_mode: Optional[str] = None
     screen_hours: Optional[float] = Field(None, ge=0, le=24)
     screen_last_use: Optional[str] = None
+    # Coffees and other caffeinated drinks over the whole day, at any hour.
+    caffeine_drinks: Optional[int] = Field(None, ge=0, le=30)
 
     @validator("date")
     def validate_date(cls, v):
@@ -167,6 +171,8 @@ async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_curren
     # Every extended field is sent, null included, so clearing a value on an
     # edit actually clears it rather than leaving the old number behind.
     extended = {f: getattr(body, f) for f in EXTENDED_FIELDS}
+    # A full check-in replaces anything a voice or typed log started the day with.
+    extended["partial"] = False
 
     # Without on_conflict, PostgREST upserts on the primary key (id), which a
     # fresh row never collides with — a second save for the same day then hit
@@ -182,12 +188,12 @@ async def submit_checkin(body: CheckInRequest, user_id: str = Depends(get_curren
             resp = None
             # If a column hasn't been added to the table yet (its SQL file not run), leave out just
             # that column and save the rest, rather than losing every newer field.
-            for _ in range(len(EXTENDED_FIELDS) + 1):
+            for _ in range(len(OPTIONAL_COLUMNS) + 1):
                 resp = await client.post(_sb_url("daily_checkins"), headers=headers, params=params, json=payload)
                 if resp.status_code == 400 and "PGRST204" in resp.text:
                     missing = re.search(r"'([a-z_0-9]+)' column", resp.text)
                     name = missing.group(1) if missing else None
-                    if name and name in payload and name in EXTENDED_FIELDS:
+                    if name and name in payload and name in OPTIONAL_COLUMNS:
                         logger.warning("daily_checkins has no %s column yet — saving without it. Run the latest SQL file.", name)
                         payload.pop(name)
                         extended_saved = False
@@ -296,7 +302,7 @@ async def _get_streak(user_id: str, local_date: Optional[str] = None) -> int:
                 headers=_sb_headers(),
                 params={
                     "user_id": f"eq.{user_id}",
-                    "select": "date",
+                    "select": "*",
                     "order": "date.desc",
                     "limit": "90",
                 },
@@ -304,8 +310,9 @@ async def _get_streak(user_id: str, local_date: Optional[str] = None) -> int:
             resp.raise_for_status()
             rows = resp.json() or []
 
+        # A day that only has a voice or typed log (partial) isn't a check-in.
         dates = sorted(
-            [datetime.strptime(r["date"], "%Y-%m-%d").date() for r in rows],
+            [datetime.strptime(r["date"], "%Y-%m-%d").date() for r in rows if not r.get("partial")],
             reverse=True,
         )
         if not dates:
@@ -339,7 +346,7 @@ def get_checkin_dataframe(user_id: str, days: int = 180):
       high_stress_flag, energy_drinks, energy_drink_late_flag, cigarettes,
       gambling_minutes, gambling_flag, substance_flag, work_hours,
       work_late_flag, argument_flag, travel_hours, travel_flag, screen_hours,
-      late_screen_flag
+      late_screen_flag, caffeine_drinks, high_caffeine_flag
     """
     import numpy as np
     import pandas as pd
@@ -384,13 +391,20 @@ def get_checkin_dataframe(user_id: str, days: int = 180):
         # Original fields. Alcohol is a yes/no that a drink count refines:
         # any drinks at all means yes.
         drinks = num("alcohol_drinks")
-        alcohol_bool = raw["alcohol"].fillna(False).astype(bool) if "alcohol" in raw.columns else pd.Series(False, index=raw.index)
-        out["alcohol_flag"] = (alcohol_bool | (drinks.fillna(0) > 0)).astype(int)
+        # A day logged by voice may not have answered the alcohol or caffeine question at all
+        # (the column is null): that stays unanswered (NaN) rather than becoming a "no".
+        alcohol_raw = raw["alcohol"] if "alcohol" in raw.columns else pd.Series(np.nan, index=raw.index, dtype="object")
+        alcohol_known = alcohol_raw.notna() | drinks.notna()
+        alcohol_bool = alcohol_raw.fillna(False).astype(bool)
+        out["alcohol_flag"] = (alcohol_bool | (drinks.fillna(0) > 0)).astype(float).where(alcohol_known)
         # Older rows have no count: a "no" is a known zero, a "yes" is unknown.
-        out["alcohol_drinks"] = drinks.where(drinks.notna(), np.where(alcohol_bool, np.nan, 0.0))
-        out["afternoon_caffeine"] = (
-            raw["afternoon_caffeine"].fillna(False).astype(int) if "afternoon_caffeine" in raw.columns else 0
-        )
+        no_count = pd.Series(np.where(alcohol_bool, np.nan, 0.0), index=raw.index).where(alcohol_known)
+        out["alcohol_drinks"] = drinks.where(drinks.notna(), no_count)
+        caffeine_raw = raw["afternoon_caffeine"] if "afternoon_caffeine" in raw.columns else pd.Series(np.nan, index=raw.index, dtype="object")
+        out["afternoon_caffeine"] = caffeine_raw.fillna(False).astype(bool).astype(float).where(caffeine_raw.notna())
+        coffees = num("caffeine_drinks")
+        out["caffeine_drinks"] = coffees
+        out["high_caffeine_flag"] = flag(coffees >= 4, coffees.notna())
         stress = num("stress_score")
         out["stress_score"] = stress
         out["high_stress_flag"] = (stress >= 7).astype(int).where(stress.notna()) if stress.notna().any() else np.nan

@@ -249,6 +249,51 @@ HYPOTHESES: list[Hypothesis] = [
         category="lifestyle",
     ),
 
+    # How MANY coffees and caffeinated drinks, at any hour: five before 2 pm and none after
+    # is a very different day from one cup, which the after-2-pm yes/no above can't see.
+    Hypothesis(
+        id="caffeine_drinks_sleep",
+        treatment_col="caffeine_drinks",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Coffees and caffeinated drinks (per drink)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="caffeine_drinks_deep_sleep",
+        treatment_col="caffeine_drinks",
+        outcome_col="sleep_deep_min",
+        covariate_cols=["sleep_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Coffees and caffeinated drinks (per drink)",
+        outcome_label="Deep sleep (minutes)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="caffeine_drinks_hrv",
+        treatment_col="caffeine_drinks",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        treatment_label="Coffees and caffeinated drinks (per drink)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="high_caffeine_sleep",
+        treatment_col="high_caffeine_flag",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=8,
+        treatment_label="Four or more caffeinated drinks in a day (yes/no)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+
     # 16. Alcohol → Next-day resting HR (binary)
     Hypothesis(
         id="alcohol_rhr",
