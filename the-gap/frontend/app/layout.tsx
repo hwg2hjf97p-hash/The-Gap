@@ -2,9 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ChromeWrapper from "../components/ChromeWrapper";
 
-const TITLE = "The Gap: don't just know what. Know why.";
-const DESCRIPTION =
-  "The Gap finds the habits that actually move your sleep, recovery and energy, using your own data from Apple Health, Whoop, Oura and more. In private testing on iPhone.";
+const TITLE = "The Gap";
+const DESCRIPTION = "The Gap by CausalMe.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -15,14 +14,12 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: "https://causalme.com",
     siteName: "The Gap",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "The Gap" }],
     type: "website",
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/og-image.png"],
   },
 };
 
