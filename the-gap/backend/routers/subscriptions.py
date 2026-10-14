@@ -11,6 +11,7 @@ Table DDL (run once in Supabase SQL editor):
     is_active BOOLEAN NOT NULL DEFAULT false,
     product_id TEXT,
     expires_at TIMESTAMPTZ,
+    period_type TEXT,            -- TRIAL while in the free month, NORMAL once paying (phase12.sql)
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
 
@@ -92,6 +93,7 @@ async def revenuecat_webhook(request_body: dict, authorization: str = Header(def
         "is_active": is_active,
         "product_id": event.get("product_id"),
         "expires_at": expires_at,
+        "period_type": (event.get("period_type") or "").upper() or None,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -103,6 +105,15 @@ async def revenuecat_webhook(request_body: dict, authorization: str = Header(def
                 params={"on_conflict": "user_id"},
                 json=[payload],
             )
+            if resp.status_code == 400 and "period_type" in resp.text:
+                # phase12.sql hasn't been run yet: record the rest rather than lose the update.
+                payload.pop("period_type")
+                resp = await client.post(
+                    _sb_url("user_subscriptions"),
+                    headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
+                    params={"on_conflict": "user_id"},
+                    json=[payload],
+                )
             resp.raise_for_status()
     except Exception as exc:
         logger.error("RevenueCat webhook DB write failed for %s: %s", user_id[:8], exc)
@@ -136,3 +147,30 @@ async def is_subscribed(user_id: str) -> bool:
     except Exception as exc:
         logger.warning("is_subscribed check failed for %s: %s", user_id[:8], exc)
         return False
+
+
+async def is_on_trial(user_id: str) -> bool:
+    """True while this person is in their free month (a live subscription whose current period is the trial).
+    Used to keep the costly features modest for people who haven't paid yet. If it can't be read, they are
+    treated as paying: the limit is there to protect spend, not to lock anyone out."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("user_subscriptions"),
+                headers=_sb_headers(),
+                params={"user_id": f"eq.{user_id}", "select": "is_active,expires_at,period_type", "limit": 1},
+            )
+            resp.raise_for_status()
+            rows = resp.json() or []
+    except Exception as exc:
+        logger.warning("is_on_trial check failed for %s: %s", user_id[:8], exc)
+        return False
+    if not rows:
+        return False
+    row = rows[0]
+    if not row.get("is_active") or str(row.get("period_type") or "").upper() != "TRIAL":
+        return False
+    expires_at = row.get("expires_at")
+    if expires_at and datetime.fromisoformat(expires_at.replace("Z", "+00:00")) < datetime.now(timezone.utc):
+        return False
+    return True

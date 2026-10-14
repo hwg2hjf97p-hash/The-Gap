@@ -26,6 +26,7 @@ from utils.assistant_signals import log_assistant_question
 
 from utils.consent import ai_allowed  # noqa: E402
 from utils.entitlement import require_subscription  # noqa: E402
+from routers.subscriptions import is_on_trial  # noqa: E402
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -94,6 +95,8 @@ def _build_context(results_row: dict | None) -> str:
 
 
 MAX_QUESTIONS_PER_DAY = 40
+# During the free month the assistant is the one feature that costs real money per use, so it is kept modest.
+TRIAL_QUESTIONS_PER_DAY = 10
 
 
 async def _questions_in_last_day(user_id: str) -> int:
@@ -127,8 +130,15 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
         raise HTTPException(status_code=403, detail="AI features are switched off. You can turn them on in Settings.")
     await require_subscription(user_id)
 
-    if await _questions_in_last_day(user_id) >= MAX_QUESTIONS_PER_DAY:
-        raise HTTPException(status_code=429, detail="You've reached today's question limit for Gappy. Try again tomorrow.")
+    on_trial = await is_on_trial(user_id)
+    limit = TRIAL_QUESTIONS_PER_DAY if on_trial else MAX_QUESTIONS_PER_DAY
+    if await _questions_in_last_day(user_id) >= limit:
+        detail = (
+            f"You've used your {limit} questions for Gappy today. During your free month it's {limit} a day. Try again tomorrow."
+            if on_trial
+            else "You've reached today's question limit for Gappy. Try again tomorrow."
+        )
+        raise HTTPException(status_code=429, detail=detail)
 
     results_row = await asyncio.to_thread(get_latest_results, user_id)
     context = _build_context(results_row)
