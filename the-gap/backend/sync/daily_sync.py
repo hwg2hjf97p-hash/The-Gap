@@ -38,6 +38,7 @@ from utils.patterns import build_patterns
 from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from utils.insight_memory import stabilise
+from utils.headsups import run_headsups
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 from routers.workouts import get_workout_dataframe
@@ -615,6 +616,9 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             logger.warning("Proactive nudge step failed for %s: %s", user_id[:8], exc)
 
         await check_card_experiments(user_id)  # never raises
+
+        # Short coach-style heads-ups from today's numbers (cards in the app, at most one push a day). Never raises.
+        await run_headsups(user_id, df, insights_dicts)
 
         try:
             await check_intervention_followups(user_id)

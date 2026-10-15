@@ -12,14 +12,14 @@ name: Scheduled Sync & Digest
 
 on:
   schedule:
-    - cron: "0 */4 * * *"   # every 4 hours — background sync, no "Sync Now" tap needed
+    - cron: "20 * * * *"    # every hour — background sync, no "Sync Now" tap needed
     - cron: "0 22 * * 0"    # Sundays 22:00 UTC — weekly digest
     - cron: "0 20 */2 * *"  # every second day, 20:00 UTC (6 am in Brisbane) — new research cards for people with goals
   workflow_dispatch: {}       # lets you trigger either job manually from the Actions tab
 
 jobs:
   sync:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 */4 * * *'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '20 * * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger backend sync

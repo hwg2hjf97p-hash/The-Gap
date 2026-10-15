@@ -96,6 +96,7 @@ from routers import weight
 from routers import log as log_router
 from routers import saved_foods
 from routers import quicklog
+from routers import headsups
 from routers import evidence_admin
 from routers import app_config
 from sync import daily_sync
@@ -138,13 +139,14 @@ app.include_router(weight.router)
 app.include_router(log_router.router)
 app.include_router(saved_foods.router)
 app.include_router(quicklog.router)
+app.include_router(headsups.router)
 app.include_router(evidence_admin.router)
 app.include_router(app_config.router)
 
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "engine-2"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "headsups-1"}
 
 @app.get("/")
 def root():
