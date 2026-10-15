@@ -240,7 +240,20 @@ async def run_sync(x_sync_secret: str = Header(default="")):
     })
 
 
+# One sync at a time per person. The hourly job, opening the app, an Apple Health upload and a calendar
+# upload can all start a sync at nearly the same moment; run side by side they each read "the previous
+# result" before the other has saved, and whichever finishes last overwrites the other, so the numbers on
+# screen could flip between runs.
+_user_sync_locks: dict[str, asyncio.Lock] = {}
+
+
 async def _sync_user(user_id: str, connections: list[dict]) -> dict:
+    lock = _user_sync_locks.setdefault(user_id, asyncio.Lock())
+    async with lock:
+        return await _sync_user_unlocked(user_id, connections)
+
+
+async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
     """Sync one user — fetch all their data, run causal engine, save results."""
     t0 = time.perf_counter()
     health_df = None
