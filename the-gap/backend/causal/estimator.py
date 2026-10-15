@@ -111,3 +111,71 @@ def run_linear_dml(
     except Exception as exc:
         logger.error("LinearDML estimation failed for %s -> %s: %s", treatment_col, outcome_col, exc)
         return None
+
+
+def run_ols(
+    *,
+    df: pd.DataFrame,
+    treatment_col: str,
+    outcome_col: str,
+    covariate_cols: list[str],
+    binary_treatment: bool = False,
+) -> Optional[dict]:
+    """
+    The effect of the treatment on the outcome, adjusted for the covariates, by ordinary least squares
+    with a t-test. Same result shape as run_linear_dml.
+
+    WHY THIS REPLACED LinearDML FOR THE P-VALUES: with the simple linear models this app uses inside
+    LinearDML, DML is the same calculation as least squares plus cross-fitting, which only adds noise
+    on a few weeks of data. Tested on made-up people whose check-in answers were shuffled (so any
+    pattern found is false), LinearDML's p-values called a pattern "significant" at p < 0.05 in 18-25% of
+    cases instead of 5%. Least squares with a t-test did so in about 5%, and still found about as many
+    real patterns (see lab/calibration_lab.py). For a yes/no treatment the heteroskedasticity-robust (HC3)
+    standard error is used, because the days with and without it can vary by different amounts.
+    """
+    try:
+        from scipy import stats
+
+        y = df[outcome_col].values.astype(float)
+        t = df[treatment_col].values.astype(float)
+        if len(y) < 5 or float(np.std(t)) == 0.0:
+            return None
+        cols = [np.ones(len(y)), t] + [df[c].values.astype(float) for c in covariate_cols]
+        X = np.column_stack(cols)
+        n = X.shape[0]
+        rank = int(np.linalg.matrix_rank(X))
+        dof = n - rank
+        if dof < 3:
+            return None
+
+        xtx_inv = np.linalg.pinv(X.T @ X)
+        beta = xtx_inv @ X.T @ y
+        resid = y - X @ beta
+        effect = float(beta[1])
+
+        if binary_treatment:
+            lever = np.clip(np.einsum("ij,jk,ik->i", X, xtx_inv, X), 0.0, 0.999)
+            scaled = resid / (1.0 - lever)
+            meat = (X * scaled[:, None]).T @ (X * scaled[:, None])
+            var = float((xtx_inv @ meat @ xtx_inv)[1, 1])
+        else:
+            var = float(resid @ resid) / dof * float(xtx_inv[1, 1])
+        stderr = float(np.sqrt(max(var, 0.0)))
+        if not np.isfinite(stderr) or stderr <= 0.0:
+            return None
+
+        p_value = float(2 * stats.t.sf(abs(effect) / stderr, dof))
+        half = float(stats.t.ppf(0.95, dof)) * stderr  # a 90% interval, as before
+        return {
+            "effect": effect,
+            "ci_low": effect - half,
+            "ci_high": effect + half,
+            "n_obs": n,
+            "p_value": p_value,
+            "stderr": stderr,
+            "n_covariates": len(covariate_cols),
+            "method": "OLS",
+        }
+    except Exception as exc:
+        logger.error("OLS estimation failed for %s -> %s: %s", treatment_col, outcome_col, exc)
+        return None

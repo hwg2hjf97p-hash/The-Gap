@@ -35,10 +35,11 @@ logging.disable(logging.CRITICAL)
 TRUE_TREATMENTS = {"alcohol_flag", "alcohol_drinks", "afternoon_caffeine", "stress_score", "screen_hours", "late_screen_flag", "steps"}
 
 SETTINGS = {
-    "now": dict(rows=1.0, treated=1.0, adaptive=False, fdr=0.10, moderate_n=30),
-    "less_data": dict(rows=0.7, treated=0.7, adaptive=True, fdr=0.10, moderate_n=21),
-    "less_data_fdr15": dict(rows=0.7, treated=0.7, adaptive=True, fdr=0.15, moderate_n=21),
-    "least_data_fdr15": dict(rows=0.55, treated=0.6, adaptive=True, fdr=0.15, moderate_n=18),
+    "now_dml": dict(est="dml", rows=1.0, treated=1.0, adaptive=False, fdr=0.10, moderate_n=30),
+    "ols_same_days": dict(est="ols", rows=1.0, treated=1.0, adaptive=False, fdr=0.10, moderate_n=30),
+    "ols_70pct_days": dict(est="ols", rows=0.7, treated=0.7, adaptive=True, fdr=0.10, moderate_n=21),
+    "ols_55pct_days": dict(est="ols", rows=0.55, treated=0.6, adaptive=True, fdr=0.10, moderate_n=18),
+    "ols_55pct_fdr15": dict(est="ols", rows=0.55, treated=0.6, adaptive=True, fdr=0.15, moderate_n=18),
 }
 
 
@@ -72,6 +73,7 @@ def build_frame(seed: int, days_logged: int, shuffled: bool) -> tuple[pd.DataFra
 
 def apply(name: str) -> None:
     s = SETTINGS[name]
+    engine.ESTIMATOR = s["est"]
     engine.MIN_ROWS_SCALE = s["rows"]
     engine.MIN_TREATED_SCALE = s["treated"]
     engine.ADAPTIVE_COVARIATES = s["adaptive"]
@@ -80,8 +82,8 @@ def apply(name: str) -> None:
 
 
 def main() -> None:
-    seeds = [int(x) for x in os.environ.get("LAB_SEEDS", "11,12,13").split(",")]
-    days_options = [int(x) for x in os.environ.get("LAB_DAYS", "21,35").split(",")]
+    seeds = [int(x) for x in os.environ.get("LAB_SEEDS", "11,12,13,14,15,16").split(",")]
+    days_options = [int(x) for x in os.environ.get("LAB_DAYS", "18,21,28").split(",")]
     by_hyp = {h.id: h for h in HYPOTHESES}
     lines: list[str] = []
     started = time.time()
@@ -120,11 +122,8 @@ def main() -> None:
             )
             print(line, flush=True)
             lines.append(line)
-    summary = " || ".join(lines)
     print(f"LAB_DONE seconds={time.time()-started:.0f}")
-    print("::notice title=Engine lab::" + summary.replace("%", "%25").replace("\n", "%0A"))
-    for i, line in enumerate(lines):
-        print(f"::notice title=Engine lab {i+1}::" + line.replace("%", "%25"))
+    print("::notice title=Engine lab::" + "%0A".join(lines))
 
 
 if __name__ == "__main__":

@@ -28,4 +28,4 @@ jobs:
           pip install -r requirements.txt
       - name: Run the lab
         run: |
-          python -u lab/calibration_lab.py
+          python -u lab/engine_lab.py

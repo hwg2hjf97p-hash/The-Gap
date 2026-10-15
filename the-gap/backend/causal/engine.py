@@ -11,7 +11,7 @@ from typing import Optional
 import pandas as pd
 
 from causal.hypotheses import HYPOTHESES, Hypothesis
-from causal.estimator import run_linear_dml
+from causal.estimator import run_linear_dml, run_ols
 from causal.interpreter import interpret_result, OUTCOME_HIGHER_IS_BETTER
 from models.insight import Insight, ConfidenceLevel
 
@@ -41,6 +41,22 @@ MIN_CONTROL_DAYS = 0         # days WITHOUT the treatment needed, for yes/no tre
 # one at a time, until it can run. Day of week is never set aside.
 ADAPTIVE_COVARIATES = False
 KEEP_COVARIATES = {"day_of_week", "is_weekend"}
+
+
+# Which calculation gives the effect, its interval and its p-value. "ols" is calibrated on a few weeks of data
+# where "dml" is not (see run_ols and lab/calibration_lab.py).
+ESTIMATOR = "dml"
+
+
+def estimate(sub: pd.DataFrame, hyp: Hypothesis, covs: list[str]) -> Optional[dict]:
+    run = run_ols if ESTIMATOR == "ols" else run_linear_dml
+    return run(
+        df=sub,
+        treatment_col=hyp.treatment_col,
+        outcome_col=hyp.outcome_col,
+        covariate_cols=covs,
+        binary_treatment=hyp.binary_treatment,
+    )
 
 
 def required_rows(hyp: Hypothesis) -> int:
@@ -224,13 +240,7 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
         early_read = None
         if current >= max(EARLY_READ_MIN_ABSOLUTE, int(required_n * EARLY_READ_MIN_FRACTION)):
             try:
-                result = run_linear_dml(
-                    df=sub,
-                    treatment_col=hyp.treatment_col,
-                    outcome_col=hyp.outcome_col,
-                    covariate_cols=covs_used,
-                    binary_treatment=hyp.binary_treatment,
-                )
+                result = estimate(sub, hyp, covs_used)
                 if result is not None:
                     contrast = None if hyp.binary_treatment else _contrast(result["effect"], sub[hyp.treatment_col])
                     result = _scaled(result, hyp)
@@ -336,13 +346,7 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
             return None
 
     # ── 5. Run LinearDML ───────────────────────────────────────────────────
-    result = run_linear_dml(
-        df=sub,
-        treatment_col=hyp.treatment_col,
-        outcome_col=hyp.outcome_col,
-        covariate_cols=covs_used,
-        binary_treatment=hyp.binary_treatment,
-    )
+    result = estimate(sub, hyp, covs_used)
 
     if result is None:
         logger.info("ESTIMATION_RETURNED_NONE hyp=%s rows=%d — see estimator.py logs above for the actual cause", hyp.id, len(sub))
