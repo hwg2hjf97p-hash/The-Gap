@@ -13,7 +13,7 @@ const SECTIONS: LegalSection[] = [
     paragraphs: ["We collect only what you give us, connect, or log, plus a small amount of technical information needed to run the app."],
     bullets: [
       "Your account: your Sign in with Apple identifier, and your name and email address if you choose to share them (Apple may give us a private relay address instead). We create an internal user id for you. We don't see your Apple ID password or payment card details.",
-      "Apple Health data you allow (read-only): heart rate variability, resting heart rate, heart rate, steps, sleep (total and stages), active energy, VO2 max, and nutrition totals. The app reads this on your phone and sends us daily summaries.",
+      "Apple Health data you allow (read-only): heart rate variability, resting heart rate, heart rate, steps, sleep (total and stages), active energy, VO2 max, and nutrition totals. The app reads this on your phone and sends us daily summaries. When new data arrives, iOS can also wake the app briefly in the background so your numbers stay up to date; it reads and sends the same data, and you can switch this off in Settings.",
       "Connected services you choose to link (Whoop, Oura, Strava, Withings, Polar, Google Calendar): the data each one makes available under the permissions you grant, such as recovery, sleep, HRV, workouts, weight, and calendar timing.",
       "Your calendar: from your phone's calendar or Google Calendar, we use the number of events, meeting hours and timing. We don't store event titles or attendees.",
       "What you log: Quick Entry notes, including anything you type or say to Siri or a Shortcut (the app keeps a small key in your iPhone's Keychain so the Siri action can add a log with the app closed; it can only add logs, is removed when you sign out or turn voice logging off, and Apple processes your speech as it does for any Siri request); daily check-ins (stress, alcohol, caffeine, energy drinks, cigarettes, gambling time, work hours, arguments, travel, and, only if you switch it on, other substances); food and water; workouts (exercises, sets, reps, weights, set start and stop times, and each set's average and peak heart rate); and any notes you add.",
@@ -128,5 +128,5 @@ const SECTIONS: LegalSection[] = [
 ];
 
 export default function PrivacyPolicyPage() {
-  return <LegalPage title="Privacy Policy" updated="12 October 2026" intro={INTRO} sections={SECTIONS} />;
+  return <LegalPage title="Privacy Policy" updated="16 October 2026" intro={INTRO} sections={SECTIONS} />;
 }
