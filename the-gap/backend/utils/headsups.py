@@ -9,7 +9,7 @@ HRV), the message mentions it, worded as "has tended to". Otherwise it sticks to
 the numbers and a sensible easy-evening kind of suggestion.
 
 Kept calm on purpose: a handful of kinds, each with a "real change" bar rather than
-any small wobble, one card per kind per day, at most ONE push a day, never during
+any small wobble, one card per kind per day, at most THREE pushes a day (spaced apart), never during
 quiet hours (send_push holds it), never anything about substances or gambling, and
 no medical advice. The wording is plain templates (no AI, no cost) with a few
 variants so it doesn't read the same every day.
@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 BASELINE_DAYS = 14
 MIN_BASELINE_DAYS = 7
+MAX_PUSHES_PER_DAY = 3
+MIN_MINUTES_BETWEEN_PUSHES = 90
 PUSH_START_HOUR = 8.0
 PUSH_END_HOUR = 20.5
 RECOVERY_GOAL_COLS = {"hrv", "recovery_score", "resting_hr", "sleep_total_min"}
@@ -311,14 +313,31 @@ async def _todays_rows(user_id: str, local_date: str) -> list[dict]:
         return resp.json() or []
 
 
-def choose_push(items: list[dict], rows: list[dict], hour: float) -> Optional[dict]:
-    """The one heads-up worth a push right now, or None: nothing pushed yet today, not dismissed, inside its window."""
-    if any(r.get("pushed_at") for r in rows):
+def _when(value) -> Optional[datetime]:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
         return None
-    dismissed = {r["kind"] for r in rows if r.get("dismissed_at")}
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def choose_push(items: list[dict], rows: list[dict], hour: float, now: Optional[datetime] = None) -> Optional[dict]:
+    """
+    The heads-up worth a push right now, or None. At most MAX_PUSHES_PER_DAY a day, at least
+    MIN_MINUTES_BETWEEN_PUSHES apart, each kind once a day, never one the person hid, and only inside
+    that kind's own time window.
+    """
+    now = now or datetime.now(timezone.utc)
+    pushed = [r for r in rows if r.get("pushed_at")]
+    if len(pushed) >= MAX_PUSHES_PER_DAY:
+        return None
+    times = [t for t in (_when(r["pushed_at"]) for r in pushed) if t]
+    if times and (now - max(times)).total_seconds() < MIN_MINUTES_BETWEEN_PUSHES * 60:
+        return None
+    skip = {r["kind"] for r in pushed} | {r["kind"] for r in rows if r.get("dismissed_at")}
     for item in items:  # already highest priority first
         start, end = item.get("window", (PUSH_START_HOUR, PUSH_END_HOUR))
-        if item.get("push") and item["kind"] not in dismissed and start <= hour <= end:
+        if item.get("push") and item["kind"] not in skip and start <= hour <= end:
             return item
     return None
 

@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -148,18 +148,38 @@ def item(kind, priority, push=True, window=(8.0, 20.5)):
     return {"kind": kind, "priority": priority, "push": push, "window": window}
 
 
-def test_one_push_a_day_the_most_important_that_is_pushable_now():
+NOW = datetime(2026, 10, 15, 5, 0, tzinfo=timezone.utc)
+
+
+def pushed(kind, minutes_ago):
+    return {"kind": kind, "pushed_at": (NOW - timedelta(minutes=minutes_ago)).isoformat(), "dismissed_at": None}
+
+
+def test_the_most_important_pushable_one_is_chosen_for_this_time_of_day():
     items = [item("steps_high", 80), item("sleep_short", 70, window=(8.0, 11.5)), item("water_behind", 50, push=False)]
-    assert hu.choose_push(items, [], 15.0)["kind"] == "steps_high"
-    assert hu.choose_push(items[1:], [], 15.0) is None  # the sleep one is a morning message
-    assert hu.choose_push(items[1:], [], 9.0)["kind"] == "sleep_short"
+    assert hu.choose_push(items, [], 15.0, NOW)["kind"] == "steps_high"
+    assert hu.choose_push(items[1:], [], 15.0, NOW) is None  # the sleep one is a morning message
+    assert hu.choose_push(items[1:], [], 9.0, NOW)["kind"] == "sleep_short"
 
 
-def test_once_one_has_been_pushed_that_is_it_for_the_day():
-    rows = [{"kind": "steps_high", "pushed_at": "2026-10-15T01:00:00+00:00", "dismissed_at": None}]
-    assert hu.choose_push([item("sleep_short", 70)], rows, 9.0) is None
+def test_up_to_three_a_day_but_not_a_fourth():
+    items = [item("steps_high", 80), item("sleep_short", 70), item("strain_high", 75), item("steps_low", 40)]
+    assert hu.choose_push(items, [pushed("a", 300)], 15.0, NOW) is not None
+    assert hu.choose_push(items, [pushed("a", 400), pushed("b", 300)], 15.0, NOW) is not None
+    assert hu.choose_push(items, [pushed("a", 500), pushed("b", 400), pushed("c", 300)], 15.0, NOW) is None
+
+
+def test_they_are_spaced_apart():
+    items = [item("steps_high", 80)]
+    assert hu.choose_push(items, [pushed("sleep_short", 30)], 15.0, NOW) is None
+    assert hu.choose_push(items, [pushed("sleep_short", 100)], 15.0, NOW)["kind"] == "steps_high"
+
+
+def test_the_same_kind_is_never_pushed_twice_in_a_day():
+    items = [item("steps_high", 80), item("strain_high", 75)]
+    assert hu.choose_push(items, [pushed("steps_high", 300)], 15.0, NOW)["kind"] == "strain_high"
 
 
 def test_one_the_person_dismissed_is_not_pushed():
     rows = [{"kind": "steps_high", "pushed_at": None, "dismissed_at": "2026-10-15T02:00:00+00:00"}]
-    assert hu.choose_push([item("steps_high", 80)], rows, 15.0) is None
+    assert hu.choose_push([item("steps_high", 80)], rows, 15.0, NOW) is None
