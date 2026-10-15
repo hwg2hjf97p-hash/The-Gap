@@ -58,10 +58,10 @@ const delegatePath = ["AppDelegate.mm", "AppDelegate.m"].map((n) => path.join(io
 if (!delegatePath) problems.push("no AppDelegate was generated");
 else {
   const d = fs.readFileSync(delegatePath, "utf8");
-  const calls = (d.match(/initializeBackgroundObservers:self.bridge/g) || []).length;
+  const calls = d.split("initializeBackgroundObservers:self.bridge").length - 1;
   if (calls !== 1) problems.push(`AppDelegate has ${calls} background-observer calls (want exactly 1)`);
-  if (!/RCTAppleHealthKit.h/.test(d)) problems.push("AppDelegate is missing the HealthKit import");
-  if (!/BOOL launched = [super application:application didFinishLaunchingWithOptions:launchOptions];/.test(d)) problems.push("AppDelegate launch call was not rewritten");
+  if (!d.includes("RCTAppleHealthKit.h")) problems.push("AppDelegate is missing the HealthKit import");
+  if (!d.includes("BOOL launched = [super application:application didFinishLaunchingWithOptions:launchOptions];")) problems.push("AppDelegate launch call was not rewritten");
   if (d.indexOf("initializeBackgroundObservers") < d.indexOf("BOOL launched")) problems.push("observers are started before the app finishes launching");
 }
 const entPath = path.join(iosDir, appName, appName + ".entitlements");
