@@ -2,16 +2,33 @@
   "expo": {
     "name": "The Gap",
     "slug": "the-gap",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "scheme": "thegap",
     "ios": {
       "bundleIdentifier": "com.causalme.thegap",
-      "entitlements": { "com.apple.security.application-groups": ["group.com.causalme.thegap"] }
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.causalme.thegap"
+        ]
+      }
     },
     "plugins": [
       "expo-router",
       "./plugins/withQuickLog",
-      ["@bacons/apple-targets", { "appleTeamId": "A4JR7U9VZ3" }]
+      "./plugins/withHealthBackground",
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "Reads health data.",
+          "healthUpdatePermission": "No writes."
+        }
+      ],
+      [
+        "@bacons/apple-targets",
+        {
+          "appleTeamId": "A4JR7U9VZ3"
+        }
+      ]
     ]
   }
 }

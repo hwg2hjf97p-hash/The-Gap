@@ -53,6 +53,22 @@ for (const [name, v] of Object.entries(names)) {
 const widget = Object.entries(names).find(([n]) => n.includes("Widget"));
 if (!widget) problems.push("the widget target is missing (apple-targets did not run)");
 
+// Apple Health background delivery: the entitlement and the AppDelegate patch (exactly once).
+const delegatePath = ["AppDelegate.mm", "AppDelegate.m"].map((n) => path.join(iosDir, appName, n)).find((p) => fs.existsSync(p));
+if (!delegatePath) problems.push("no AppDelegate was generated");
+else {
+  const d = fs.readFileSync(delegatePath, "utf8");
+  const calls = (d.match(/initializeBackgroundObservers:self.bridge/g) || []).length;
+  if (calls !== 1) problems.push(`AppDelegate has ${calls} background-observer calls (want exactly 1)`);
+  if (!/RCTAppleHealthKit.h/.test(d)) problems.push("AppDelegate is missing the HealthKit import");
+  if (!/BOOL launched = [super application:application didFinishLaunchingWithOptions:launchOptions];/.test(d)) problems.push("AppDelegate launch call was not rewritten");
+  if (d.indexOf("initializeBackgroundObservers") < d.indexOf("BOOL launched")) problems.push("observers are started before the app finishes launching");
+}
+const entPath = path.join(iosDir, appName, appName + ".entitlements");
+const ent = fs.existsSync(entPath) ? fs.readFileSync(entPath, "utf8") : "";
+if (!ent.includes("com.apple.developer.healthkit.background-delivery")) problems.push("the background-delivery entitlement is missing");
+if (!ent.includes("com.apple.developer.healthkit<")) problems.push("the HealthKit entitlement is missing");
+
 const podfile = fs.existsSync(path.join(iosDir, "Podfile")) ? fs.readFileSync(path.join(iosDir, "Podfile"), "utf8") : "";
 console.log("Podfile mentions autolinking:", /use_expo_modules!/.test(podfile));
 
