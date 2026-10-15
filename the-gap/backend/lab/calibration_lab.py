@@ -47,6 +47,34 @@ def p_variants(r: dict) -> dict[str, float]:
     return out
 
 
+def ols_p(sub, hyp, covs) -> dict[str, float]:
+    """Plain least squares of the outcome on the treatment and the covariates, with a t-test (classical and HC3)."""
+    y = sub[hyp.outcome_col].values.astype(float)
+    t = sub[hyp.treatment_col].values.astype(float)
+    cols = [np.ones(len(y)), t] + [sub[c].values.astype(float) for c in covs]
+    X = np.column_stack(cols)
+    n, p = X.shape
+    if n - p < 3 or np.linalg.matrix_rank(X) < p:
+        return {}
+    xtx_inv = np.linalg.pinv(X.T @ X)
+    beta = xtx_inv @ X.T @ y
+    resid = y - X @ beta
+    df = n - p
+    out = {}
+    s2 = float(resid @ resid) / df
+    se = float(np.sqrt(s2 * xtx_inv[1, 1]))
+    if se > 0:
+        out["ols_t"] = float(2 * stats.t.sf(abs(beta[1]) / se, df))
+    h = np.einsum("ij,jk,ik->i", X, xtx_inv, X)
+    h = np.clip(h, 0, 0.999)
+    meat = (X * (resid / (1 - h))[:, None]).T @ (X * (resid / (1 - h))[:, None])
+    cov = xtx_inv @ meat @ xtx_inv
+    se3 = float(np.sqrt(max(cov[1, 1], 0)))
+    if se3 > 0:
+        out["ols_hc3"] = float(2 * stats.t.sf(abs(beta[1]) / se3, df))
+    return out
+
+
 def bh_count(ps: list[float], q: float) -> int:
     ps = sorted(p for p in ps if p == p)
     m, k = len(ps), 0
@@ -84,7 +112,9 @@ def main() -> None:
                     r = run_linear_dml(df=sub, treatment_col=hyp.treatment_col, outcome_col=hyp.outcome_col, covariate_cols=covs, binary_treatment=hyp.binary_treatment)
                     if not r:
                         continue
-                    for name, p in p_variants(r).items():
+                    variants = p_variants(r)
+                    variants.update(ols_p(sub, hyp, covs))
+                    for name, p in variants.items():
                         per_run.setdefault(name, []).append(p)
                         if shuffled:
                             null_p.setdefault(name, []).append(p)
@@ -108,7 +138,7 @@ def main() -> None:
         head = f"logged={days}d seeds={n_seeds}"
         for line in lines:
             print(head, line, flush=True)
-            print(f"::notice title=Calibration {days}d::" + line)
+        print(f"::notice title=Calibration {days}d::" + "%0A".join(lines))
     print(f"LAB_DONE seconds={time.time()-started:.0f}")
 
 
