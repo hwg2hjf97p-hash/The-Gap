@@ -37,6 +37,7 @@ from utils.goals import check_goal_achievements
 from utils.patterns import build_patterns
 from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
+from utils.insight_memory import stabilise
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 from routers.workouts import get_workout_dataframe
@@ -566,7 +567,15 @@ async def _sync_user(user_id: str, connections: list[dict]) -> dict:
             }
         except Exception as exc:
             logger.warning("Could not load previous results for discovery diff (%s): %s", user_id[:8], exc)
+            previous = None
             previous_ids = set()
+
+        # A pattern near the edge of "confirmed" can wobble across it from one sync to the next; hold on to a
+        # recently confirmed insight for a few days rather than let it blink out (see utils/insight_memory.py).
+        try:
+            insights_dicts = stabilise((previous or {}).get("insights"), (previous or {}).get("created_at"), insights_dicts)
+        except Exception as exc:
+            logger.warning("Insight stabilising failed for %s (using this run's as they are): %s", user_id[:8], exc)
 
         # Early signals (confidence "weak") are never pushed — with this many
         # hypotheses running, announcing every faint hint would be mostly noise.
