@@ -31,21 +31,23 @@ EARLY_READ_MIN_ABSOLUTE = 12
 # How much data is enough to try a hypothesis. Each hypothesis states the days it
 # wants (min_rows, min_treated_days); these scale that down for everyone at once, and
 # never raise it. See working_frame for how usable days are counted.
-MIN_ROWS_SCALE = 1.0
+# Settings chosen with lab/engine_lab.py: on made-up people with three to four weeks of logging this finds about
+# three times as many real patterns as the old 30-day requirement, with fewer false ones than before.
+MIN_ROWS_SCALE = 0.55
 MIN_ROWS_FLOOR = 18          # never ask for fewer than this many days (or the hypothesis's own number, if lower)
-MIN_TREATED_SCALE = 1.0
+MIN_TREATED_SCALE = 0.6
 MIN_TREATED_FLOOR = 4        # never ask for fewer treated days than this (or the hypothesis's own number, if lower)
 MIN_CONTROL_DAYS = 0         # days WITHOUT the treatment needed, for yes/no treatments
 # When a hypothesis can't reach its days only because of the extra things it adjusts for
 # (each one missing on some days shrinks the usable days), set the least-recorded of them aside,
 # one at a time, until it can run. Day of week is never set aside.
-ADAPTIVE_COVARIATES = False
+ADAPTIVE_COVARIATES = True
 KEEP_COVARIATES = {"day_of_week", "is_weekend"}
 
 
 # Which calculation gives the effect, its interval and its p-value. "ols" is calibrated on a few weeks of data
 # where "dml" is not (see run_ols and lab/calibration_lab.py).
-ESTIMATOR = "dml"
+ESTIMATOR = "ols"
 
 
 def estimate(sub: pd.DataFrame, hyp: Hypothesis, covs: list[str]) -> Optional[dict]:

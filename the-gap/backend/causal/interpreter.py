@@ -25,7 +25,7 @@ OUTCOME_HIGHER_IS_BETTER = {
 
 
 # Days of data before a pattern can be called "moderate" or "strong" confidence.
-MODERATE_MIN_N = 30
+MODERATE_MIN_N = 18
 STRONG_MIN_N = 60
 
 
@@ -67,12 +67,14 @@ def interpret_result(
         confidence_label = "Moderate confidence"
         confidence_description = (
             "A consistent pattern in your data. More days will sharpen it further."
+            if n_obs >= 30
+            else f"A pattern in the {n_obs} days so far. It could shift a little as more days come in."
         )
     else:
         confidence = ConfidenceLevel.WEAK
         confidence_label = "Early signal"
         confidence_description = (
-            "A hint of this pattern exists. Track another 30 days to confirm."
+            "A hint of this pattern exists. Keep logging for a few more weeks to see if it holds."
         )
 
     # ── Per-hypothesis copy ────────────────────────────────────────────────
