@@ -1,0 +1,76 @@
+name: Uptime watch
+
+# Every ten minutes: is the server up, does the database answer, and is scheduled syncing keeping up?
+# (GET /health/deep). If not, an issue is opened on this repo and assigned to the owner, which emails them.
+# When everything is back to normal the issue is closed. It also keeps Render's free server from falling asleep.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the server
+        id: check
+        run: |
+          url="${{ vars.BACKEND_URL || 'https://the-gap-backend.onrender.com' }}/health/deep"
+          ok=false
+          detail="no answer"
+          for attempt in 1 2 3; do
+            code=$(curl -s -m 90 -o body.json -w "%{http_code}" "$url" || echo 000)
+            if [ "$code" = "200" ]; then
+              overdue=$(python3 -c "import json; print(json.load(open('body.json')).get('sync_overdue') or 0)")
+              if [ "$overdue" -gt 0 ]; then
+                detail="Syncing is behind: $overdue people are more than 2 hours overdue for their sync."
+              else
+                ok=true
+                detail="ok"
+              fi
+              break
+            fi
+            detail="The server answered HTTP $code (000 means no answer at all)."
+            sleep 20
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "detail=$detail" >> "$GITHUB_OUTPUT"
+          echo "$detail"
+
+      - name: Open or close the alert
+        uses: actions/github-script@v7
+        env:
+          OK: ${{ steps.check.outputs.ok }}
+          DETAIL: ${{ steps.check.outputs.detail }}
+        with:
+          script: |
+            const ok = process.env.OK === 'true';
+            const detail = process.env.DETAIL;
+            const label = 'server-problem';
+            const { owner, repo } = context.repo;
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: label });
+            if (!ok) {
+              if (open.data.length === 0) {
+                await github.rest.issues.create({
+                  owner, repo,
+                  title: 'The Gap server problem',
+                  labels: [label],
+                  assignees: [owner],
+                  body: `@${owner} The uptime check found a problem.\n\n**${detail}**\n\nWhat to check: the Render dashboard (is the service running? any failed deploy?), the Supabase dashboard (is the project paused?), and the Render logs for errors.\n\nThis issue closes by itself when things are back to normal.`,
+                });
+              }
+            } else {
+              for (const issue of open.data) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: 'Back to normal. Closing.' });
+                await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+              }
+            }

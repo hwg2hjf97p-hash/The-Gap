@@ -20,6 +20,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
+# Error alerts to Sentry when SENTRY_DSN is set (does nothing otherwise). See utils/observability.py.
+from utils.observability import init_sentry  # noqa: E402
+init_sentry()
+
 app = FastAPI(
     title="The Gap API",
     description="Personal Causal Intelligence Layer — analyses wearable data to find verified cause-and-effect insights",
@@ -146,7 +150,31 @@ app.include_router(app_config.router)
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "synclock-1"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "queue-1"}
+
+@app.get("/health/deep")
+async def health_deep():
+    """What an uptime monitor should watch: the server is up AND the database answers AND scheduled syncing isn't falling behind."""
+    import httpx
+    from utils import sync_queue
+
+    report = dict(health_check())
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    database_ok = False
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            resp = await client.get(f"{base}/rest/v1/results", headers={"apikey": key, "Authorization": f"Bearer {key}"}, params={"select": "id", "limit": "1"})
+            database_ok = resp.status_code == 200
+    except Exception:
+        database_ok = False
+    report["database"] = "ok" if database_ok else "down"
+    report["sync_overdue"] = await sync_queue.overdue_count() if database_ok else None
+    if not database_ok:
+        report["status"] = "degraded"
+        return JSONResponse(status_code=503, content=report)
+    return report
+
 
 @app.get("/")
 def root():

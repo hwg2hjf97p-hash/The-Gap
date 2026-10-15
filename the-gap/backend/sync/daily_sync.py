@@ -39,6 +39,7 @@ from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from utils.insight_memory import stabilise
 from utils.headsups import run_headsups
+from utils import sync_queue
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 from routers.workouts import get_workout_dataframe
@@ -195,6 +196,9 @@ async def _supabase_patch(table: str, params: dict, payload: dict) -> None:
 
 # ── Sync routes ───────────────────────────────────────────────────────────────
 
+_last_full_sync = 0.0
+
+
 @router.post("/run")
 async def run_sync(x_sync_secret: str = Header(default="")):
     """
@@ -229,6 +233,18 @@ async def run_sync(x_sync_secret: str = Header(default="")):
     for conn in connections:
         users.setdefault(conn["user_id"], []).append(conn)
 
+    # The normal way: whoever is due is synced a few at a time in the background, and this returns at once
+    # (see utils/sync_queue.py). Falls back to the old walk-through-everyone below until phase14.sql is run.
+    queued = await sync_queue.start_batch(users, _sync_user)
+    if queued is not None:
+        return JSONResponse(content={**queued, "timestamp": datetime.now(timezone.utc).isoformat()})
+
+    # The old way syncs everyone in one go, and the trigger now fires every 15 minutes, so keep it to about hourly.
+    global _last_full_sync
+    if time.time() - _last_full_sync < 50 * 60:
+        return JSONResponse(content={"mode": "skipped", "reason": "the full sync ran less than 50 minutes ago", "timestamp": datetime.now(timezone.utc).isoformat()})
+    _last_full_sync = time.time()
+
     for user_id, user_connections in users.items():
         result = await _sync_user(user_id, user_connections)
         results.append(result)
@@ -250,7 +266,10 @@ _user_sync_locks: dict[str, asyncio.Lock] = {}
 async def _sync_user(user_id: str, connections: list[dict]) -> dict:
     lock = _user_sync_locks.setdefault(user_id, asyncio.Lock())
     async with lock:
-        return await _sync_user_unlocked(user_id, connections)
+        result = await _sync_user_unlocked(user_id, connections)
+    if result.get("status") == "success":
+        await sync_queue.touch(user_id)  # they are fresh now: their next scheduled sync moves an hour on
+    return result
 
 
 async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
