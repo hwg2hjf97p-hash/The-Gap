@@ -92,6 +92,10 @@ def run_linear_dml(
         ci_low = float(np.asarray(ci[0]).flatten()[0])
         ci_high = float(np.asarray(ci[1]).flatten()[0])
         p_value = float(np.asarray(inference.pvalue()).flatten()[0])
+        try:
+            stderr = float(np.asarray(inference.stderr).flatten()[0])
+        except Exception:
+            stderr = None
 
         return {
             "effect": effect,
@@ -99,6 +103,8 @@ def run_linear_dml(
             "ci_high": ci_high,
             "n_obs": n,
             "p_value": p_value,
+            "stderr": stderr,
+            "n_covariates": len(covariate_cols),
             "method": "LinearDML",
         }
 

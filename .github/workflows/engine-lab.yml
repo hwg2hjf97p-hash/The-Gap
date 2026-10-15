@@ -27,4 +27,5 @@ jobs:
           pip install "numpy>=1.24,<2.0" "pandas>=2.0,<3.0"
           pip install -r requirements.txt
       - name: Run the lab
-        run: python -u lab/engine_lab.py
+        run: |
+          python -u lab/calibration_lab.py
