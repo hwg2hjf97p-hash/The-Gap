@@ -24,6 +24,11 @@ OUTCOME_HIGHER_IS_BETTER = {
 }
 
 
+# Days of data before a pattern can be called "moderate" or "strong" confidence.
+MODERATE_MIN_N = 30
+STRONG_MIN_N = 60
+
+
 def interpret_result(
     *,
     hypothesis: Hypothesis,
@@ -51,13 +56,13 @@ def interpret_result(
     ci_width = abs(ci_high - ci_low)
     tight_ci = ci_width < abs(effect) * 2
 
-    if ci_excludes_zero and tight_ci and n_obs >= 60:
+    if ci_excludes_zero and tight_ci and n_obs >= STRONG_MIN_N:
         confidence = ConfidenceLevel.STRONG
         confidence_label = "High confidence"
         confidence_description = (
             "Seen consistently across your data. Strong enough to act on."
         )
-    elif ci_excludes_zero and n_obs >= 30:
+    elif ci_excludes_zero and n_obs >= MODERATE_MIN_N:
         confidence = ConfidenceLevel.MODERATE
         confidence_label = "Moderate confidence"
         confidence_description = (

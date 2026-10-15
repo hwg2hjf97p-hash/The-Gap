@@ -28,6 +28,57 @@ logger = logging.getLogger(__name__)
 EARLY_READ_MIN_FRACTION = 0.5
 EARLY_READ_MIN_ABSOLUTE = 12
 
+# How much data is enough to try a hypothesis. Each hypothesis states the days it
+# wants (min_rows, min_treated_days); these scale that down for everyone at once, and
+# never raise it. See working_frame for how usable days are counted.
+MIN_ROWS_SCALE = 1.0
+MIN_ROWS_FLOOR = 18          # never ask for fewer than this many days (or the hypothesis's own number, if lower)
+MIN_TREATED_SCALE = 1.0
+MIN_TREATED_FLOOR = 4        # never ask for fewer treated days than this (or the hypothesis's own number, if lower)
+MIN_CONTROL_DAYS = 0         # days WITHOUT the treatment needed, for yes/no treatments
+# When a hypothesis can't reach its days only because of the extra things it adjusts for
+# (each one missing on some days shrinks the usable days), set the least-recorded of them aside,
+# one at a time, until it can run. Day of week is never set aside.
+ADAPTIVE_COVARIATES = False
+KEEP_COVARIATES = {"day_of_week", "is_weekend"}
+
+
+def required_rows(hyp: Hypothesis) -> int:
+    return max(min(hyp.min_rows, MIN_ROWS_FLOOR), round(hyp.min_rows * MIN_ROWS_SCALE))
+
+
+def required_treated(hyp: Hypothesis) -> int:
+    return max(min(hyp.min_treated_days, MIN_TREATED_FLOOR), round(hyp.min_treated_days * MIN_TREATED_SCALE))
+
+
+def working_frame(df: pd.DataFrame, hyp: Hypothesis) -> tuple[pd.DataFrame, list[str]]:
+    """
+    The days this hypothesis can use, and the covariates it will adjust for.
+
+    Normally a day counts only if the treatment, the outcome AND every covariate are known.
+    Each covariate that is often missing therefore costs days. With ADAPTIVE_COVARIATES on, if that
+    leaves too few days, the covariate missing on the most days is set aside (never day of week),
+    and so on, until there are enough or nothing more can be set aside.
+    """
+    covs = list(hyp.covariate_cols or [])
+    need = required_rows(hyp)
+    cols = list({hyp.treatment_col, hyp.outcome_col, *covs})
+    sub = df[cols].dropna()
+    if len(sub) >= need or not ADAPTIVE_COVARIATES:
+        return sub, covs
+
+    have_ty = df[[hyp.treatment_col, hyp.outcome_col]].dropna().index
+    droppable = [c for c in covs if c not in KEEP_COVARIATES]
+    droppable.sort(key=lambda c: int(df.loc[have_ty, c].isna().sum()), reverse=True)
+    for c in droppable:
+        covs = [x for x in covs if x != c]
+        cols = list({hyp.treatment_col, hyp.outcome_col, *covs})
+        sub = df[cols].dropna()
+        if len(sub) >= need:
+            break
+    return sub, covs
+
+
 # Smallest effect worth showing someone, in the natural unit of each outcome.
 # A result can be statistically real and still not worth a card: "you sleep 5
 # minutes longer on busier calendar days" is not something anyone can act on or
@@ -158,15 +209,14 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
         if any(c not in df.columns for c in required):
             continue  # no relevant data source connected at all — nothing to show
 
-        cols = list({hyp.treatment_col, hyp.outcome_col, *(hyp.covariate_cols or [])})
-        sub = df[cols].dropna()
+        sub, covs_used = working_frame(df, hyp)
 
         if hyp.binary_treatment:
             current = int(sub[hyp.treatment_col].sum())
-            required_n = hyp.min_treated_days
+            required_n = required_treated(hyp)
         else:
             current = len(sub)
-            required_n = hyp.min_rows
+            required_n = required_rows(hyp)
 
         if current >= required_n:
             continue  # already sufficient — will surface as an insight instead
@@ -178,7 +228,7 @@ def get_experiments_in_progress(df: pd.DataFrame, extra_hypotheses: Optional[lis
                     df=sub,
                     treatment_col=hyp.treatment_col,
                     outcome_col=hyp.outcome_col,
-                    covariate_cols=hyp.covariate_cols or [],
+                    covariate_cols=covs_used,
                     binary_treatment=hyp.binary_treatment,
                 )
                 if result is not None:
@@ -261,26 +311,28 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
         return None
 
     # ── 2. Build working sub-frame ─────────────────────────────────────────
-    cols = list({hyp.treatment_col, hyp.outcome_col, *(hyp.covariate_cols or [])})
-    sub = df[cols].dropna()
+    sub, covs_used = working_frame(df, hyp)
 
     # ── 3. Check minimum row count ─────────────────────────────────────────
-    if len(sub) < hyp.min_rows:
+    if len(sub) < required_rows(hyp):
         logger.info(
-            "SKIPPED_INSUFFICIENT_ROWS hyp=%s rows=%d needed=%d", hyp.id, len(sub), hyp.min_rows
+            "SKIPPED_INSUFFICIENT_ROWS hyp=%s rows=%d needed=%d", hyp.id, len(sub), required_rows(hyp)
         )
         return None
 
     # ── 4. Extra cardinality check for binary treatment hypotheses ─────────
     if hyp.binary_treatment:
         n_treated = sub[hyp.treatment_col].sum()
-        if n_treated < hyp.min_treated_days:
+        if n_treated < required_treated(hyp):
             logger.info(
                 "SKIPPED_INSUFFICIENT_TREATED_DAYS hyp=%s treated=%d needed=%d",
                 hyp.id,
                 int(n_treated),
-                hyp.min_treated_days,
+                required_treated(hyp),
             )
+            return None
+        if len(sub) - n_treated < MIN_CONTROL_DAYS:
+            logger.info("SKIPPED_INSUFFICIENT_CONTROL_DAYS hyp=%s controls=%d needed=%d", hyp.id, int(len(sub) - n_treated), MIN_CONTROL_DAYS)
             return None
 
     # ── 5. Run LinearDML ───────────────────────────────────────────────────
@@ -288,7 +340,7 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
         df=sub,
         treatment_col=hyp.treatment_col,
         outcome_col=hyp.outcome_col,
-        covariate_cols=hyp.covariate_cols or [],
+        covariate_cols=covs_used,
         binary_treatment=hyp.binary_treatment,
     )
 

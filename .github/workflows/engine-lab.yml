@@ -1,0 +1,30 @@
+name: Engine lab
+
+# Compares engine settings on made-up people whose real patterns are known, and prints the result as
+# annotations. Run by hand (Actions tab, "Run workflow") or by a push that touches the lab.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "the-gap/backend/lab/**"
+      - ".github/workflows/engine-lab.yml"
+
+jobs:
+  lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: the-gap/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the full requirements
+        run: |
+          pip install "numpy>=1.24,<2.0" "pandas>=2.0,<3.0"
+          pip install -r requirements.txt
+      - name: Run the lab
+        run: python -u lab/engine_lab.py

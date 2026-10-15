@@ -29,14 +29,14 @@ SEED = 20261007
 SCREEN_LAST_USE = ("before_9pm", "9_11pm", "11pm_1am", "after_1am")
 
 
-def generate_demo_data(last_day: date, days: int = DAYS) -> tuple[dict[str, dict[str, float]], list[dict]]:
+def generate_demo_data(last_day: date, days: int = DAYS, seed: int = SEED) -> tuple[dict[str, dict[str, float]], list[dict]]:
     """
     Returns (health_rows, checkin_rows) for the `days` days ending on `last_day`.
 
     health_rows maps an ISO date to the Apple Health style values the app
     stores per day; checkin_rows are daily_checkins rows without a user id.
     """
-    rng = np.random.default_rng(SEED)
+    rng = np.random.default_rng(seed)
     start = last_day - timedelta(days=days - 1)
 
     health: dict[str, dict[str, float]] = {}
