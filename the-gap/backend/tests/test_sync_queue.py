@@ -185,3 +185,37 @@ def test_error_reports_carry_no_request_bodies_or_secrets():
     assert "data" not in out["request"] and "cookies" not in out["request"] and "query_string" not in out["request"]
     assert out["request"]["headers"] == {"User-Agent": "iPhone"}
     assert "user" not in out and out["message"] == "something broke"
+
+
+# ── the server's own clock ───────────────────────────────────────────────────
+
+def test_one_scheduler_pass_groups_connections_by_person_and_hands_them_to_the_queue(monkeypatch):
+    from sync import scheduler
+
+    seen = {}
+
+    async def fake_start(users, sync_fn, **kw):
+        seen["users"] = users
+        return {"mode": "queue", "claimed": 2, "due": 2, "connected": len(users)}
+
+    async def load():
+        return [{"user_id": "a", "provider": "whoop"}, {"user_id": "a", "provider": "oura"}, {"user_id": "b", "provider": "whoop"}]
+
+    async def sync(user_id, conns):
+        return {"status": "success"}
+
+    monkeypatch.setattr(sq, "start_batch", fake_start)
+    out = run(scheduler.run_due_once(load, sync))
+    assert out["connected"] == 2 and {u: len(c) for u, c in seen["users"].items()} == {"a": 2, "b": 1}
+
+
+def test_a_pass_with_nobody_connected_does_nothing(monkeypatch):
+    from sync import scheduler
+
+    async def load():
+        return []
+
+    async def sync(user_id, conns):
+        raise AssertionError("no one to sync")
+
+    assert run(scheduler.run_due_once(load, sync))["claimed"] == 0

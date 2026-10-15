@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -147,10 +148,20 @@ app.include_router(headsups.router)
 app.include_router(evidence_admin.router)
 app.include_router(app_config.router)
 
+@app.on_event("startup")
+async def start_background_scheduler():
+    """The server checks for due syncs itself (see sync/scheduler.py), so syncing doesn't depend on GitHub's flaky cron."""
+    if os.getenv("DISABLE_SCHEDULER", "").strip().lower() in ("1", "true", "yes"):
+        return
+    from sync.scheduler import scheduler_loop
+
+    app.state.scheduler = asyncio.create_task(scheduler_loop())
+
+
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "queue-1"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "queue-2"}
 
 @app.get("/health/deep")
 async def health_deep():
