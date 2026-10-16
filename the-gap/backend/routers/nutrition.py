@@ -73,6 +73,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
+from utils.servings import default_serving, portion_from_measures
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
@@ -177,8 +178,15 @@ def _usda_to_item(food: dict) -> Optional[dict]:
         serving_grams = float(size)
         household = (food.get("householdServingFullText") or "").strip()
         label = f"{household} ({round(serving_grams)} g)" if household else None
+    name = _tidy(food["description"])
+    if not serving_grams:
+        # Generic foods carry no serving: use the database's own household measure, else a typical serving for plain
+        # everyday foods, else it stays per 100 g (utils/servings.py).
+        found = portion_from_measures(food.get("foodMeasures") or food.get("foodPortions")) or default_serving(name)
+        if found:
+            label, serving_grams = found
     brand = _tidy(food.get("brandName") or food.get("brandOwner"))
-    return _food_item("usda", str(food.get("fdcId")), _tidy(food["description"]), brand, per100, serving_grams, label)
+    return _food_item("usda", str(food.get("fdcId")), name, brand, per100, serving_grams, label)
 
 
 async def _usda_search(client: httpx.AsyncClient, query: str, data_types: str, page_size: int) -> list[dict]:
@@ -232,6 +240,10 @@ def _off_to_item(product: dict) -> Optional[dict]:
     except (TypeError, ValueError):
         pass
     label = (product.get("serving_size") or "").strip() or None
+    if not serving_grams:
+        found = default_serving(name)
+        if found:
+            label, serving_grams = found
     brands = product.get("brands")
     if isinstance(brands, list):  # the newer search service returns a list
         brand = str(brands[0]) if brands else ""
