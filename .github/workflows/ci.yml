@@ -42,7 +42,7 @@ jobs:
       - name: Run tests
         run: |
           eval "$ANNOTATE"
-          run_annotated python -m pytest -q
+          run_annotated python -m pytest -q -p no:warnings --tb=short
 
   backend-engine:
     # Runs the sample data through the real analysis (the full requirements, so slower).
