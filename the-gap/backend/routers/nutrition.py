@@ -74,7 +74,8 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 from utils.servings import default_serving, portion_from_measures
-from utils import takeaway
+from utils import meals, takeaway
+from routers.suggestions import current_week_recipes
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
@@ -314,11 +315,12 @@ async def search_foods(
 
     failures: list[str] = []
     async with httpx.AsyncClient(timeout=10) as client:
-        generic, branded, off_local, off_world = await asyncio.gather(
+        generic, branded, off_local, off_world, week_recipes = await asyncio.gather(
             _safe(_usda_search(client, q, "Foundation,SR Legacy", 6), "usda_generic", failures),
             _safe(_usda_search(client, q, "Branded", 8 if us_like else 3), "usda_branded", failures),
             _safe(_off_search(client, q, tag, 10), "off_local", failures) if tag else _none(),
             _safe(_off_search(client, q, None, 8), "off", failures),
+            current_week_recipes(user_id),
         )
 
     ordered = (
@@ -328,6 +330,10 @@ async def search_foods(
     )
     # Takeaway menu items (McDonald's and so on) from the chains' own published nutrition lead the list.
     ordered = takeaway.search(q, 8) + ordered
+    # Everyday meals (with a link to the recipe) and the person's own recipe ideas for the week come right after.
+    # A single word like "chicken" fits many meals, so it gets fewer slots and the usual foods still show.
+    one_word = len(q.split()) == 1
+    ordered = meals.from_week_recipes(week_recipes, q, 2 if one_word else 3) + meals.search(q, 2 if one_word else 4) + ordered
 
     seen: set[tuple[str, str]] = set()
     results: list[dict] = []

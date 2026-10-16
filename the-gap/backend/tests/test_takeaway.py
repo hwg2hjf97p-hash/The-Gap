@@ -1,6 +1,6 @@
 from utils import takeaway
 
-CHAINS = ("McDonald's", "Guzman y Gomez", "Hungry Jack's", "KFC", "Domino's", "Subway")
+CHAINS = ("McDonald's", "Guzman y Gomez", "Hungry Jack's", "KFC", "Domino's", "Subway", "Nando's")
 
 
 def chain(name):
@@ -66,6 +66,7 @@ def test_the_chain_name_or_a_nickname_finds_its_dishes():
         ("gyg", "Guzman y Gomez"), ("guzman y gomez", "Guzman y Gomez"),
         ("hungry jacks", "Hungry Jack's"), ("hj", "Hungry Jack's"), ("kfc", "KFC"),
         ("dominos", "Domino's"), ("domino's", "Domino's"), ("subway", "Subway"),
+        ("nandos", "Nando's"), ("nando's", "Nando's"),
     ):
         results = takeaway.search(text, 8)
         assert results and all(r["brand"] == brand for r in results), text

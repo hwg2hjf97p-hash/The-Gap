@@ -190,6 +190,24 @@ async def _cache_get(client: httpx.AsyncClient, user_id: str, week: date, kind: 
     return None
 
 
+async def current_week_recipes(user_id: str) -> list[dict]:
+    """This week's recipe ideas already written for the person (if any), for the food search. Never writes or generates."""
+    try:
+        week = _week_start(date.today())
+        async with httpx.AsyncClient(timeout=6) as client:
+            resp = await client.get(
+                _sb_url("weekly_suggestions"), headers=_sb_headers(),
+                params={"user_id": f"eq.{user_id}", "week_start": f"eq.{week.isoformat()}", "kind": "eq.food", "select": "payload", "limit": "1"},
+            )
+            resp.raise_for_status()
+            rows = resp.json() or []
+        payload = rows[0].get("payload") if rows else None
+        return list((payload or {}).get("recipes") or [])
+    except Exception as exc:
+        logger.warning("Week recipes read failed for %s: %s", user_id[:8], exc)
+        return []
+
+
 async def _cache_put(client: httpx.AsyncClient, user_id: str, week: date, kind: str, phash: str, payload: dict) -> None:
     try:
         resp = await client.post(

@@ -1,0 +1,41 @@
+{
+  "chain": "Nando's",
+  "aliases": [
+    "nandos",
+    "nando's",
+    "nando"
+  ],
+  "country": "AU",
+  "source": "Nando's Australia nutritional information pages, one per menu item, per serve (https://www.nandos.com.au/menu-item)",
+  "collected": "2026-10-17",
+  "notes": "Per serve as published on each item's page, with the usual PERi-PERi basting. The Great Pretender Protein (patty only) and the PERi-Harvest Bowl were left out because their published numbers did not add up. Sauces, drinks and kids' items are not published there.",
+  "featured": [
+    "chicken",
+    "burgers-wraps"
+  ],
+  "labels": {
+    "chicken": "1 serve",
+    "salads-bowls": "1 serve",
+    "burgers-wraps": "1 burger or wrap",
+    "sides": "1 serve"
+  },
+  "columns": ["category", "name", "kcal", "protein_g", "carbs_g", "fat_g"],
+  "items": [
+    ["chicken","Half PERi-PERi Chicken",715,108,1.1,30.8],
+    ["chicken","Whole PERi-PERi Chicken",1380,208,2.2,59.7],
+    ["chicken","BBQ Chicken Ribs",297,29.6,4.4,18],
+    ["chicken","4 PERi-PERi Grilled Tenders",220,39.6,0.7,6.5],
+    ["salads-bowls","Mediterranean Salad",415,8.1,14.8,30.2],
+    ["salads-bowls","Mediterranean Salad with Chicken",581,37.8,15.3,35],
+    ["salads-bowls","Paella",557,31,81.9,10],
+    ["salads-bowls","Avo Parmesan Crunch",259,10.5,7.1,20.6],
+    ["burgers-wraps","Avo Goodness",568,38.4,52.4,21.5],
+    ["burgers-wraps","The Halloumi",599,40.1,53.9,24.7],
+    ["burgers-wraps","Double Cheese & Bacon",667,47.2,48.4,31.4],
+    ["burgers-wraps","PERinaise Classic",496,41,42.5,16.9],
+    ["burgers-wraps","Supremo",648,41.9,52.5,28.9],
+    ["sides","PERi-PERi Chips",326,5.4,44.7,13],
+    ["sides","Halloumi Sticks & Dip",360,17.6,14.7,25.5],
+    ["sides","Roasted Broccoli with PERi-Crackle",339,11.4,3.2,30.3]
+  ]
+}
