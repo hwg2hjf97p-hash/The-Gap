@@ -74,6 +74,7 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 from utils.servings import default_serving, portion_from_measures
+from utils import takeaway
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
@@ -325,6 +326,8 @@ async def search_foods(
         if us_like
         else off_local + generic + off_world + branded
     )
+    # Takeaway menu items (McDonald's and so on) from the chains' own published nutrition lead the list.
+    ordered = takeaway.search(q, 8) + ordered
 
     seen: set[tuple[str, str]] = set()
     results: list[dict] = []
@@ -340,6 +343,12 @@ async def search_foods(
     # showing a thin result list as if nothing matched.
     degraded = "usda_generic" in failures and "usda_branded" in failures and not (off_local or off_world)
     return JSONResponse(content={"results": results[:20], "degraded": degraded})
+
+
+@router.get("/takeaway")
+async def takeaway_chains(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """The chains with menu items available to log (for the shortcuts under the search box)."""
+    return JSONResponse(content={"chains": takeaway.chains_summary()})
 
 
 @router.get("/barcode/{code}")
