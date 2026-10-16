@@ -39,6 +39,12 @@ def default_serving(name: str) -> Optional[tuple[str, float]]:
     first, _, rest = text.partition(",")
     first = first.strip()
     if first not in _COMMON:
+        # USDA names are plural ("Bananas, raw", "Tomatoes, red"): try the singular.
+        for cut in (1, 2):
+            if first.endswith("s" if cut == 1 else "es") and first[:-cut] in _COMMON:
+                first = first[:-cut]
+                break
+    if first not in _COMMON:
         return None
     # "Bananas, raw" or just "Banana" are plain; "Banana, with skin, dehydrated" is not.
     rest = rest.strip()
