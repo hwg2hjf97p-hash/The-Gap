@@ -299,6 +299,7 @@ async def get_latest_results_endpoint(user_id: str = Depends(get_current_user_id
     row = await asyncio.to_thread(get_latest_results, user_id)
     if row is None:
         return JSONResponse(content={"found": False})
+    await _add_movement_to(user_id, row)
     return JSONResponse(content={"found": True, **row})
 
 
@@ -319,3 +320,23 @@ async def get_results(session_id: str) -> JSONResponse:
     # The share link is public, so it shouldn't carry the owner's internal id.
     row.pop("user_id", None)
     return JSONResponse(content=row)
+
+
+async def _add_movement_to(user_id: str, row: dict) -> None:
+    """Mark each insight with how much it moved since about a day before this analysis (see utils/movement.py). Never raises."""
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        from db.supabase_client import get_insights_before
+        from utils.movement import add_movement
+
+        insights = row.get("insights")
+        if not isinstance(insights, list):
+            return
+        saved = datetime.fromisoformat(str(row.get("created_at")).replace("Z", "+00:00"))
+        if saved.tzinfo is None:
+            saved = saved.replace(tzinfo=timezone.utc)
+        earlier = await asyncio.to_thread(get_insights_before, user_id, (saved - timedelta(hours=20)).isoformat())
+        add_movement(insights, earlier)
+    except Exception as exc:
+        logger.warning("Movement could not be worked out for %s: %s", user_id[:8], exc)

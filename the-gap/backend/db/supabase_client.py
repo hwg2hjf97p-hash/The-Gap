@@ -166,6 +166,28 @@ def get_latest_results(user_id: str) -> Optional[dict]:
         return None
 
 
+def get_insights_before(user_id: str, before_iso: str) -> Optional[list[dict]]:
+    """The insights saved by the newest analysis made at or before `before_iso` (used to see what has moved since then).
+    None when there isn't one, or it can't be read."""
+    if not _is_configured():
+        return None
+    try:
+        resp = httpx.get(
+            _sb_url("results"),
+            headers=_sb_headers(),
+            params={"user_id": f"eq.{user_id}", "created_at": f"lte.{before_iso}", "select": "insights,created_at", "order": "created_at.desc", "limit": "1"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        if not rows:
+            return None
+        return rows[0].get("insights") or []
+    except Exception as exc:
+        logger.warning("Earlier insights fetch failed for %s: %s", user_id[:8], exc)
+        return None
+
+
 # Keep _get_client for any legacy imports — returns None so callers degrade gracefully
 def _get_client():
     logger.warning("_get_client() called — supabase-py is no longer used. Returning None.")
