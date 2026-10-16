@@ -1,0 +1,30 @@
+{
+  "chain": "Subway",
+  "aliases": ["subway"],
+  "country": "AU",
+  "source": "Subway Australia Nutrition Information, October 2025 (https://www.subway.com/v1v2/assets/en-au/nutrition/documents/aus-nutritional-summary.pdf)",
+  "collected": "2026-10-17",
+  "notes": "Subway's published 6-inch subs with their standard recipe (the sub, its listed ingredients and bread). A footlong is roughly double. Changing bread, sauce or toppings changes the numbers.",
+  "featured": ["subs"],
+  "labels": {"subs": "1 six-inch sub"},
+  "columns": ["category", "name", "kcal", "protein_g", "carbs_g", "fat_g"],
+  "items": [
+    ["subs", "BBQ Southern Style Chicken Sub (6-inch)", 482, 19.3, 63.1, 16.1],
+    ["subs", "Chicken & Bacon Ranch Sub (6-inch)", 466, 28.9, 39.1, 21],
+    ["subs", "Chicken Classic Sub (6-inch)", 492, 22.3, 47.5, 22.8],
+    ["subs", "Chicken Schnitzel Sub (6-inch)", 538, 29.9, 49.5, 23.6],
+    ["subs", "Chicken Strips Sub (6-inch)", 382, 25.8, 38.3, 13.3],
+    ["subs", "Chipotle Steak Melt Sub (6-inch)", 485, 25.2, 42.4, 22.6],
+    ["subs", "Honey Mustard Leg Ham Sub (6-inch)", 391, 21.4, 48, 11.4],
+    ["subs", "Italian B.M.T. Sub (6-inch)", 506, 24.6, 42.5, 25.8],
+    ["subs", "Italian Meatball Sub (6-inch)", 561, 24, 51.8, 28.4],
+    ["subs", "Pizza Melt Sub (6-inch)", 450, 21.4, 42.6, 20.8],
+    ["subs", "Seafood Sensation Sub (6-inch)", 464, 14.7, 51.7, 21.1],
+    ["subs", "Smashed Falafel Sub (6-inch)", 498, 18.7, 57.6, 19.3],
+    ["subs", "Sweet Onion Chicken Teriyaki Sub (6-inch)", 396, 25.3, 54.5, 8],
+    ["subs", "Tuna Mayo Sub (6-inch)", 377, 21.8, 38.2, 14.5],
+    ["subs", "Turkey on Rye Sub (6-inch)", 394, 23.9, 47.7, 10.7],
+    ["subs", "Veggie Delite with Avo Sub (6-inch)", 377, 16.1, 44.5, 14.7],
+    ["subs", "Veggie Patty Sub (6-inch)", 573, 19.2, 67.1, 23.5]
+  ]
+}

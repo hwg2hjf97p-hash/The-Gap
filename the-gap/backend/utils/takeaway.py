@@ -57,8 +57,9 @@ def load_chains() -> tuple[dict, ...]:
                 "category": category, "kind": kind, "note": note,
             }
 
+        labels = raw.get("labels", {})
         for row in raw["items"]:
-            item = make(row[1], _macros(row), row[0], "1 serve", "item")
+            item = make(row[1], _macros(row), row[0], labels.get(row[0], "1 serve"), "item")
             by_name[row[1]] = item
             items.append(item)
 
@@ -81,6 +82,7 @@ def load_chains() -> tuple[dict, ...]:
         chains.append({
             "name": name, "aliases": [_norm(a) for a in raw.get("aliases", [])] + [_norm(name)],
             "country": raw.get("country"), "collected": raw.get("collected"), "source": raw.get("source"),
+            "featured": raw.get("featured") or ["beef", "chicken"], "max_gap": raw.get("max_gap", 0.20),
             "items": items, "meals": meals,
         })
     return tuple(chains)
@@ -108,7 +110,7 @@ def search(query: str, limit: int = 8) -> list[dict]:
     q = _norm(query)
     if len(q) < 2:
         return []
-    out: list[dict] = []
+    groups: list[list[dict]] = []
     for chain in load_chains():
         remaining = q
         chain_named = False
@@ -120,7 +122,8 @@ def search(query: str, limit: int = 8) -> list[dict]:
         tokens = remaining.split()
         if chain_named and not tokens:
             # Just the chain's name: show its main dishes first.
-            out.extend([i for i in chain["items"] if i["category"] in ("beef", "chicken")][: max(limit, 8)])
+            featured = [i for i in chain["items"] if i["category"] in chain["featured"]] or chain["items"]
+            groups.append(featured[: max(limit, 8)])
             continue
         if not tokens or (not chain_named and len(q) < 3):
             continue
@@ -128,8 +131,17 @@ def search(query: str, limit: int = 8) -> list[dict]:
         pool = chain["meals"] if wants_meal else chain["items"]
         found = [i for i in pool if _matches(tokens, i["name"])]
         found.sort(key=lambda i: _sort_key(i, tokens))
-        out.extend(found)
-    return out[:limit]
+        if found and not chain_named and not wants_meal:
+            # A plain word like "chicken" matches every chain: take a few from each so the usual foods still show too.
+            found = found[:3]
+        groups.append(found)
+    # One chain at a time when it was named; otherwise a fair mix across chains.
+    out: list[dict] = []
+    for rank in range(max((len(g) for g in groups), default=0)):
+        out.extend(g[rank] for g in groups if rank < len(g))
+    if len([g for g in groups if g]) > 1:
+        return out[: min(limit, 6)]
+    return [i for g in groups for i in g][:limit]
 
 
 def chains_summary() -> list[dict]:
