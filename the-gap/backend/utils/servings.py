@@ -28,8 +28,6 @@ _COMMON = {
     "chicken breast": ("1 breast", 172), "salmon": ("1 fillet", 154), "tuna": ("1 can", 95),
 }
 
-# Words that mean the food is not the plain thing (banana bread, dried apple, apple juice ...): no default then.
-_NOT_PLAIN = ("bread", "cake", "muffin", "chips", "dried", "juice", "pie", "pudding", "flavour", "flavor", "candy", "sauce", "powder", "baby", "canned", "frozen", "fried", "smoothie", "bar")
 _SKIP_TEXT = ("quantity not specified", "100 g", "1 g", "10 g")
 
 
@@ -41,8 +39,6 @@ def default_serving(name: str) -> Optional[tuple[str, float]]:
     first, _, rest = text.partition(",")
     first = first.strip()
     if first not in _COMMON:
-        return None
-    if any(w in text for w in _NOT_PLAIN):
         return None
     # "Bananas, raw" or just "Banana" are plain; "Banana, with skin, dehydrated" is not.
     rest = rest.strip()
