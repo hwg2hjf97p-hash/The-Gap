@@ -40,6 +40,7 @@ from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from utils.insight_memory import stabilise
 from utils.headsups import run_headsups
 from utils import sync_queue
+from utils.token_health import PROVIDER_NAMES, refresh_token_is_dead
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 from routers.workouts import get_workout_dataframe
@@ -320,6 +321,23 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
                     )
                     logger.info("TOKEN_REFRESHED %s/%s", user_id[:8], provider)
                 except Exception as exc:
+                    if refresh_token_is_dead(exc):
+                        # The provider says this login can't be renewed (revoked, or expired as Google's test-mode
+                        # logins do after a week). Retrying every sync only repeats the error, so turn the connection
+                        # off, tell the person once, and let them reconnect.
+                        logger.warning("TOKEN_DEAD %s/%s: the provider rejected the saved login (invalid_grant); connection turned off", user_id[:8], provider)
+                        await _supabase_patch(
+                            "user_connections",
+                            {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
+                            {"is_active": False},
+                        )
+                        name = PROVIDER_NAMES.get(provider, provider.title())
+                        await send_push(
+                            user_id, f"{name} needs reconnecting",
+                            f"Your {name} connection expired. Open The Gap, then Settings, then Connections to reconnect it.",
+                            data={"kind": "connection_expired", "provider": provider},
+                        )
+                        continue
                     logger.error("TOKEN_REFRESH_FAILED %s/%s: %s — continuing with old token",
                                  user_id[:8], provider, exc)
                     # Don't skip — try with the existing token anyway
