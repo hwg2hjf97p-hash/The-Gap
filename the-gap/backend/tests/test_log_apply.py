@@ -136,8 +136,16 @@ def test_a_beer_in_the_evening_sets_the_alcohol_fields(monkeypatch):
     assert payload["alcohol"] is True and payload["alcohol_drinks"] == 1 and payload["alcohol_time"] == "evening"
 
 
-def test_a_second_beer_keeps_the_time_of_the_first(monkeypatch):
+def test_a_second_beer_adds_its_time_to_the_first(monkeypatch):
     db = FakeDB(checkin={"alcohol_drinks": 1, "alcohol_time": "afternoon", "partial": True})
+    install(monkeypatch, db)
+    run("another beer", at(21))
+    payload = db.posted("daily_checkins")[0]
+    assert payload["alcohol_drinks"] == 2 and payload["alcohol_time"] == "afternoon,evening"
+
+
+def test_a_second_beer_at_the_same_time_of_day_leaves_the_times_alone(monkeypatch):
+    db = FakeDB(checkin={"alcohol_drinks": 1, "alcohol_time": "evening", "partial": True})
     install(monkeypatch, db)
     run("another beer", at(21))
     payload = db.posted("daily_checkins")[0]

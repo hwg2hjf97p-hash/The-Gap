@@ -24,8 +24,9 @@ class _Resp:
 class FakeTable:
     """sync_state, as far as the queue needs it. `due` is who the database says is due; `taken` are people already claimed elsewhere."""
 
-    def __init__(self, existing=(), due=(), taken=(), missing_table=False):
+    def __init__(self, existing=(), due=(), taken=(), missing_table=False, connected=("late1",)):
         self.existing, self.due, self.taken, self.missing = set(existing), list(due), set(taken), missing_table
+        self.connected = set(connected)
         self.created, self.patches, self.posts = [], [], []
 
 
@@ -43,6 +44,8 @@ def install(monkeypatch, table: FakeTable):
         async def get(self, url, headers=None, params=None):
             if table.missing:
                 return _Resp(status=404)
+            if "user_connections" in url:
+                return _Resp([{"user_id": u} for u in table.connected])
             if "next_sync_at" in params and str(params["next_sync_at"]).startswith("lte."):
                 return _Resp([{"user_id": u, "fail_count": 0} for u in table.due])
             if "next_sync_at" in params and str(params["next_sync_at"]).startswith("lt."):
@@ -167,9 +170,14 @@ def test_a_slow_sync_is_cut_off_and_counted_as_failed(monkeypatch):
     assert "timed out" in table.patches[0][1]["last_error"]
 
 
-def test_overdue_count(monkeypatch):
-    install(monkeypatch, FakeTable())
+def test_overdue_count_only_counts_people_who_are_still_connected(monkeypatch):
+    # Two people are behind in the table, but only one still has a connected device: the other disconnected and isn't synced.
+    install(monkeypatch, FakeTable(connected=("late1",)))
+    assert run(sq.overdue_count(NOW)) == 1
+    install(monkeypatch, FakeTable(connected=("late1", "late2")))
     assert run(sq.overdue_count(NOW)) == 2
+    install(monkeypatch, FakeTable(connected=()))
+    assert run(sq.overdue_count(NOW)) == 0
 
 
 # ── error reports ────────────────────────────────────────────────────────────

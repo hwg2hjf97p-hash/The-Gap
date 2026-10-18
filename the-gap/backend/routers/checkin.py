@@ -43,6 +43,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_id
+from utils import drink_times
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/checkin", tags=["checkin"])
@@ -126,9 +127,14 @@ class CheckInRequest(BaseModel):
             raise ValueError("date must be YYYY-MM-DD format")
         return v
 
-    @validator("alcohol_time", "energy_drink_time", "gambling_time", "substance_time")
+    @validator("energy_drink_time", "gambling_time", "substance_time")
     def validate_time_of_day(cls, v):
         return _one_of(TIME_OF_DAY, v)
+
+    @validator("alcohol_time")
+    def validate_alcohol_times(cls, v):
+        # Drinks can be at several times in a day, so this one takes a list ("afternoon,evening").
+        return drink_times.clean(v)
 
     @validator("work_finish")
     def validate_work_finish(cls, v):

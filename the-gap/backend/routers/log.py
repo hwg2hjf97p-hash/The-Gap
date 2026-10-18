@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 from auth import get_current_user_id
 from routers.journal import _count_today, _get_streak, save_note
 from routers.weight import save_weight
+from utils import drink_times
 from utils.local_time import DEFAULT_TZ
 from utils.log_router import Action, Parsed, parse_log, spoken_summary, time_bucket
 from utils.saved_logging import (
@@ -104,8 +105,11 @@ async def _add_to_checkin(client: httpx.AsyncClient, user_id: str, day: str, hou
     bucket = time_bucket(hour)
     if "alcohol_drinks" in adds:
         payload["alcohol"] = True
-        if not (existing or {}).get("alcohol_time"):
-            payload["alcohol_time"] = bucket
+        # Each drink adds its time of day to the day's list (a beer at 1 pm and another at 8 pm gives both).
+        before = drink_times.clean((existing or {}).get("alcohol_time"))
+        merged = drink_times.add(before, bucket)
+        if merged != before:
+            payload["alcohol_time"] = merged
     if "energy_drinks" in adds and not (existing or {}).get("energy_drink_time"):
         payload["energy_drink_time"] = bucket
     if pm_caffeine:

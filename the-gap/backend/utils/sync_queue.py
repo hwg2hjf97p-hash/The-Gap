@@ -149,7 +149,10 @@ async def touch(user_id: str) -> None:
 
 
 async def overdue_count(now: Optional[datetime] = None) -> Optional[int]:
-    """How many people are more than OVERDUE_GRACE_MINUTES past due, or None if the queue isn't set up."""
+    """
+    How many people with a connected device or app are more than OVERDUE_GRACE_MINUTES past due, or None if the queue
+    isn't set up. Someone who has disconnected everything keeps an old row but is never synced, so they don't count.
+    """
     now = now or datetime.now(timezone.utc)
     try:
         async with httpx.AsyncClient(timeout=8) as client:
@@ -158,7 +161,16 @@ async def overdue_count(now: Optional[datetime] = None) -> Optional[int]:
                 params={"next_sync_at": f"lt.{_iso(now - timedelta(minutes=OVERDUE_GRACE_MINUTES))}", "select": "user_id", "limit": "1000"},
             )
             resp.raise_for_status()
-            return len(resp.json() or [])
+            late = {r["user_id"] for r in (resp.json() or [])}
+            if not late:
+                return 0
+            conns = await client.get(
+                _sb_url("user_connections"), headers=_sb_headers(),
+                params={"is_active": "eq.true", "select": "user_id", "limit": "100000"},
+            )
+            conns.raise_for_status()
+            connected = {r["user_id"] for r in (conns.json() or [])}
+            return len(late & connected)
     except Exception:
         return None
 
