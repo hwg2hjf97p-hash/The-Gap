@@ -5,6 +5,10 @@ from __future__ import annotations
 PROVIDER_NAMES = {"google": "Google Calendar", "whoop": "Whoop", "oura": "Oura", "strava": "Strava", "withings": "Withings", "polar": "Polar"}
 
 
+# Connections that are no longer offered. Any that still exist are switched off the next time they would sync.
+RETIRED_PROVIDERS = {"google"}
+
+
 def refresh_token_is_dead(exc: Exception) -> bool:
     """
     True when a token refresh failed because the provider says the saved login is no longer valid

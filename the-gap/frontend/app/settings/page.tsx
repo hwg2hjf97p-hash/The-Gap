@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Activity, CircleDot, Route, Calendar, LogOut, Cpu, Scale, Watch, Download, Trash2, ChevronRight } from "lucide-react";
+import { ArrowLeft, Activity, CircleDot, Route, LogOut, Cpu, Scale, Watch, Download, Trash2, ChevronRight } from "lucide-react";
 import { getUserId, getDisplayName, setDisplayName, resetIdentity } from "../../lib/identity";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://the-gap-backend.onrender.com";
@@ -12,7 +12,6 @@ const PROVIDERS = [
   { id: "whoop", name: "Whoop", Icon: Activity, color: "#ff3c00" },
   { id: "oura", name: "Oura Ring", Icon: CircleDot, color: "#6366f1" },
   { id: "strava", name: "Strava", Icon: Route, color: "#fc4c02" },
-  { id: "google", name: "Google Calendar", Icon: Calendar, color: "#34a853" },
   { id: "withings", name: "Withings", Icon: Scale, color: "#00bcd4" },
   { id: "polar", name: "Polar", Icon: Watch, color: "#e6ff00" },
 ];

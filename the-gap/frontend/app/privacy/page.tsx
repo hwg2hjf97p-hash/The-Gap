@@ -14,8 +14,8 @@ const SECTIONS: LegalSection[] = [
     bullets: [
       "Your account: your Sign in with Apple identifier, and your name and email address if you choose to share them (Apple may give us a private relay address instead). We create an internal user id for you. We don't see your Apple ID password or payment card details.",
       "Apple Health data you allow (read-only): heart rate variability, resting heart rate, heart rate, steps, sleep (total and stages), active energy, VO2 max, and nutrition totals. The app reads this on your phone and sends us daily summaries. When new data arrives, iOS can also wake the app briefly in the background so your numbers stay up to date; it reads and sends the same data, and you can switch this off in Settings.",
-      "Connected services you choose to link (Whoop, Oura, Strava, Withings, Polar, Google Calendar): the data each one makes available under the permissions you grant, such as recovery, sleep, HRV, workouts, weight, and calendar timing.",
-      "Your calendar: from your phone's calendar or Google Calendar, we use the number of events, meeting hours and timing. We don't store event titles or attendees.",
+      "Connected services you choose to link (Whoop, Oura, Strava, Withings, Polar): the data each one makes available under the permissions you grant, such as recovery, sleep, HRV, workouts, and weight.",
+      "Your calendar: from your phone's calendar (which includes any Google, iCloud or Outlook calendars you've added to your phone), we use the number of events, meeting hours and timing. We don't store event titles or attendees.",
       "What you log: Quick Entry notes, including anything you type or say to Siri or a Shortcut (the app keeps a small key in your iPhone's Keychain so the Siri action can add a log with the app closed; it can only add logs, is removed when you sign out or turn voice logging off, and Apple processes your speech as it does for any Siri request); daily check-ins (stress, alcohol, caffeine, energy drinks, cigarettes, gambling time, work hours, arguments, travel, and, only if you switch it on, other substances); food and water; workouts (exercises, sets, reps, weights, set start and stop times, and each set's average and peak heart rate); and any notes you add.",
       "About you: height, weight and age if you enter them; your calorie, protein and water goals; your workout schedule; your diet goal, eating style, allergies or foods to avoid; your training goal and equipment; your goals and experiments; and the questions you ask the in-app assistant (Gappy).",
       "Places: a home and work address if you enter them, the coordinates we look up from them, the weather for that place, and estimated commute times. The app does not use your phone's GPS.",
@@ -66,7 +66,7 @@ const SECTIONS: LegalSection[] = [
       { label: "Apple", text: "Sign in with Apple, push notifications, and App Store purchases. Apple Health data stays on your phone except for the summaries the app sends us." },
       { label: "RevenueCat", text: "Manages subscriptions. It receives your internal user id and purchase status." },
       { label: "Expo", text: "Delivers push notifications and app updates to your phone." },
-      { label: "Wearable and calendar providers", text: "Whoop, Oura, Strava, Withings, Polar and Google, only if you connect them, so we can retrieve your own data. Their own privacy policies apply to what they hold." },
+      { label: "Wearable and calendar providers", text: "Whoop, Oura, Strava, Withings and Polar, only if you connect them, so we can retrieve your own data. Their own privacy policies apply to what they hold." },
       { label: "Open-Meteo and Google Maps", text: "Look up the place you enter, fetch weather for it, and estimate commute times. They receive the place names or coordinates, not your name or account." },
       { label: "USDA FoodData Central and Open Food Facts", text: "Receive the food names you search for and barcodes you scan, through our server. They don't receive your account details." },
       { label: "YouTube (Google) and jsDelivr", text: "The app loads video thumbnails and exercise pictures from them, so they can see your IP address, like any website you visit. Videos open in YouTube, which has its own policy." },
@@ -128,5 +128,5 @@ const SECTIONS: LegalSection[] = [
 ];
 
 export default function PrivacyPolicyPage() {
-  return <LegalPage title="Privacy Policy" updated="16 October 2026" intro={INTRO} sections={SECTIONS} />;
+  return <LegalPage title="Privacy Policy" updated="19 October 2026" intro={INTRO} sections={SECTIONS} />;
 }

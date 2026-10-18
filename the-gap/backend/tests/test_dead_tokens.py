@@ -20,3 +20,9 @@ def test_other_failures_are_not_treated_as_a_dead_login():
     assert not refresh_token_is_dead(_error(429, "slow down"))
     assert not refresh_token_is_dead(httpx.ReadTimeout("slow"))
     assert not refresh_token_is_dead(RuntimeError("boom"))
+
+
+def test_google_calendar_is_a_retired_provider():
+    from utils.token_health import RETIRED_PROVIDERS
+
+    assert "google" in RETIRED_PROVIDERS

@@ -40,7 +40,7 @@ from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from utils.insight_memory import stabilise
 from utils.headsups import run_headsups
 from utils import sync_queue
-from utils.token_health import PROVIDER_NAMES, refresh_token_is_dead
+from utils.token_health import PROVIDER_NAMES, RETIRED_PROVIDERS, refresh_token_is_dead
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
 from routers.workouts import get_workout_dataframe
@@ -284,6 +284,10 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
 
     for conn in connections:
         provider = conn["provider"]
+        if provider in RETIRED_PROVIDERS:
+            # No longer offered (Google Calendar: the phone's own calendar covers it). Switch any old connection off once.
+            await _supabase_patch("user_connections", {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"}, {"is_active": False})
+            continue
         access_token = conn.get("access_token", "").strip()
         refresh_token = conn.get("refresh_token", "").strip()
         expires_at = conn.get("expires_at") or 0

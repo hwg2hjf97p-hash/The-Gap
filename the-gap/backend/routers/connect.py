@@ -1,6 +1,6 @@
 """
 OAuth connection router for The Gap.
-Handles connect/callback flows for Whoop, Oura, and Google Calendar.
+Handles connect/callback flows for Whoop, Oura, Strava, Withings and Polar. (Google Calendar was retired: the phone's own calendar covers it.)
 
 Flow:
   1. GET /connect/{provider}        → redirect user to provider OAuth page
@@ -54,13 +54,6 @@ PROVIDERS = {
         "scopes": "daily heartrate personal workout session",
         "client_id_env": "OURA_CLIENT_ID",
         "client_secret_env": "OURA_CLIENT_SECRET",
-    },
-    "google": {
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": "https://www.googleapis.com/auth/calendar.readonly",
-        "client_id_env": "GOOGLE_CLIENT_ID",
-        "client_secret_env": "GOOGLE_CLIENT_SECRET",
     },
     "withings": {
         # Withings' OAuth doesn't follow the standard shape other providers
