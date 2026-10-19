@@ -40,6 +40,7 @@ from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from utils.insight_memory import stabilise
 from utils.headsups import run_headsups
 from utils import sync_queue
+from sync.recent_refresh import fetch_recent_first, forget as forget_saved_reading
 from utils.token_health import PROVIDER_NAMES, RETIRED_PROVIDERS, refresh_token_is_dead
 from routers.checkin import get_checkin_dataframe
 from routers.journal import get_journal_dataframe
@@ -330,6 +331,7 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
                         # logins do after a week). Retrying every sync only repeats the error, so turn the connection
                         # off, tell the person once, and let them reconnect.
                         logger.warning("TOKEN_DEAD %s/%s: the provider rejected the saved login (invalid_grant); connection turned off", user_id[:8], provider)
+                        forget_saved_reading(user_id, provider)
                         await _supabase_patch(
                             "user_connections",
                             {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
@@ -354,7 +356,8 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
                 logger.info("FETCH_DONE provider=google rows=%s",
                             len(calendar_df) if calendar_df is not None else 0)
             elif provider == "whoop":
-                fetched = await fetch_whoop_data(access_token)
+                # The full 180 days once a day at most; between those, only the last two weeks (3 calls instead of about 25).
+                fetched = await fetch_recent_first(user_id, "whoop", access_token, fetch_whoop_data)
                 logger.info("FETCH_DONE provider=whoop rows=%d", len(fetched) if fetched is not None else 0)
                 if fetched is not None and not fetched.empty:
                     frames[provider] = fetched

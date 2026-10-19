@@ -570,6 +570,9 @@ async def disconnect(provider: str, user_id: str = Depends(get_current_user_id))
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.delete(url, headers=headers, params=params)
             resp.raise_for_status()
+            from sync.recent_refresh import forget
+
+            forget(user_id, provider)  # nothing held in memory for them either
             return JSONResponse(content={"success": True})
     except Exception as exc:
         logger.error("Disconnect failed: %s", exc)
