@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from auth import get_current_user_id
+from utils import provider_caps
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/connect")
@@ -278,6 +279,31 @@ def _build_auth_url(provider: str, user_id: str, platform: str) -> str:
     return cfg["auth_url"] + "?" + urlencode(params)
 
 
+async def _refuse_if_full(provider: str, user_id: str) -> None:
+    """A service at its member limit would refuse the sign-in, so say so plainly first (the app shows a friendly message)."""
+    if await provider_caps.is_full_for(user_id, provider):
+        name = provider_caps.DISPLAY.get(provider, provider.title())
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "provider_full", "provider": provider, "message": f"{name} connections are full right now."},
+        )
+
+
+@router.get("/capacity")
+async def connection_capacity(user_id: str = Depends(get_current_user_id)):
+    """Which services are at their member limit for this person, and which waiting lists they are on."""
+    return JSONResponse(content={"providers": await provider_caps.capacity_for(user_id)})
+
+
+@router.post("/waitlist/{provider}")
+async def join_connection_waitlist(provider: str, user_id: str = Depends(get_current_user_id)):
+    """Ask to be told when a full service has room."""
+    if provider not in provider_caps.CAPPED_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Unknown service.")
+    saved = await provider_caps.join_waitlist(user_id, provider)
+    return JSONResponse(content={"saved": saved})
+
+
 @router.post("/{provider}/start")
 async def start_oauth_authenticated(
     provider: str,
@@ -289,6 +315,7 @@ async def start_oauth_authenticated(
     sign-in token and then opens the returned address, so the user named in
     the signed state is always the real, verified caller.
     """
+    await _refuse_if_full(provider, user_id)
     url = _build_auth_url(provider, user_id, platform)
     logger.info("OAuth start (authenticated): provider=%s user=%s", provider, user_id[:8])
     return JSONResponse(content={"url": url})
@@ -310,6 +337,7 @@ async def start_oauth(
     """
     if os.getenv("ALLOW_LEGACY_CONNECT", "true").strip().lower() in ("0", "false", "no"):
         raise HTTPException(status_code=403, detail="Please update The Gap to connect a device.")
+    await _refuse_if_full(provider, user_id)
     url = _build_auth_url(provider, user_id, platform)
     logger.info("OAuth start (legacy): provider=%s user=%s", provider, user_id[:8])
     return RedirectResponse(url=url)

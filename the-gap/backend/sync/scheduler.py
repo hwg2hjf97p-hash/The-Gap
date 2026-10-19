@@ -52,6 +52,9 @@ async def scheduler_loop(interval_seconds: float = INTERVAL_SECONDS, first_delay
             from utils.push import flush_queue
 
             await flush_queue()  # pushes held during quiet hours that are now due
+            from utils.provider_caps import notify_open
+
+            await notify_open()  # tell people waiting for a full service that there is room now
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # the loop must never die
