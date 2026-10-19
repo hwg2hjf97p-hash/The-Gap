@@ -86,6 +86,7 @@ from routers import interventions
 from routers import focus
 from routers import goals
 from routers import workouts
+from routers import workout_templates
 from routers import nutrition
 from routers import readiness
 from routers import health_plan
@@ -130,6 +131,7 @@ app.include_router(interventions.router)
 app.include_router(focus.router)
 app.include_router(goals.router)
 app.include_router(workouts.router)
+app.include_router(workout_templates.router)
 app.include_router(nutrition.router)
 app.include_router(readiness.router)
 app.include_router(health_plan.router)
@@ -163,7 +165,7 @@ async def start_background_scheduler():
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "lighter-1"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "templates-1"}
 
 @app.get("/health/deep")
 async def health_deep():

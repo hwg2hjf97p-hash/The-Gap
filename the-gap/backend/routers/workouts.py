@@ -33,6 +33,12 @@ Table DDL (run once in Supabase SQL editor):
   ALTER TABLE workouts ADD COLUMN IF NOT EXISTS exercises JSONB NOT NULL DEFAULT '[]'::jsonb;
   ALTER TABLE workouts ADD COLUMN IF NOT EXISTS duration_min INTEGER;
   ALTER TABLE workouts ADD COLUMN IF NOT EXISTS include_in_engine BOOLEAN NOT NULL DEFAULT true;
+
+  -- Added with "for time" / AMRAP workouts (one clock for the whole workout):
+  ALTER TABLE workouts ADD COLUMN IF NOT EXISTS format JSONB;
+
+Until that column exists, a workout with a format still saves; the format is
+just left off (see _write_with_format_fallback).
 """
 
 from __future__ import annotations
@@ -111,6 +117,22 @@ class ExerciseModel(BaseModel):
     sets: list[SetModel] = Field(default_factory=list)
 
 
+class FormatModel(BaseModel):
+    """How a workout is done when it is one clock for the whole thing rather
+    than timed sets. for_time: finish the work as fast as you can (seconds is
+    the result). amrap: as many rounds as possible in cap_min minutes (rounds
+    is the result)."""
+
+    style: Literal["for_time", "amrap"]
+    cap_min: Optional[int] = Field(default=None, ge=0, le=600)
+    seconds: Optional[int] = Field(default=None, ge=0, le=86400)
+    rounds: Optional[int] = Field(default=None, ge=0, le=1000)
+    # "round": a time per round or set, taken automatically. "custom": the
+    # person cut their own sections; laps are the seconds on the clock at each cut.
+    split: Optional[Literal["round", "custom"]] = None
+    laps: Optional[list[int]] = None
+
+
 class WorkoutBody(BaseModel):
     workout_type: str = Field(max_length=40)
     planned_date: str
@@ -120,6 +142,7 @@ class WorkoutBody(BaseModel):
     status: Literal["planned", "completed"] = "planned"
     duration_min: Optional[int] = Field(default=None, ge=0, le=1440)
     include_in_engine: bool = True
+    format: Optional[FormatModel] = None
 
 
 def _check_date(value: str) -> str:
@@ -137,7 +160,7 @@ def _row_from_body(body: WorkoutBody, user_id: str) -> dict:
     # spelled differently across pydantic major versions.
     if len(body.exercises) > 40 or any(len(e.sets) > 50 for e in body.exercises):
         raise HTTPException(status_code=400, detail="That workout is too large — max 40 exercises and 50 sets each.")
-    return {
+    row = {
         "user_id": user_id,
         "workout_type": body.workout_type,
         "planned_date": _check_date(body.planned_date),
@@ -148,6 +171,26 @@ def _row_from_body(body: WorkoutBody, user_id: str) -> dict:
         "duration_min": body.duration_min,
         "include_in_engine": body.include_in_engine,
     }
+    # Only sent when there is one, so ordinary workouts never depend on the
+    # format column existing.
+    if body.format is not None:
+        laps = body.format.laps or []
+        if len(laps) > 200 or any(x < 0 or x > 86400 for x in laps):
+            raise HTTPException(status_code=400, detail="Too many sections in that workout.")
+        row["format"] = body.format.model_dump() if hasattr(body.format, "model_dump") else body.format.dict()
+    return row
+
+
+async def _write_with_format_fallback(send, payload: dict):
+    """Run send(payload). If the database rejects it (400) while the payload
+    carries a format, the format column probably hasn't been added yet: log it
+    and save again without the format, so the workout itself is never lost."""
+    resp = await send(payload)
+    if resp.status_code == 400 and "format" in payload:
+        logger.warning("Saving workout format failed (is the 'format' column added? see phase16.sql); saving without it.")
+        resp = await send({k: v for k, v in payload.items() if k != "format"})
+    resp.raise_for_status()
+    return resp
 
 
 @router.post("/")
@@ -157,12 +200,10 @@ async def create_workout(body: WorkoutBody, user_id: str = Depends(get_current_u
         payload["completed_at"] = datetime.now(timezone.utc).isoformat()
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                _sb_url("workouts"),
-                headers=_sb_headers("return=representation"),
-                json=payload,
+            resp = await _write_with_format_fallback(
+                lambda p: client.post(_sb_url("workouts"), headers=_sb_headers("return=representation"), json=p),
+                payload,
             )
-            resp.raise_for_status()
             created = resp.json()
     except Exception as exc:
         logger.error("Creating workout failed for %s: %s", user_id[:8], exc)
@@ -193,13 +234,15 @@ async def update_workout(workout_id: str, body: WorkoutBody, user_id: str = Depe
             else:
                 payload["completed_at"] = None
 
-            resp = await client.patch(
-                _sb_url("workouts"),
-                headers=_sb_headers("return=representation"),
-                params={"id": f"eq.{workout_id}", "user_id": f"eq.{user_id}"},
-                json=payload,
+            resp = await _write_with_format_fallback(
+                lambda p: client.patch(
+                    _sb_url("workouts"),
+                    headers=_sb_headers("return=representation"),
+                    params={"id": f"eq.{workout_id}", "user_id": f"eq.{user_id}"},
+                    json=p,
+                ),
+                payload,
             )
-            resp.raise_for_status()
             updated = resp.json()
     except HTTPException:
         raise
