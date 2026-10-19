@@ -44,14 +44,16 @@ PROVIDERS = {
     "whoop": {
         "auth_url": "https://api.prod.whoop.com/oauth/oauth2/auth",
         "token_url": "https://api.prod.whoop.com/oauth/oauth2/token",
-        "scopes": "offline read:recovery read:sleep read:cycles read:workout read:body_measurement read:profile",
+        # Only what the sync reads (recovery, sleep, and the daily cycle for strain and calories), plus offline so the login can renew.
+        "scopes": "offline read:recovery read:sleep read:cycles",
         "client_id_env": "WHOOP_CLIENT_ID",
         "client_secret_env": "WHOOP_CLIENT_SECRET",
     },
     "oura": {
         "auth_url": "https://cloud.ouraring.com/oauth/authorize",
         "token_url": "https://api.ouraring.com/oauth/token",
-        "scopes": "daily heartrate personal workout session",
+        # Only the daily summaries and the sleep records (which carry HRV): that is all the sync reads.
+        "scopes": "daily",
         "client_id_env": "OURA_CLIENT_ID",
         "client_secret_env": "OURA_CLIENT_SECRET",
     },
@@ -523,7 +525,10 @@ async def oauth_callback(
 
 @router.delete("/{provider}")
 async def disconnect(provider: str, user_id: str = Depends(get_current_user_id)):
-    """Disconnect a provider for the authenticated user."""
+    """
+    Disconnect a provider for the authenticated user. The saved login (access and refresh tokens) is deleted, not just
+    switched off, so nothing that could read the person's data from that service is kept once they disconnect.
+    """
     url = _supabase_rest_url("user_connections")
     headers = _supabase_headers()
     headers["Prefer"] = "return=minimal"
@@ -535,12 +540,7 @@ async def disconnect(provider: str, user_id: str = Depends(get_current_user_id))
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.patch(
-                url,
-                headers=headers,
-                params=params,
-                json={"is_active": False},
-            )
+            resp = await client.delete(url, headers=headers, params=params)
             resp.raise_for_status()
             return JSONResponse(content={"success": True})
     except Exception as exc:

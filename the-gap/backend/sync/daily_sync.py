@@ -286,7 +286,7 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
         provider = conn["provider"]
         if provider in RETIRED_PROVIDERS:
             # No longer offered (Google Calendar: the phone's own calendar covers it). Switch any old connection off once.
-            await _supabase_patch("user_connections", {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"}, {"is_active": False})
+            await _supabase_patch("user_connections", {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"}, {"is_active": False, "access_token": "", "refresh_token": ""})
             continue
         access_token = conn.get("access_token", "").strip()
         refresh_token = conn.get("refresh_token", "").strip()
@@ -333,7 +333,7 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
                         await _supabase_patch(
                             "user_connections",
                             {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
-                            {"is_active": False},
+                            {"is_active": False, "access_token": "", "refresh_token": ""},
                         )
                         name = PROVIDER_NAMES.get(provider, provider.title())
                         await send_push(
