@@ -26,7 +26,7 @@ const SHOTS = [
   {
     file: "4-findings.png",
     title: "Findings: what affects this member",
-    text: "The core of the app. Patterns are tested against the member's own history and explained in plain language, labelled as confirmed findings or early signals. It is for general wellness only and gives no medical advice.",
+    text: "The core of the app. Patterns are tested against the member's own history and explained in plain language, labelled as confirmed findings or early signals. For example, \"every 3 extra points of Whoop strain lowers your next-morning HRV by 1.8 ms\". It is for general wellness only and gives no medical advice.",
   },
   {
     file: "5-settings.png",
@@ -35,8 +35,8 @@ const SHOTS = [
   },
   {
     file: "6-privacy.png",
-    title: "Privacy policy",
-    text: "Our privacy policy, updated 19 October 2026, available in the app and at app.causalme.com/privacy. It names WHOOP as a service the member may connect and explains what we collect and who handles it.",
+    title: "Privacy policy: connected services",
+    text: "Our privacy policy, updated 19 October 2026, available in the app and at app.causalme.com/privacy. This section names WHOOP as one of the services a member may choose to link, and says what is collected from it and why.",
   },
 ];
 
