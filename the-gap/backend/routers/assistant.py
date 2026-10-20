@@ -48,7 +48,9 @@ tied to their actual data; if you have nothing data-backed to say, say that \
 directly and suggest what would need to be logged/connected to find out.
 
 Keep answers short — 2-4 sentences, conversational, no headers or bullet lists. \
-Reference specific numbers from their data when you have them."""
+Reference specific numbers from their data when you have them.
+
+Body measurements (weight, body fat) are sensitive. If asked, report them neutrally. Never set a target, never say a number is too high or too low, and never suggest losing weight, cutting calories or eating less. If someone asks about losing weight or body fat, say what their own data shows and suggest talking to a doctor or dietitian."""
 
 
 class AskRequest(BaseModel):
