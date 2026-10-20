@@ -363,6 +363,15 @@ def with_clock_time(row: dict) -> str:
         return text
 
 
+def needs_reading(entries: list[str], saved: dict | None) -> bool:
+    """
+    Whether a day's notes go to the AI. Only when there is no saved reading yet or the notes have changed (a new one
+    was logged). Today is treated like any other day: this used to read today's notes again on every hourly sync even
+    when nothing had changed, which paid for the same answer up to 24 times a day.
+    """
+    return saved is None or int(saved.get("entry_count") or 0) != len(entries)
+
+
 async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """
     Fetch quick entries for the last N days, group by date, and return a
@@ -377,7 +386,6 @@ async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     since_date = since[:10]
-    today_str = datetime.now(timezone.utc).date().isoformat()
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -421,10 +429,7 @@ async def get_journal_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
 
     records = {}
     for d, entries in by_date.items():
-        # A day is summarised again whenever its entries have changed (a new one was logged), whatever
-        # the server's own date says: for anyone ahead of UTC the server's "today" is the wrong day.
-        needs_extraction = d == today_str or d not in cached or int(cached[d].get("entry_count") or 0) != len(entries)
-        if needs_extraction and ai_on:
+        if needs_reading(entries, cached.get(d)) and ai_on:
             signals = await extract_daily_signals(entries)
             if signals is not None:
                 await _save_extraction(user_id, d, len(entries), signals)

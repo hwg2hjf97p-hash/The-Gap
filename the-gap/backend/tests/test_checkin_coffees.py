@@ -224,3 +224,10 @@ def test_a_cached_day_with_the_same_number_of_entries_is_not_summarised_again(mo
     monkeypatch.setattr(journal, "ai_allowed", allowed)
     df = asyncio.run(journal.get_journal_dataframe("u1"))
     assert extracted == [] and df.iloc[0]["mood_score"] == -0.2
+
+
+def test_todays_notes_are_only_read_again_when_they_have_changed():
+    same = {"entry_count": 2}
+    assert journal.needs_reading(["a", "b"], same) is False   # nothing new: reuse the saved reading, even for today
+    assert journal.needs_reading(["a", "b", "c"], same) is True  # a new note was logged
+    assert journal.needs_reading(["a"], None) is True         # never read before
