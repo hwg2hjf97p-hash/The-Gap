@@ -42,6 +42,8 @@ type Card = {
   experiment_label: string | null;
   metric_tags: string[];
   weight_related: boolean;
+  effect_metric?: string | null;
+  effect_direction?: string | null;
   verified: boolean;
   can_approve: boolean;
   blocking_problems: string[];
@@ -166,6 +168,16 @@ export default function EvidenceReview() {
     });
     if (r.ok) updateCard(card.id, { can_approve: r.body.can_approve, blocking_problems: r.body.blocking_problems, source: { ...card.source, checks: r.body.checks } });
     else setError(typeof r.body.detail === "string" ? r.body.detail : "Couldn't save.");
+  }
+
+  // Saves only what the study found (not its words), so it works on an approved card too.
+  async function saveDirection(card: Card) {
+    const r = await call(`/${card.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ effect_metric: card.effect_metric || "", effect_direction: card.effect_direction || "" }),
+    });
+    if (r.ok) setError("");
+    else setError(typeof r.body.detail === "string" ? r.body.detail : "Couldn't save. Has phase20.sql been run?");
   }
 
   async function act(card: Card, action: "approve" | "reject" | "unapprove") {
@@ -317,6 +329,27 @@ export default function EvidenceReview() {
               <label style={{ display: "block", marginTop: 10, fontSize: 12, color: colors.muted }}>"Test it on yourself" behaviour (leave empty if it isn't a simple everyday habit; never a supplement)</label>
               <input style={input} value={card.experiment_label ?? ""} onChange={(e) => updateCard(card.id, { experiment_label: e.target.value })} disabled={card.verified} />
               <p style={{ color: colors.muted, fontSize: 12, marginTop: 8 }}>Matches goals on: {card.metric_tags.join(", ")}</p>
+              <label style={{ display: "block", marginTop: 10, fontSize: 12, color: colors.muted }}>
+                What did the study find? Pick the reading, then which way it went. The app uses this to say whether research agrees with a person's own finding. Leave blank if it isn't clear-cut. Skip supplement studies.
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <select style={{ ...input, width: "auto" }} value={card.effect_metric ?? ""} onChange={(e) => updateCard(card.id, { effect_metric: e.target.value || null })}>
+                  <option value="">Reading: not set</option>
+                  {card.metric_tags.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <select style={{ ...input, width: "auto" }} value={card.effect_direction ?? ""} onChange={(e) => updateCard(card.id, { effect_direction: e.target.value || null })}>
+                  <option value="">Direction: not set</option>
+                  <option value="up">More of the thing studied went with a HIGHER reading</option>
+                  <option value="down">More of the thing studied went with a LOWER reading</option>
+                </select>
+                <button onClick={() => saveDirection(card)} style={button}>
+                  Save direction
+                </button>
+              </div>
               {!!card.mentions_medication?.length && !card.verified && (
                 <p style={{ color: "#f5a524", fontSize: 12.5, marginTop: 8 }}>
                   The abstract mentions medicine ({card.mentions_medication.join(", ")}). Cards about medicines usually shouldn't be approved.

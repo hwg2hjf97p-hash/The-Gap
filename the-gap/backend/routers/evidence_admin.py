@@ -47,7 +47,10 @@ def require_admin(x_admin_secret: str = Header(default="")) -> None:
 router = APIRouter(prefix="/admin/evidence", tags=["admin"], dependencies=[Depends(require_admin)])
 
 _TASKS: set = set()
-EDITABLE = ("title", "plain_summary", "finding", "population", "caution_notes", "experiment_label", "category", "sample_size", "weight_related", "metric_tags")
+EDITABLE = ("title", "plain_summary", "finding", "population", "caution_notes", "experiment_label", "category", "sample_size", "weight_related", "metric_tags", "effect_metric", "effect_direction")
+# What the study found, marked by hand so the app can say whether it agrees with a person's finding (utils/agreement.py).
+# These don't change the card's words, so they can be set on an approved card without taking it back out of use.
+EFFECT_FIELDS = {"effect_metric", "effect_direction"}
 
 
 def _sb_url(table: str) -> str:
@@ -136,6 +139,8 @@ class EditBody(BaseModel):
     sample_size: Optional[int] = Field(default=None, ge=1)
     weight_related: Optional[bool] = None
     metric_tags: Optional[list[str]] = None
+    effect_metric: Optional[str] = None
+    effect_direction: Optional[str] = None
 
 
 @router.patch("/{card_id}")
@@ -144,10 +149,16 @@ async def edit_card(card_id: str, body: EditBody) -> JSONResponse:
     changes = {k: v for k, v in dump(exclude_unset=True).items() if k in EDITABLE}
     if "category" in changes and changes["category"] not in CATEGORY_KEYS:
         raise HTTPException(status_code=400, detail="Unknown category.")
+    for field in EFFECT_FIELDS & set(changes):
+        changes[field] = (changes[field] or "").strip() or None  # blank clears it
+    if changes.get("effect_direction") not in (None, "up", "down"):
+        raise HTTPException(status_code=400, detail="Direction must be up, down, or blank.")
     async with httpx.AsyncClient(timeout=20) as client:
         card, source = await _get_card_with_source(client, card_id)
-        if card.get("verified"):
+        if card.get("verified") and not set(changes) <= EFFECT_FIELDS:
             raise HTTPException(status_code=409, detail="Unapprove the card before editing it.")
+        if changes.get("effect_metric") and changes["effect_metric"] not in (changes.get("metric_tags") or card.get("metric_tags") or []):
+            raise HTTPException(status_code=400, detail="The reading has to be one this card matches goals on.")
         card.update(changes)
         checks = _recheck(card, source)
         if changes:

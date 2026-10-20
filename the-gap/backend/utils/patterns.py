@@ -238,4 +238,17 @@ def tracking_suggestions(df: pd.DataFrame, limit: int = 3) -> list[dict]:
 
 def build_patterns(df: pd.DataFrame) -> dict:
     """What the Insights screen shows: patterns, what to log next, and the honest caveat."""
-    return {"items": best_vs_worst(df), "suggestions": tracking_suggestions(df), "caveat": CAVEAT, "days": int(len(df)) if df is not None else 0}
+    from utils.follow_ons import CAVEAT as FOLLOW_ON_CAVEAT, follow_ons  # imported here: follow_ons uses this module's exact test
+
+    try:
+        together = follow_ons(df)
+    except Exception:
+        together = []  # never let this take the rest of the patterns down
+    return {
+        "items": best_vs_worst(df),
+        "suggestions": tracking_suggestions(df),
+        "caveat": CAVEAT,
+        "follow_ons": together,
+        "follow_ons_caveat": FOLLOW_ON_CAVEAT,
+        "days": int(len(df)) if df is not None else 0,
+    }

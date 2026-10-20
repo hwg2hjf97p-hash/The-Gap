@@ -52,6 +52,7 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         "energy_drink_late_flag", "gambling_flag", "substance_flag",
         "work_late_flag", "argument_flag", "travel_flag", "late_screen_flag", "high_caffeine_flag",
         "took_magnesium", "took_melatonin", "took_ashwagandha", "took_omega3",
+        "skipped_lunch", "skipped_breakfast",
     }
 
     # REAL BUG FIXED HERE: the hand-maintained BINARY_COLS list above missed

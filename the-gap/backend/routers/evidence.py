@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import timedelta
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -23,6 +24,7 @@ from pydantic import BaseModel
 from auth import get_current_user_id
 from routers.interventions import get_active_hypothesis_ids
 from utils import supplements
+from utils.agreement import agreement
 from utils.evidence import DISCLAIMER, get_verified_card, list_verified_cards
 from utils.experiments import BASELINE_DAYS, MIN_BEFORE
 from utils.goal_catalog import get_metric
@@ -55,8 +57,25 @@ def _refused(code: str, message: str, status: int = 400) -> JSONResponse:
     return JSONResponse(status_code=status, content={"detail": message, "code": code})
 
 
+async def _effect_marks(card_ids: list[str]) -> dict[str, dict]:
+    """What each study was marked as finding (see utils/agreement.py). Empty if the columns aren't there yet."""
+    if not card_ids:
+        return {}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                _sb_url("evidence_cards"), headers=_sb_headers(),
+                params={"id": f"in.({','.join(card_ids)})", "select": "id,effect_metric,effect_direction"},
+            )
+            resp.raise_for_status()
+            return {r["id"]: {"effect_metric": r.get("effect_metric"), "effect_direction": r.get("effect_direction")} for r in resp.json() or []}
+    except Exception as exc:
+        logger.info("Study direction marks not available (%s)", exc)
+        return {}
+
+
 @router.get("/related")
-async def related_research(treatment_col: str = "", outcome_col: str = "", user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+async def related_research(treatment_col: str = "", outcome_col: str = "", ate: Optional[float] = None, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """
     Approved research that speaks to one of the person's findings: everyday-habit studies first, then at most one
     study on a supplement (each marked `is_supplement` with a caution written for it; the app hides those behind a tap).
@@ -86,7 +105,13 @@ async def related_research(treatment_col: str = "", outcome_col: str = "", user_
             if not found or found.key != logged:
                 continue  # a finding about magnesium shows research on magnesium, not on something else
         usable.append(card)
-    payload["cards"] = supplements.pick_related(usable, treatment_tags, outcome_tags)
+    picked = supplements.pick_related(usable, treatment_tags, outcome_tags)
+    marks = await _effect_marks([c["id"] for c in picked])
+    for card in picked:
+        card.update(marks.get(card["id"], {}))
+        # Beside the finding, never inside it: the person's own numbers are not touched by what a study found.
+        card["agreement"] = agreement(card, treatment_col, outcome_col, ate)
+    payload["cards"] = picked
     return JSONResponse(content=payload)
 
 

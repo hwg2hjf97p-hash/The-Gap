@@ -29,6 +29,7 @@ HOME
 JOURNAL SCREEN (opened from Quick Entry on Home)
 - Daily check-in: tap the header ("Daily check-in") to open it. It asks about alcohol, caffeine, stress (1 to 10), energy drinks, cigarettes, gambling, work, arguments, travel, screen time and coffees. It opens on Yesterday before midday and on Today after. A past day can be picked and edited. Saving the same day again replaces it. "Choose what to track" at the bottom of the check-in switches categories on or off. A category that is switched off is left out of the analysis (it does not count as zero). Supplements (magnesium, melatonin, ashwagandha, omega-3) are off until switched on there; if on, they only let the app compare the person's own days with and without. It never tells anyone to take anything.
 - "What just happened?" box: type a note about something that just happened (a drink of water, a cigarette, an argument, a coffee) and tap Log. Simple things are sorted automatically into water, caffeine, alcohol, cigarettes, weight or saved foods, and every note is also kept as a note. Quick prompts appear above the box when it is empty.
+- A mic button next to the box (in the newest version of the app) lets the person talk instead of typing: tap it, speak, tap it again to stop, check the words, then tap Log. The first time, the phone asks to allow the microphone and speech recognition. If there is no mic button, the app needs updating from TestFlight or the App Store.
 - The same thing can be done by voice with Siri when the app is closed (see Voice logging).
 
 YOUR HEALTH TAB
@@ -45,11 +46,11 @@ WORKOUTS
 
 INSIGHTS TAB
 - Two views: Findings and Improve.
-- Findings: confirmed findings (a pattern that passed the app's checks against chance) and early signals (faint hints that may be chance). New confirmed findings arrive sealed ("Sealed discovery"): tap to open it. Tap a finding for its details, a chart, and "Related research" (published studies on the same subject, general information about groups of people, not about the person). Share is available for confirmed findings only.
+- Findings: confirmed findings (a pattern that passed the app's checks against chance) and early signals (faint hints that may be chance). New confirmed findings arrive sealed ("Sealed discovery"): tap to open it. Tap a finding for its details, a chart, and "Related research" (published studies on the same subject, general information about groups of people, not about the person). A study may carry a line saying whether it points the same way as the person's own data or the other way; the person's own data always comes first. Share is available for confirmed findings only.
 - Most tests need about three weeks of days with both the habit and the reading recorded. Until then the tab shows "Day X of Y" progress.
 - "Try this": starts tracking a suggestion, and the app follows up about a week later with whether it seemed to help.
 - Improve: today's focus, what the person is trying, findings ready to try, goals, food and workout cards, and short videos.
-- Patterns card: best and worst days.
+- Patterns card: best and worst days, and "What tends to come together in your days" (for example, on the days a person logged an argument, how many also had no lunch logged). These are same-day counts, not causes, and they only appear after several days of the event.
 - Findings about a supplement the person logged are only a description of their own days. There is no Try this or improvement plan for them.
 
 ASK GAPPY TAB

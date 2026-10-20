@@ -75,6 +75,7 @@ from pydantic import BaseModel, Field
 from auth import get_current_user_id
 from utils.servings import default_serving, portion_from_measures
 from utils import meals, takeaway
+from utils.follow_ons import meal_skips
 from routers.suggestions import current_week_recipes
 
 logger = logging.getLogger(__name__)
@@ -707,6 +708,10 @@ def get_nutrition_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
                 carbs_g=("carbs_g", "sum"), fat_g=("fat_g", "sum"), last_meal_hour=("local_hour", "max"),
             )
             g = g[g["dietary_energy"] >= MIN_COMPLETE_DAY_KCAL]
+            # Whether breakfast or lunch is missing from an otherwise fully logged day (for "on days with X, no lunch" patterns).
+            skips = meal_skips(f)
+            if skips is not None:
+                g = g.join(skips, how="left")
             frames.append(g)
 
         water = httpx.get(
