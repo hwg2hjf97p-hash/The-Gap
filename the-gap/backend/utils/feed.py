@@ -81,6 +81,7 @@ async def attach_cards(user_id: str, items: list[dict]) -> list[dict]:
     """
     from routers.interventions import get_active_hypothesis_ids
     from utils.evidence import DISCLAIMER, get_verified_cards
+    from utils.supplements import SUPPLEMENT_DISCLAIMER
 
     ids = sorted({i["card_id"] for i in items if i.get("kind") == "check_this_out" and i.get("card_id")})
     cards = await get_verified_cards(ids)
@@ -91,7 +92,7 @@ async def attach_cards(user_id: str, items: list[dict]) -> list[dict]:
             card = cards.get(item.get("card_id") or "")
             if not card:
                 continue
-            item = {**item, "card": card, "disclaimer": DISCLAIMER, "experiment_active": f"card:{card['id']}" in active}
+            item = {**item, "card": card, "disclaimer": SUPPLEMENT_DISCLAIMER if card.get("is_supplement") else DISCLAIMER, "experiment_active": f"card:{card['id']}" in active}
         out.append(item)
     return out
 

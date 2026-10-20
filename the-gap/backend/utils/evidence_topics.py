@@ -41,6 +41,7 @@ TOPICS: list[Topic] = [
     T("sleep", '"short sleep" AND "health outcomes"', "sleep_total_min"),
     T("sleep", "melatonin AND sleep", "sleep_total_min", supplement=True),
     T("sleep", "magnesium AND sleep", "sleep_total_min", "sleep_score", supplement=True),
+    T("sleep", "ashwagandha AND sleep", "sleep_total_min", "sleep_score", supplement=True),
     # ── Body ─────────────────────────────────────────────────────────────────
     T("body", '"resistance training" AND "lean body mass"', "weight_kg"),
     T("body", "protein AND \"muscle mass\" AND \"resistance training\"", "weight_kg"),
@@ -72,6 +73,7 @@ TOPICS: list[Topic] = [
     T("recovery", '"active recovery" AND "exercise"', "recovery_score"),
     T("recovery", '"omega-3" AND "heart rate variability"', "hrv", supplement=True),
     # ── Stress & mood ────────────────────────────────────────────────────────
+    T("stress_mood", "ashwagandha AND stress", "stress_score", supplement=True),
     T("stress_mood", '"mindfulness" AND "perceived stress"', "stress_score"),
     T("stress_mood", 'exercise AND anxiety', "stress_score"),
     T("stress_mood", '"nature exposure" AND stress', "stress_score"),

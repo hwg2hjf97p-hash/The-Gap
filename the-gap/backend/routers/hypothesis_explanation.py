@@ -35,7 +35,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from auth import get_current_user_id
-from causal.hypotheses import HYPOTHESES
+from causal.hypotheses import HYPOTHESES, SUPPLEMENT_HYPOTHESIS_IDS
 from utils.hypothesis_explanation import generate_hypothesis_explanation, generate_raw_signal_explanation
 
 from utils.consent import ai_allowed  # noqa: E402
@@ -164,7 +164,7 @@ async def get_hypothesis_explanation(body: HypothesisExplanationRequest, user_id
     hyp = None
     if body.kind == "hypothesis":
         hyp = next((h for h in HYPOTHESES if h.id == body.hypothesis_id), None)
-        if hyp is None:
+        if hyp is None or hyp.id in SUPPLEMENT_HYPOTHESIS_IDS:  # no AI "why this happens" for a supplement
             return JSONResponse(content={"explanation_text": None, "cached": False, "limit_reached": False})
 
     cached = await _get_cached(user_id, cache_key)

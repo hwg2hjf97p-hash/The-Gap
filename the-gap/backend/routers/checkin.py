@@ -43,7 +43,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_id
-from utils import drink_times
+from utils import drink_times, supplements
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/checkin", tags=["checkin"])
@@ -81,6 +81,7 @@ EXTENDED_FIELDS = (
     "cigarettes", "gambling_minutes", "gambling_time", "substance_use",
     "substance_time", "work_hours", "work_finish", "argument_count",
     "argument_intensity", "travel_hours", "travel_mode", "screen_hours", "screen_last_use", "caffeine_drinks",
+    "supplements",
 )
 # Also left out, rather than failing the save, if its column isn't there yet (see phase10.sql).
 OPTIONAL_COLUMNS = EXTENDED_FIELDS + ("partial",)
@@ -118,6 +119,9 @@ class CheckInRequest(BaseModel):
     screen_last_use: Optional[str] = None
     # Coffees and other caffeinated drinks over the whole day, at any hour.
     caffeine_drinks: Optional[int] = Field(None, ge=0, le=30)
+    # Supplements the person says they took: None = not asked, "" = none, otherwise keys like "magnesium,omega3"
+    # (utils/supplements.py). Only used to compare their own days; it never turns into advice.
+    supplements: Optional[str] = None
 
     @validator("date")
     def validate_date(cls, v):
@@ -130,6 +134,10 @@ class CheckInRequest(BaseModel):
     @validator("energy_drink_time", "gambling_time", "substance_time")
     def validate_time_of_day(cls, v):
         return _one_of(TIME_OF_DAY, v)
+
+    @validator("supplements")
+    def validate_supplements(cls, v):
+        return supplements.clean_log(v)
 
     @validator("alcohol_time")
     def validate_alcohol_times(cls, v):
@@ -407,6 +415,13 @@ def get_checkin_dataframe(user_id: str, days: int = 180):
         no_count = pd.Series(np.where(alcohol_bool, np.nan, 0.0), index=raw.index).where(alcohol_known)
         out["alcohol_drinks"] = drinks.where(drinks.notna(), no_count)
         caffeine_raw = raw["afternoon_caffeine"] if "afternoon_caffeine" in raw.columns else pd.Series(np.nan, index=raw.index, dtype="object")
+        # Supplements taken (took_magnesium, ...): 1 on a day it was listed, 0 on a day the question was answered
+        # without it, NaN on a day nobody was asked.
+        logged = text("supplements")
+        answered = logged.notna()
+        listed = logged.fillna("").astype(str).str.split(",")
+        for key in supplements.CHECKIN_KEYS:
+            out[f"took_{key}"] = flag(listed.map(lambda items, k=key: k in items), answered)
         out["afternoon_caffeine"] = caffeine_raw.fillna(False).astype(bool).astype(float).where(caffeine_raw.notna())
         coffees = num("caffeine_drinks")
         out["caffeine_drinks"] = coffees

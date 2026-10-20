@@ -966,10 +966,106 @@ HYPOTHESES: list[Hypothesis] = [
         treatment_scale=3.0,
     ),
 
+    # ── SUPPLEMENTS the person logs themselves in the check-in. These only ever compare their own days with and
+    # without it. The wording (causal/interpreter.py) never says it works or that they should take it, and these
+    # findings are kept out of pushes, share cards, "today's one thing" and the improvement plan (SUPPLEMENT_HYPOTHESIS_IDS).
+    Hypothesis(
+        id="magnesium_deep_sleep",
+        treatment_col="took_magnesium",
+        outcome_col="sleep_deep_min",
+        covariate_cols=["sleep_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=10,
+        treatment_label="Magnesium taken (yes/no)",
+        outcome_label="Deep sleep that night (minutes)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="magnesium_sleep",
+        treatment_col="took_magnesium",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=10,
+        treatment_label="Magnesium taken (yes/no)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="melatonin_sleep",
+        treatment_col="took_melatonin",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=10,
+        treatment_label="Melatonin taken (yes/no)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="melatonin_deep_sleep",
+        treatment_col="took_melatonin",
+        outcome_col="sleep_deep_min",
+        covariate_cols=["sleep_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=10,
+        treatment_label="Melatonin taken (yes/no)",
+        outcome_label="Deep sleep that night (minutes)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="ashwagandha_hrv",
+        treatment_col="took_ashwagandha",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=10,
+        treatment_label="Ashwagandha taken (yes/no)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="ashwagandha_sleep",
+        treatment_col="took_ashwagandha",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "day_of_week", "is_weekend"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=10,
+        treatment_label="Ashwagandha taken (yes/no)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+    ),
+    Hypothesis(
+        id="omega3_hrv",
+        treatment_col="took_omega3",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "day_of_week"],
+        min_rows=30,
+        binary_treatment=True,
+        min_treated_days=10,
+        treatment_label="Omega-3 taken (yes/no)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+    ),
+
 ]
 
 # Sensitive findings. They still appear inside the app for the person who
 # logged them, but never on a lock-screen push (nudges), a share card, the
 # PDF report, or "today's one thing" on Home.
 PRIVATE_HYPOTHESIS_IDS = {"substance_hrv", "substance_deep_sleep", "gambling_sleep", "gambling_hrv"}
+
+# Findings about a supplement the person logs. Shown inside the app as a description of their own days, but never on a
+# push, share card, in "today's one thing", the proactive "expect this today" heads-up or the improvement plan: those
+# would read as a recommendation.
+SUPPLEMENT_HYPOTHESIS_IDS = {
+    "magnesium_deep_sleep", "magnesium_sleep", "melatonin_sleep", "melatonin_deep_sleep",
+    "ashwagandha_hrv", "ashwagandha_sleep", "omega3_hrv",
+}
 

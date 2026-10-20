@@ -60,6 +60,10 @@ class Insight:
     # report. Still shown to the user inside the app.
     is_private: bool = False
 
+    # A finding about a supplement the person logs (SUPPLEMENT_HYPOTHESIS_IDS): worded as a description of their
+    # own days, with no "try this", no improvement plan, and no push or share card.
+    is_supplement: bool = False
+
     # For findings about an amount (steps, screen time, calendar events): what
     # the effect comes to between this person's lighter days and heavier days,
     # in plain words (see causal/engine.py). Empty for yes/no findings.

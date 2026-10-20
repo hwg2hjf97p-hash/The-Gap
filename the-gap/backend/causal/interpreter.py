@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from causal.hypotheses import Hypothesis, PRIVATE_HYPOTHESIS_IDS
+from causal.hypotheses import Hypothesis, PRIVATE_HYPOTHESIS_IDS, SUPPLEMENT_HYPOTHESIS_IDS
 from models.insight import Insight, ConfidenceLevel
 
 # REAL BUG FIXED HERE: metric_direction (which drives the app's green/red
@@ -27,6 +27,18 @@ OUTCOME_HIGHER_IS_BETTER = {
 # Days of data before a pattern can be called "moderate" or "strong" confidence.
 MODERATE_MIN_N = 18
 STRONG_MIN_N = 60
+
+
+# hypothesis id -> (what the person logged, title, the outcome in plain words, short unit, unit shown on the badge)
+SUPPLEMENT_COPY: dict[str, tuple[str, str, str, str, str]] = {
+    "magnesium_deep_sleep": ("magnesium", "Magnesium & Deep Sleep", "deep sleep", "min", "min deep sleep"),
+    "magnesium_sleep": ("magnesium", "Magnesium & Sleep", "sleep that night", "min", "min sleep"),
+    "melatonin_sleep": ("melatonin", "Melatonin & Sleep", "sleep that night", "min", "min sleep"),
+    "melatonin_deep_sleep": ("melatonin", "Melatonin & Deep Sleep", "deep sleep", "min", "min deep sleep"),
+    "ashwagandha_hrv": ("ashwagandha", "Ashwagandha & Recovery", "next-morning HRV", "ms", "ms HRV"),
+    "ashwagandha_sleep": ("ashwagandha", "Ashwagandha & Sleep", "sleep that night", "min", "min sleep"),
+    "omega3_hrv": ("omega-3", "Omega-3 & Recovery", "next-morning HRV", "ms", "ms HRV"),
+}
 
 
 def interpret_result(
@@ -869,6 +881,18 @@ def interpret_result(
             else "Harder days go with more sleep for you, which is your body recovering."
         )
 
+    elif hid in SUPPLEMENT_COPY:
+        name, title, outcome_phrase, short_unit, badge_unit = SUPPLEMENT_COPY[hid]
+        headline = (
+            f"On days you logged {name}, your {outcome_phrase} was "
+            f"{abs_effect} {short_unit} {'higher' if is_positive else 'lower'} than on days you didn't"
+        )
+        metric_unit = badge_unit
+        tip = (
+            f"This only compares your days with and without {name}. It can't show that {name} made the difference, "
+            f"and it isn't a reason to start, stop or change anything. Talk to a doctor or pharmacist before changing a supplement."
+        )
+
     # Fallback for any future hypotheses
     else:
         title = hypothesis.treatment_label
@@ -891,6 +915,15 @@ def interpret_result(
         f"{headline.lower()}. Found with The Gap — causalme.com"
     )
 
+    if hid in SUPPLEMENT_HYPOTHESIS_IDS:
+        # Not "isolated effect" and not shareable: it describes this person's own days, nothing more.
+        name = SUPPLEMENT_COPY[hid][0]
+        body = (
+            f"Based on {n_obs} days of your data. This compares days you logged {name} with days you didn't. "
+            f"Other things differed between those days too, so read it as a pattern in your own days, not proof that {name} does anything."
+        )
+        share_text = ""
+
     return Insight(
         hypothesis_id=hid,
         title=title,
@@ -907,6 +940,7 @@ def interpret_result(
         treatment_col=hypothesis.treatment_col,
         outcome_col=hypothesis.outcome_col,
         is_private=hypothesis.id in PRIVATE_HYPOTHESIS_IDS,
+        is_supplement=hypothesis.id in SUPPLEMENT_HYPOTHESIS_IDS,
         ate=round(effect, 4),
         ci_low=round(ci_low, 4),
         ci_high=round(ci_high, 4),

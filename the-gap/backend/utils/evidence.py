@@ -10,6 +10,8 @@ from typing import Optional
 
 import httpx
 
+from utils.supplements import decorate_card
+
 # What the app may show of a card. The abstract and check results are never included.
 PUBLIC_FIELDS = (
     "id,category,title,plain_summary,finding,metric_tags,study_type,sample_size,population,year,journal,"
@@ -39,7 +41,7 @@ async def get_verified_card(card_id: str) -> Optional[dict]:
         resp = await client.get(_sb_url("evidence_cards"), headers=_sb_headers(), params=verified_params({"id": f"eq.{card_id}", "limit": "1"}))
         resp.raise_for_status()
         rows = resp.json() or []
-        return rows[0] if rows else None
+        return decorate_card(rows[0]) if rows else None
 
 
 async def get_verified_cards(card_ids: list[str]) -> dict[str, dict]:
@@ -49,7 +51,7 @@ async def get_verified_cards(card_ids: list[str]) -> dict[str, dict]:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(_sb_url("evidence_cards"), headers=_sb_headers(), params=verified_params({"id": f"in.({','.join(card_ids)})"}))
         resp.raise_for_status()
-        return {c["id"]: c for c in resp.json() or []}
+        return {c["id"]: decorate_card(c) for c in resp.json() or []}
 
 
 async def list_verified_cards(tags: Optional[list[str]] = None, category: Optional[str] = None, limit: int = 100) -> list[dict]:
@@ -61,4 +63,4 @@ async def list_verified_cards(tags: Optional[list[str]] = None, category: Option
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(_sb_url("evidence_cards"), headers=_sb_headers(), params=verified_params(extra))
         resp.raise_for_status()
-        return resp.json() or []
+        return [decorate_card(c) for c in resp.json() or []]

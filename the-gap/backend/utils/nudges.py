@@ -28,7 +28,7 @@ from datetime import date
 import httpx
 import pandas as pd
 
-from causal.hypotheses import HYPOTHESES, PRIVATE_HYPOTHESIS_IDS
+from causal.hypotheses import HYPOTHESES, PRIVATE_HYPOTHESIS_IDS, SUPPLEMENT_HYPOTHESIS_IDS
 from utils.push import send_push
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,8 @@ async def check_proactive_nudge(user_id: str, df: pd.DataFrame, insights: list[d
                 continue  # never predict from a pattern that's still only an early signal
             if hypothesis_id in PRIVATE_HYPOTHESIS_IDS:
                 continue  # a lock-screen push must never name these
+            if hypothesis_id in SUPPLEMENT_HYPOTHESIS_IDS:
+                continue  # "expect X because you took Y" would read as a recommendation
             hyp = _HYPOTHESES_BY_ID.get(hypothesis_id)
             if hyp is None or not hyp.binary_treatment:
                 continue

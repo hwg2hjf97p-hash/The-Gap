@@ -22,7 +22,8 @@ from pydantic import BaseModel
 
 from auth import get_current_user_id
 from routers.interventions import get_active_hypothesis_ids
-from utils.evidence import get_verified_card
+from utils import supplements
+from utils.evidence import DISCLAIMER, get_verified_card, list_verified_cards
 from utils.experiments import BASELINE_DAYS, MIN_BEFORE
 from utils.goal_catalog import get_metric
 from utils.goals import fetch_points, fmt
@@ -52,6 +53,41 @@ class ExperimentBody(BaseModel):
 
 def _refused(code: str, message: str, status: int = 400) -> JSONResponse:
     return JSONResponse(status_code=status, content={"detail": message, "code": code})
+
+
+@router.get("/related")
+async def related_research(treatment_col: str = "", outcome_col: str = "", user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """
+    Approved research that speaks to one of the person's findings: everyday-habit studies first, then at most one
+    study on a supplement (each marked `is_supplement` with a caution written for it; the app hides those behind a tap).
+    Nothing here is advice. A finding about a supplement the person logs shows only research on that same supplement.
+    """
+    treatment_tags, outcome_tags = supplements.tags_for_finding(treatment_col, outcome_col)
+    tags = sorted(set(treatment_tags + outcome_tags))
+    payload = {"cards": [], "disclaimer": DISCLAIMER, "supplement_disclaimer": supplements.SUPPLEMENT_DISCLAIMER}
+    if not tags:
+        return JSONResponse(content=payload)
+    try:
+        cards = await list_verified_cards(tags=tags, limit=80)
+    except Exception as exc:
+        logger.warning("Loading related research failed for %s: %s", user_id[:8], exc)
+        return JSONResponse(content=payload)
+
+    from utils.push import get_prefs
+
+    tz = ((await get_prefs(user_id)) or {}).get("tz")
+    logged = treatment_col[len("took_"):] if treatment_col.startswith("took_") else None
+    usable = []
+    for card in cards:
+        if card.get("weight_related") or supplements.hidden_where_the_person_is(card, tz):
+            continue
+        if card.get("is_supplement") and logged:
+            found = supplements.match(" ".join(str(card.get(k) or "") for k in ("title", "plain_summary", "finding")))
+            if not found or found.key != logged:
+                continue  # a finding about magnesium shows research on magnesium, not on something else
+        usable.append(card)
+    payload["cards"] = supplements.pick_related(usable, treatment_tags, outcome_tags)
+    return JSONResponse(content=payload)
 
 
 @router.post("/experiment")

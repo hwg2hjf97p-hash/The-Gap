@@ -36,6 +36,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from auth import get_current_user_id
+from causal.hypotheses import SUPPLEMENT_HYPOTHESIS_IDS
 import json
 from typing import Optional
 
@@ -168,6 +169,10 @@ async def get_improvement_plan(body: ImprovementPlanRequest, user_id: str = Depe
     that's still old-style plain text is treated as a miss and regenerated,
     but is still returned if we can't generate a new one right now.
     """
+    if body.hypothesis_id in SUPPLEMENT_HYPOTHESIS_IDS:
+        # No "what to do about it" for a supplement: the app only describes the person's own days.
+        return JSONResponse(content={"plan_text": None, "story": None, "cached": False, "limit_reached": False, "not_advice": True})
+
     cached = await _get_cached(user_id, body.hypothesis_id)
     cached_story = parse_story(cached["plan_text"]) if cached else None
 
