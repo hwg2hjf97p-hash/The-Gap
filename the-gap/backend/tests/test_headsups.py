@@ -183,3 +183,57 @@ def test_the_same_kind_is_never_pushed_twice_in_a_day():
 def test_one_the_person_dismissed_is_not_pushed():
     rows = [{"kind": "steps_high", "pushed_at": None, "dismissed_at": "2026-10-15T02:00:00+00:00"}]
     assert hu.choose_push([item("steps_high", 80)], rows, 15.0, NOW) is None
+
+
+# ── water and protein cards re-check themselves against what's logged ─────────
+
+def stored(kind, body="old words"):
+    return {"id": kind, "kind": kind, "title": "old", "body": body, "tone": "nudge", "priority": 50}
+
+
+def live_for(water_ml, hour=15.0, goal=2000, protein_g=0, protein_goal=None):
+    goals = {"water_goal_ml": goal}
+    if protein_goal:
+        goals["protein_goal_g"] = protein_goal
+    items = hu.build_headsups(today={}, usual={}, hour=hour, day=DAY, user_key="u1", nutrition={"water_ml": water_ml, "protein_g": protein_g}, nutrition_goals=goals)
+    return {i["kind"]: i for i in items if i["kind"] in hu.LIVE_KINDS}
+
+
+def test_logging_enough_water_makes_the_water_card_go_away_by_itself():
+    rows = [stored("water_behind"), stored("steps_high")]
+    behind = hu.apply_live(rows, live_for(600))
+    assert [r["kind"] for r in behind] == ["water_behind", "steps_high"]
+    assert "30%" in behind[0]["body"]
+    caught_up = hu.apply_live(rows, live_for(900))
+    assert [r["kind"] for r in caught_up] == ["steps_high"]  # 45% by mid-afternoon is on track
+
+
+def test_a_card_that_still_applies_shows_the_new_numbers_not_the_old_ones():
+    out = hu.apply_live([stored("water_behind", "300 ml down, 15%")], live_for(700))
+    assert "700 ml" in out[0]["body"] and "35%" in out[0]["body"]
+
+
+def test_when_the_logs_cant_be_read_the_cards_are_left_alone():
+    rows = [stored("water_behind"), stored("protein_behind")]
+    assert hu.apply_live(rows, None) == rows
+
+
+def test_the_other_kinds_are_facts_about_the_day_and_stay():
+    rows = [stored("steps_high"), stored("sleep_short")]
+    assert hu.apply_live(rows, {}) == rows
+
+
+def test_protein_clears_once_the_person_is_past_half_their_goal():
+    rows = [stored("protein_behind")]
+    assert len(hu.apply_live(rows, live_for(2000, hour=18.0, protein_g=40, protein_goal=120))) == 1
+    assert hu.apply_live(rows, live_for(2000, hour=18.0, protein_g=70, protein_goal=120)) == []
+
+
+def test_water_and_protein_are_now_worth_a_push_in_the_right_window():
+    water = live_for(300, hour=15.0)["water_behind"]
+    assert water["push"] is True and water["window"] == (14.0, 19.5)
+    assert hu.choose_push([water], [], 15.0, NOW)["kind"] == "water_behind"
+    assert hu.choose_push([water], [], 21.0, NOW) is None  # not late at night
+    protein = live_for(2000, hour=18.0, protein_g=10, protein_goal=120)["protein_behind"]
+    assert hu.choose_push([protein], [], 18.0, NOW)["kind"] == "protein_behind"
+    assert hu.choose_push([protein], [], 15.0, NOW) is None

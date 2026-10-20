@@ -14,6 +14,10 @@ quiet hours (send_push holds it), never anything about substances or gambling, a
 no medical advice. The wording is plain templates (no AI, no cost) with a few
 variants so it doesn't read the same every day.
 
+Water and protein cards are LIVE: they are checked again against what the person has logged every time
+they are shown, so logging a glass of water or a meal makes the card go away (or shrink to the new
+percentage) without anyone pressing the x. Steps, sleep and strain are facts about the day, so they stay.
+
 Table DDL: see phase13.sql (headsups, notification_prefs.headsups_enabled).
 """
 
@@ -40,6 +44,8 @@ MIN_MINUTES_BETWEEN_PUSHES = 90
 PUSH_START_HOUR = 8.0
 PUSH_END_HOUR = 20.5
 RECOVERY_GOAL_COLS = {"hrv", "recovery_score", "resting_hr", "sleep_total_min"}
+# Kinds that depend only on what is logged so far today, and so can be re-checked whenever they are shown.
+LIVE_KINDS = {"water_behind", "protein_behind"}
 
 
 # ── small helpers ────────────────────────────────────────────────────────────
@@ -197,7 +203,7 @@ def build_headsups(
     nutrition = nutrition or {}
     goals = nutrition_goals or {}
 
-    # Water behind (cards only: water reminders already exist)
+    # Water behind
     water, water_goal = nutrition.get("water_ml"), goals.get("water_goal_ml")
     if water_goal and hour >= 14:
         target = 0.4 if hour < 18 else 0.6
@@ -210,10 +216,10 @@ def build_headsups(
                     f"{_int(water or 0)} ml down, {pct}% of today's {_int(water_goal)} ml goal. Your water bottle is feeling neglected. Big glass now, another with dinner.",
                     f"Water check: {_int(water or 0)} ml so far, {pct}% of your {_int(water_goal)} ml goal. Top up now and you'll thank yourself tonight.",
                 ], seed + "water_behind"),
-                "tone": "nudge", "priority": 50, "push": False,
+                "tone": "nudge", "priority": 50, "push": True, "window": (14.0, 19.5),
             })
 
-    # Protein behind (cards only)
+    # Protein behind
     protein, protein_goal = nutrition.get("protein_g"), goals.get("protein_goal_g")
     if protein_goal and hour >= 17 and (protein or 0) < protein_goal * 0.5:
         pct = round((protein or 0) / protein_goal * 100)
@@ -224,7 +230,7 @@ def build_headsups(
                 f"{_int(protein or 0)} g of protein so far, {pct}% of your {_int(protein_goal)} g goal. Dinner is your chance to catch up. Make it a protein-forward one.",
                 f"Protein's running behind: {_int(protein or 0)} g so far, {pct}% of your {_int(protein_goal)} g goal. Plan a proper protein hit for dinner.",
             ], seed + "protein_behind"),
-            "tone": "nudge", "priority": 45, "push": False,
+            "tone": "nudge", "priority": 45, "push": True, "window": (17.5, 20.0),
         })
 
     items.sort(key=lambda i: -i["priority"])
@@ -287,6 +293,62 @@ async def _nutrition_goals(user_id: str) -> dict:
         return {}
 
 
+async def local_day_and_hour(user_id: str) -> tuple[date, float]:
+    """The person's own date and hour (e.g. 15.5) right now."""
+    from utils.push import get_prefs
+
+    prefs = await get_prefs(user_id)
+    try:
+        tz = ZoneInfo((prefs or {}).get("tz") or DEFAULT_TZ)
+    except Exception:
+        tz = ZoneInfo(DEFAULT_TZ)
+    now = datetime.now(timezone.utc).astimezone(tz)
+    return now.date(), now.hour + now.minute / 60.0
+
+
+async def live_cards(user_id: str, day: date, hour: float) -> Optional[dict[str, dict]]:
+    """
+    The water / protein cards that apply right now, worked out from what is logged so far, by kind. None when
+    that couldn't be worked out (the caller then leaves the stored cards as they are rather than hiding them).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            water = await client.get(_sb_url("water_log"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "local_date": f"eq.{day.isoformat()}", "select": "amount_ml"})
+            water.raise_for_status()
+            food = await client.get(_sb_url("food_log"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "local_date": f"eq.{day.isoformat()}", "select": "protein_g"})
+            food.raise_for_status()
+            goals = await client.get(_sb_url("nutrition_goals"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "select": "protein_goal_g,water_goal_ml", "limit": "1"})
+            goals.raise_for_status()
+        nutrition = {
+            "water_ml": sum(float(r.get("amount_ml") or 0) for r in (water.json() or [])),
+            "protein_g": sum(float(r.get("protein_g") or 0) for r in (food.json() or [])),
+        }
+        goal_rows = goals.json() or []
+    except Exception as exc:
+        logger.warning("Live heads-ups failed for %s: %s", user_id[:8], exc)
+        return None
+    items = build_headsups(today={}, usual={}, hour=hour, day=day, user_key=user_id[:8], nutrition=nutrition, nutrition_goals=goal_rows[0] if goal_rows else {})
+    return {i["kind"]: i for i in items if i["kind"] in LIVE_KINDS}
+
+
+def apply_live(rows: list[dict], live: Optional[dict[str, dict]]) -> list[dict]:
+    """
+    Stored cards with the live ones brought up to date: a water/protein card that no longer applies is dropped,
+    and one that still does shows the current numbers. Everything else is untouched.
+    """
+    if live is None:
+        return rows
+    out: list[dict] = []
+    for row in rows:
+        if row.get("kind") in LIVE_KINDS:
+            current = live.get(row["kind"])
+            if not current:
+                continue
+            row = {**row, "title": current["title"], "body": current["body"]}
+        out.append(row)
+    return out
+
+
 async def _save(user_id: str, local_date: str, items: list[dict]) -> None:
     now = datetime.now(timezone.utc).isoformat()
     rows = [
@@ -347,16 +409,9 @@ async def run_headsups(user_id: str, df: pd.DataFrame, insights: list[dict]) -> 
     try:
         if not await headsups_enabled(user_id):
             return 0
-        from utils.push import get_prefs, send_push
+        from utils.push import send_push
 
-        prefs = await get_prefs(user_id)
-        try:
-            tz = ZoneInfo((prefs or {}).get("tz") or DEFAULT_TZ)
-        except Exception:
-            tz = ZoneInfo(DEFAULT_TZ)
-        local_now = datetime.now(timezone.utc).astimezone(tz)
-        day = local_now.date()
-        hour = local_now.hour + local_now.minute / 60.0
+        day, hour = await local_day_and_hour(user_id)
 
         columns = ["steps", "sleep_total_min", "strain"]
         today = today_values(df, day, columns)

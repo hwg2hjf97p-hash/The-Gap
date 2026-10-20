@@ -465,6 +465,8 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
         logger.warning("Environment data merge failed (continuing without it): %s", exc)
 
     if health_df is None or health_df.empty:
+        # No wearable data yet, but water and protein reminders only need what the person has logged.
+        await run_headsups(user_id, pd.DataFrame(), [])  # never raises
         return {"user_id": user_id, "status": "no_data", "elapsed": round(time.perf_counter() - t0, 1)}
 
     # Merge in on-device Calendar (EventKit) data — fills gaps for users
@@ -674,7 +676,7 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
 
         await check_card_experiments(user_id)  # never raises
 
-        # Short coach-style heads-ups from today's numbers (cards in the app, at most one push a day). Never raises.
+        # Short coach-style heads-ups from today's numbers (cards in the app, at most three pushes a day). Never raises.
         await run_headsups(user_id, df, insights_dicts)
 
         try:

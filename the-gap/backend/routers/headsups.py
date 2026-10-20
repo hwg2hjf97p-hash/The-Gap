@@ -17,8 +17,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from auth import get_current_user_id
-from utils.headsups import _sb_headers, _sb_url, headsups_enabled
-from utils.local_time import DEFAULT_TZ, user_today
+from utils.headsups import _save, _sb_headers, _sb_url, apply_live, headsups_enabled, live_cards, local_day_and_hour
+from utils.local_time import DEFAULT_TZ
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/headsups", tags=["headsups"])
@@ -30,14 +30,21 @@ MAX_CARDS = 3
 async def today(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     if not await headsups_enabled(user_id):
         return JSONResponse(content={"headsups": []})
-    day = await user_today(user_id)
+    day, hour = await local_day_and_hour(user_id)
+    # Water and protein are checked against what's logged right now, so logging something makes the card go away.
+    live = await live_cards(user_id, day, hour)
+    if live:
+        try:
+            await _save(user_id, day.isoformat(), list(live.values()))  # a card that has only just become true
+        except Exception as exc:
+            logger.warning("Saving live heads-ups failed for %s: %s", user_id[:8], exc)
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 _sb_url("headsups"), headers=_sb_headers(),
                 params={
                     "user_id": f"eq.{user_id}", "headsup_date": f"eq.{day.isoformat()}", "dismissed_at": "is.null",
-                    "select": "id,kind,title,body,tone,priority", "order": "priority.desc", "limit": str(MAX_CARDS),
+                    "select": "id,kind,title,body,tone,priority", "order": "priority.desc",
                 },
             )
             resp.raise_for_status()
@@ -45,7 +52,7 @@ async def today(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     except Exception as exc:
         logger.warning("Loading heads-ups failed for %s: %s", user_id[:8], exc)
         rows = []
-    return JSONResponse(content={"headsups": rows})
+    return JSONResponse(content={"headsups": apply_live(rows, live)[:MAX_CARDS]})
 
 
 @router.post("/{headsup_id}/dismiss")
