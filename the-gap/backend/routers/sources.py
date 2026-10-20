@@ -41,13 +41,13 @@ router = APIRouter(prefix="/sources", tags=["sources"])
 
 # Which sources can supply each group at all.
 # Only sources that really report that reading (checked against each sync file): Strava shares
-# workouts and training load only, and Apple Health has no weight here.
+# workouts and training load only. Apple Health supplies weight and body fat when a scale or app writes them there.
 CAN_SUPPLY = {
     "sleep": ["whoop", "oura", "withings", "polar", "apple_health"],
     "recovery": ["whoop", "oura", "withings", "polar", "apple_health"],
     "activity": ["apple_health", "whoop", "oura"],
     "energy": ["apple_health", "whoop", "oura"],
-    "body": ["manual", "withings"],
+    "body": ["manual", "withings", "apple_health"],
 }
 
 

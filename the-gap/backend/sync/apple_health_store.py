@@ -41,6 +41,12 @@ Table DDL (run once in Supabase SQL editor):
   ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS sleep_deep_min NUMERIC;
   ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS active_energy NUMERIC;
   ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS vo2max NUMERIC;
+
+  -- Weight and body fat, from a scale or app that writes them to Apple Health (phase18.sql):
+  ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
+  ALTER TABLE apple_health_daily ADD COLUMN IF NOT EXISTS body_fat_pct NUMERIC;
+
+Until phase18.sql is run, everything else is still saved and read as before (see _post_rows and the fetch below).
 """
 
 from __future__ import annotations
@@ -53,6 +59,25 @@ import httpx
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+BASE_COLUMNS = "entry_date,hrv,resting_hr,steps,sleep_total_min,sleep_deep_min,dietary_energy,protein_g,carbs_g,fat_g,active_energy,vo2max"
+BODY_COLUMNS = ("weight_kg", "body_fat_pct")
+# Readings outside these are a typing slip in another app or a scale glitch, not a real body: dropped rather than stored.
+PLAUSIBLE = {"weight_kg": (20.0, 400.0), "body_fat_pct": (2.0, 70.0)}
+
+
+def clean_body(values: dict) -> dict:
+    """The body readings in a day's values that are believable numbers, None for the rest."""
+    out: dict = {}
+    for col in BODY_COLUMNS:
+        raw = values.get(col)
+        try:
+            v = float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            v = None
+        lo, hi = PLAUSIBLE[col]
+        out[col] = round(v, 1) if v is not None and lo <= v <= hi else None
+    return out
 
 
 def _sb_url(table: str) -> str:
@@ -92,18 +117,14 @@ async def upsert_apple_health_rows(user_id: str, daily_rows: dict[str, dict[str,
             "fat_g": values.get("fat_g"),
             "active_energy": values.get("active_energy"),
             "vo2max": values.get("vo2max"),
+            **clean_body(values),
         }
         for date, values in daily_rows.items()
     ]
 
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.post(
-                _sb_url("apple_health_daily"),
-                headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
-                params={"on_conflict": "user_id,entry_date"},
-                json=payload,
-            )
+            resp = await _post_rows(client, payload)
             resp.raise_for_status()
     except Exception as exc:
         # Non-fatal by design: even if persistent storage fails, the sync
@@ -112,20 +133,40 @@ async def upsert_apple_health_rows(user_id: str, daily_rows: dict[str, dict[str,
         logger.warning("Apple Health upsert failed (continuing anyway): %s", exc)
 
 
+async def _post_rows(client: httpx.AsyncClient, payload: list[dict]) -> httpx.Response:
+    """Saves the rows. If the database rejects them (400) because the weight and body fat columns
+    haven't been added yet (phase18.sql), saves again without those two so nothing else is lost."""
+    async def send(rows: list[dict]) -> httpx.Response:
+        return await client.post(
+            _sb_url("apple_health_daily"),
+            headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
+            params={"on_conflict": "user_id,entry_date"},
+            json=rows,
+        )
+
+    resp = await send(payload)
+    if resp.status_code == 400:
+        logger.warning("Apple Health save failed with the body columns (is phase18.sql run?); saving without them.")
+        resp = await send([{k: v for k, v in row.items() if k not in BODY_COLUMNS} for row in payload])
+    return resp
+
+
 async def get_apple_health_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     """Fetch this user's stored Apple Health history as a date-indexed DataFrame."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.get(
-                _sb_url("apple_health_daily"),
-                headers=_sb_headers(),
-                params={
-                    "user_id": f"eq.{user_id}",
-                    "entry_date": f"gte.{since}",
-                    "select": "entry_date,hrv,resting_hr,steps,sleep_total_min,sleep_deep_min,dietary_energy,protein_g,carbs_g,fat_g,active_energy,vo2max",
-                },
-            )
+            async def fetch(select: str) -> httpx.Response:
+                return await client.get(
+                    _sb_url("apple_health_daily"),
+                    headers=_sb_headers(),
+                    params={"user_id": f"eq.{user_id}", "entry_date": f"gte.{since}", "select": select},
+                )
+
+            resp = await fetch(f"{BASE_COLUMNS},{','.join(BODY_COLUMNS)}")
+            if resp.status_code == 400:
+                # The weight and body fat columns aren't there yet (phase18.sql): read the rest as before.
+                resp = await fetch(BASE_COLUMNS)
             resp.raise_for_status()
             rows = resp.json() or []
     except Exception as exc:

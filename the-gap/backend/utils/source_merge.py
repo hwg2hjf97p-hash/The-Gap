@@ -37,7 +37,7 @@ GROUPS: dict[str, list[str]] = {
     "recovery": ["hrv", "resting_hr", "recovery_score"],
     "activity": ["steps", "vo2max"],
     "energy": ["active_energy"],
-    "body": ["weight_kg"],
+    "body": ["weight_kg", "body_fat_pct"],
 }
 
 GROUP_LABELS = {
@@ -45,7 +45,7 @@ GROUP_LABELS = {
     "recovery": "HRV, resting heart rate and recovery",
     "activity": "Steps",
     "energy": "Calories burned",
-    "body": "Weight",
+    "body": "Weight and body fat",
 }
 
 SOURCE_LABELS = {

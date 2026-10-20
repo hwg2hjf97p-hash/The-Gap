@@ -28,6 +28,7 @@ METRIC_DISPLAY = {
     "steps": {"label": "Steps", "unit": "", "higher_is_better": True},
     "strain": {"label": "Strain", "unit": "", "higher_is_better": None},
     "weight_kg": {"label": "Weight", "unit": "kg", "higher_is_better": None},
+    "body_fat_pct": {"label": "Body fat", "unit": "%", "higher_is_better": None},
     "dietary_energy": {"label": "Calories", "unit": "kcal", "higher_is_better": None},
     "protein_g": {"label": "Protein", "unit": "g", "higher_is_better": None},
     "carbs_g": {"label": "Carbs", "unit": "g", "higher_is_better": None},
