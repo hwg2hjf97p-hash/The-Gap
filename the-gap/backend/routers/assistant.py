@@ -28,6 +28,9 @@ from utils.consent import ai_allowed  # noqa: E402
 from utils.entitlement import require_subscription  # noqa: E402
 from routers.subscriptions import is_on_trial  # noqa: E402
 
+from utils import ai_budget
+from utils.ai_budget import note_usage
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -140,6 +143,11 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
         )
         raise HTTPException(status_code=429, detail=detail)
 
+    meter = await ai_budget.begin(user_id, "assistant")
+    if meter.blocked:
+        await ai_budget.finish(user_id, meter)
+        raise HTTPException(status_code=429, detail=ai_budget.blocked_message(meter.status))
+
     results_row = await asyncio.to_thread(get_latest_results, user_id)
     context = _build_context(results_row)
 
@@ -166,12 +174,15 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
             )
             resp.raise_for_status()
             data = resp.json()
+            note_usage(MODEL, data.get("usage"))
             answer = "".join(
                 block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"
             ).strip()
     except Exception as exc:
         logger.error("Assistant request failed: %s", exc)
         raise HTTPException(status_code=502, detail="Couldn't reach the assistant. Try again.")
+    finally:
+        await ai_budget.finish(user_id, meter)
 
     # Best-effort — what someone asks can itself be a signal (see
     # utils/assistant_signals.py), but logging it should never be able to

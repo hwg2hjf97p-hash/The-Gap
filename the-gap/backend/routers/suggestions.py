@@ -60,6 +60,9 @@ from auth import get_current_user_id
 
 from utils.consent import ai_allowed  # noqa: E402
 
+from utils import ai_budget
+from utils.ai_budget import note_usage
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/suggestions", tags=["suggestions"])
 
@@ -459,6 +462,7 @@ async def _generate_food(user_id: str, today: date, profile: dict, goals: dict) 
             )
             resp.raise_for_status()
             data = resp.json()
+            note_usage(MODEL, data.get("usage"))
         text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
         return _clean_food_payload(text, profile), note
     except Exception as exc:
@@ -504,7 +508,8 @@ async def food_suggestions(local_date: Optional[str] = None, user_id: str = Depe
                 "note": None, "ai_failed": False, "ai_off": True, "week_start": week.isoformat(),
             })
 
-        generated, note = await _generate_food(user_id, today, profile, goals)
+        async with ai_budget.metered(user_id, "food_ideas") as meter:
+            generated, note = (None, None) if meter.blocked else await _generate_food(user_id, today, profile, goals)
         payload = {
             "foods": (generated or {}).get("foods", []),
             "recipes": (generated or {}).get("recipes", []),

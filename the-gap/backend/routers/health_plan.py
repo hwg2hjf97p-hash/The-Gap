@@ -43,6 +43,9 @@ from routers.readiness import compute_readiness
 
 from utils.consent import ai_allowed  # noqa: E402
 
+from utils import ai_budget
+from utils.ai_budget import note_usage
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/health-plan", tags=["health-plan"])
 
@@ -309,6 +312,10 @@ async def _claude_text(user_id: str, today: date, facts: dict) -> Optional[str]:
     if len(_generation_count) > 5000:  # forget old days
         for k in [k for k in _generation_count if k[1] != today.isoformat()]:
             _generation_count.pop(k, None)
+    meter = await ai_budget.begin(user_id, "daily_plan_text")
+    if meter.blocked:
+        await ai_budget.finish(user_id, meter)
+        return None  # this month's allowance is used: the plain written version is used
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.post(
@@ -323,11 +330,14 @@ async def _claude_text(user_id: str, today: date, facts: dict) -> Optional[str]:
             )
             resp.raise_for_status()
             data = resp.json()
+            note_usage(MODEL, data.get("usage"))
         text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip().strip('"')
         return text if 10 <= len(text) <= 400 else None
     except Exception as exc:
         logger.warning("Health plan wording failed for %s: %s", user_id[:8], exc)
         return None
+    finally:
+        await ai_budget.finish(user_id, meter)
 
 
 # ── Endpoint ─────────────────────────────────────────────────────────────────

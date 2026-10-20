@@ -50,6 +50,8 @@ from utils.metric_personal_insight import generate_personal_insight
 from utils.consent import ai_allowed  # noqa: E402
 from utils.entitlement import require_subscription  # noqa: E402
 
+from utils import ai_budget
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/metric-insight", tags=["metric-insight"])
 
@@ -222,14 +224,15 @@ async def get_metric_insight(body: MetricInsightRequest, user_id: str = Depends(
     # 3. Under the cap — generate a fresh one, grounded in real hypothesis data.
     relevant = _relevant_hypothesis_labels(body.metric)
     profile = await get_user_profile(user_id)
-    insight_text = await generate_personal_insight(
-        metric_label=body.metric_label,
-        reading_value=str(body.reading_value),
-        unit=body.unit,
-        comparison_text=body.comparison_text,
-        relevant_hypotheses=relevant,
-        profile=profile,
-    )
+    async with ai_budget.metered(user_id, "metric_insight") as meter:
+        insight_text = None if meter.blocked else await generate_personal_insight(
+            metric_label=body.metric_label,
+            reading_value=str(body.reading_value),
+            unit=body.unit,
+            comparison_text=body.comparison_text,
+            relevant_hypotheses=relevant,
+            profile=profile,
+        )
 
     if insight_text is None:
         # Generation failed — fall back to old cache if we have it, don't

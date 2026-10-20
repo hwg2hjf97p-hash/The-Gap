@@ -17,6 +17,8 @@ import os
 
 import httpx
 
+from utils.ai_budget import note_usage
+
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
@@ -100,6 +102,7 @@ async def generate_personal_insight(
             )
             resp.raise_for_status()
             data = resp.json()
+            note_usage(MODEL, data.get("usage"))
             text = "".join(
                 block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"
             ).strip()

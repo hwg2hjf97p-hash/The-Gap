@@ -44,6 +44,8 @@ from utils.improvement_plan import generate_insight_story, parse_story, flatten_
 from utils.consent import ai_allowed  # noqa: E402
 from utils.entitlement import require_subscription  # noqa: E402
 
+from utils import ai_budget
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/improvement", tags=["improvement"])
 
@@ -200,17 +202,18 @@ async def get_improvement_plan(body: ImprovementPlanRequest, user_id: str = Depe
             "limit_reached": True,
         })
 
-    story = await generate_insight_story(
-        treatment_label=body.treatment_label,
-        outcome_label=body.outcome_label,
-        headline=body.headline,
-        existing_tip=body.existing_tip,
-        metric_direction=body.metric_direction,
-        metric_delta=body.metric_delta or "",
-        metric_unit=body.metric_unit or "",
-        confidence_label=body.confidence_label or "",
-        n_observations=body.n_observations,
-    )
+    async with ai_budget.metered(user_id, "improvement_plan") as meter:
+        story = None if meter.blocked else await generate_insight_story(
+            treatment_label=body.treatment_label,
+            outcome_label=body.outcome_label,
+            headline=body.headline,
+            existing_tip=body.existing_tip,
+            metric_direction=body.metric_direction,
+            metric_delta=body.metric_delta or "",
+            metric_unit=body.metric_unit or "",
+            confidence_label=body.confidence_label or "",
+            n_observations=body.n_observations,
+        )
 
     if story is None:
         return _response(cached_text, cached_story, bool(cached), False)

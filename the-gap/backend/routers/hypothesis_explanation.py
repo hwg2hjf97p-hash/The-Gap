@@ -41,6 +41,8 @@ from utils.hypothesis_explanation import generate_hypothesis_explanation, genera
 from utils.consent import ai_allowed  # noqa: E402
 from utils.entitlement import require_subscription  # noqa: E402
 
+from utils import ai_budget
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hypothesis-explanation", tags=["hypothesis-explanation"])
 
@@ -196,21 +198,24 @@ async def get_hypothesis_explanation(body: HypothesisExplanationRequest, user_id
             "limit_reached": True,
         })
 
-    if body.kind == "hypothesis":
-        explanation_text = await generate_hypothesis_explanation(
-            treatment_label=hyp.treatment_label,
-            outcome_label=hyp.outcome_label,
-            category=hyp.category,
-            current_days=body.current_days,
-            required_days=body.required_days,
-        )
-    else:
-        explanation_text = await generate_raw_signal_explanation(
-            description=body.description or "",
-            r=body.r or 0.0,
-            direction=body.direction or "positive",
-            n=body.n or 0,
-        )
+    async with ai_budget.metered(user_id, "explanation") as meter:
+        if meter.blocked:
+            explanation_text = None  # this month's allowance is used: show what's stored, or nothing
+        elif body.kind == "hypothesis":
+            explanation_text = await generate_hypothesis_explanation(
+                treatment_label=hyp.treatment_label,
+                outcome_label=hyp.outcome_label,
+                category=hyp.category,
+                current_days=body.current_days,
+                required_days=body.required_days,
+            )
+        else:
+            explanation_text = await generate_raw_signal_explanation(
+                description=body.description or "",
+                r=body.r or 0.0,
+                direction=body.direction or "positive",
+                n=body.n or 0,
+            )
 
     if explanation_text is None:
         if cached:

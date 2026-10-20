@@ -47,7 +47,7 @@ USER_DATA_TABLES = TABLES + [
     "metric_insights", "metric_insight_usage",
     "active_interventions", "proactive_nudges",
     "assistant_questions", "assistant_extractions",
-    "workouts", "workout_templates", "provider_waitlist", "food_log", "water_log", "nutrition_goals", "training_schedule",
+    "workouts", "workout_templates", "provider_waitlist", "ai_usage_month", "food_log", "water_log", "nutrition_goals", "training_schedule",
     "health_profile", "weekly_suggestions", "user_consents", "consent_log",
     "notification_prefs", "push_queue", "source_prefs", "feed_items", "weight_log", "saved_foods", "saved_meals", "quick_log_tokens", "headsups", "sync_state",
 ]
