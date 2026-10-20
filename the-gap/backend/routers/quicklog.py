@@ -29,6 +29,18 @@ router = APIRouter(prefix="/quicklog", tags=["quicklog"])
 
 SIGN_IN_AGAIN = "Open The Gap and sign in again, then try once more."
 
+# What a shortcut sends when its "What happened?" box holds the NAME of a variable typed out as plain words
+# instead of the variable itself. Logging it would put junk in someone's journal, so it is refused with a fix.
+PLACEHOLDER_TEXTS = {"dictated text", "shortcut input", "provided input", "what happened", "what happened?"}
+PLACEHOLDER_REPLY = (
+    "The shortcut sent the words Dictated Text instead of what you said. "
+    "In the shortcut, tap the What happened box and pick the Dictated Text bubble above the keyboard, rather than typing it."
+)
+
+
+def is_placeholder(text: str) -> bool:
+    return text.strip().strip(".!?\"' ").lower() in PLACEHOLDER_TEXTS or text.strip().lower() in PLACEHOLDER_TEXTS
+
 
 class MintBody(BaseModel):
     label: str = Field(default="iphone", min_length=1, max_length=40)
@@ -83,6 +95,8 @@ async def entry(body: EntryBody, x_quicklog_token: str = Header(default="")) -> 
         raise HTTPException(status_code=429, detail="That's a lot of logs at once. Try again in a few minutes.")
     if not body.text.strip():
         raise HTTPException(status_code=400, detail="I didn't catch anything to log.")
+    if is_placeholder(body.text):
+        raise HTTPException(status_code=400, detail=PLACEHOLDER_REPLY)
     source = body.source if body.source in ("siri", "shortcut", "action_button", "watch") else "siri"
     result = await process_log_text(user_id, body.text, body.local_date, body.occurred_at, body.tz, source)
     return JSONResponse(content=result)
