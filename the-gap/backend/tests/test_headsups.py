@@ -80,7 +80,7 @@ def test_water_and_protein_only_count_against_a_goal_the_person_set():
     assert build(nutrition={"water_ml": 300, "protein_g": 10}, hour=19.0) == []
     items = build(nutrition={"water_ml": 300, "protein_g": 40}, nutrition_goals={"water_goal_ml": 2500, "protein_goal_g": 140}, hour=19.0)
     assert set(kinds(items)) == {"water_behind", "protein_behind"}
-    assert all(i["push"] is False for i in items)
+    assert all(i["push"] is True for i in items)  # both are worth a real notification now (inside their own time windows)
 
 
 def test_water_gets_more_demanding_as_the_day_goes_on():
