@@ -34,48 +34,45 @@ def test_allowance_resets_on_the_first_of_next_month():
 
 
 def test_default_allowances_and_environment_overrides(monkeypatch):
-    for k in ("AI_BUDGET_TRIAL_USD", "AI_BUDGET_PLUS_USD", "AI_BUDGET_PRO_USD"):
+    for k in ("AI_BUDGET_TRIAL_USD", "AI_BUDGET_PAID_USD"):
         monkeypatch.delenv(k, raising=False)
     assert ai_budget.budget_micro("trial") == 1_000_000
-    assert ai_budget.budget_micro("plus") == 2_500_000
-    assert ai_budget.budget_micro("pro") == 7_500_000
-    monkeypatch.setenv("AI_BUDGET_PLUS_USD", "4")
-    assert ai_budget.budget_micro("plus") == 4_000_000
-    monkeypatch.setenv("AI_BUDGET_PLUS_USD", "nonsense")
-    assert ai_budget.budget_micro("plus") == 2_500_000
-    monkeypatch.setenv("AI_BUDGET_PLUS_USD", "-3")
-    assert ai_budget.budget_micro("plus") == 2_500_000
+    assert ai_budget.budget_micro("paid") == 2_500_000
+    monkeypatch.setenv("AI_BUDGET_PAID_USD", "4")
+    assert ai_budget.budget_micro("paid") == 4_000_000
+    monkeypatch.setenv("AI_BUDGET_PAID_USD", "nonsense")
+    assert ai_budget.budget_micro("paid") == 2_500_000
+    monkeypatch.setenv("AI_BUDGET_PAID_USD", "-3")
+    assert ai_budget.budget_micro("paid") == 2_500_000
 
 
-def test_plan_is_worked_out_from_the_subscription_row(monkeypatch):
-    monkeypatch.delenv("AI_PRO_PRODUCT_MARKER", raising=False)
+def test_plan_is_worked_out_from_the_subscription_row():
     now = _now()
     future = "2026-12-01T00:00:00+00:00"
-    assert ai_budget.tier_from_row(None, now) == "plus"
-    assert ai_budget.tier_from_row({"is_active": False}, now) == "plus"
-    assert ai_budget.tier_from_row({"is_active": True, "period_type": "TRIAL", "expires_at": future, "product_id": "com.x.plus.monthly"}, now) == "trial"
-    assert ai_budget.tier_from_row({"is_active": True, "period_type": "NORMAL", "expires_at": future, "product_id": "com.causalme.thegap.plus.monthly"}, now) == "plus"
-    assert ai_budget.tier_from_row({"is_active": True, "period_type": "NORMAL", "expires_at": future, "product_id": "com.causalme.thegap.pro.monthly"}, now) == "pro"
+    assert ai_budget.tier_from_row(None, now) == "paid"
+    assert ai_budget.tier_from_row({"is_active": False}, now) == "paid"
+    assert ai_budget.tier_from_row({"is_active": True, "period_type": "TRIAL", "expires_at": future}, now) == "trial"
+    assert ai_budget.tier_from_row({"is_active": True, "period_type": "NORMAL", "expires_at": future}, now) == "paid"
     # a trial that has already run out is not a trial
-    assert ai_budget.tier_from_row({"is_active": True, "period_type": "TRIAL", "expires_at": "2026-01-01T00:00:00Z", "product_id": "x"}, now) == "plus"
+    assert ai_budget.tier_from_row({"is_active": True, "period_type": "TRIAL", "expires_at": "2026-01-01T00:00:00Z"}, now) == "paid"
 
 
 def test_used_percent_and_exhausted(monkeypatch):
-    monkeypatch.delenv("AI_BUDGET_PLUS_USD", raising=False)
-    s = ai_budget.summarize(0, "plus", _now())
+    monkeypatch.delenv("AI_BUDGET_PAID_USD", raising=False)
+    s = ai_budget.summarize(0, "paid", _now())
     assert (s["used_pct"], s["exhausted"]) == (0, False)
-    s = ai_budget.summarize(1_250_000, "plus", _now())
+    s = ai_budget.summarize(1_250_000, "paid", _now())
     assert (s["used_pct"], s["exhausted"]) == (50, False)
-    s = ai_budget.summarize(2_499_999, "plus", _now())
+    s = ai_budget.summarize(2_499_999, "paid", _now())
     assert (s["used_pct"], s["exhausted"]) == (99, False)
-    s = ai_budget.summarize(2_500_000, "plus", _now())
+    s = ai_budget.summarize(2_500_000, "paid", _now())
     assert (s["used_pct"], s["exhausted"]) == (100, True)
-    s = ai_budget.summarize(9_000_000, "plus", _now())
+    s = ai_budget.summarize(9_000_000, "paid", _now())
     assert (s["used_pct"], s["exhausted"]) == (100, True)
 
 
 def test_the_message_names_the_reset_date_and_says_the_rest_still_works():
-    m = ai_budget.blocked_message({"tier": "plus", "resets_on": "2026-11-01"})
+    m = ai_budget.blocked_message({"tier": "paid", "resets_on": "2026-11-01"})
     assert "2026-11-01" in m and "rest of The Gap" in m
     t = ai_budget.blocked_message({"tier": "trial", "resets_on": "2026-11-01"})
     assert "free month" in t
@@ -103,7 +100,7 @@ def _patch_io(monkeypatch, status, recorded):
 
 def test_usage_inside_a_metered_request_is_recorded_once(monkeypatch):
     recorded = []
-    _patch_io(monkeypatch, {"tier": "plus", "used_pct": 10, "exhausted": False, "resets_on": "2026-11-01"}, recorded)
+    _patch_io(monkeypatch, {"tier": "paid", "used_pct": 10, "exhausted": False, "resets_on": "2026-11-01"}, recorded)
 
     async def go():
         async with ai_budget.metered("u1", "assistant") as m:
@@ -117,7 +114,7 @@ def test_usage_inside_a_metered_request_is_recorded_once(monkeypatch):
 
 def test_usage_outside_a_metered_request_is_ignored(monkeypatch):
     recorded = []
-    _patch_io(monkeypatch, {"tier": "plus", "used_pct": 0, "exhausted": False, "resets_on": "x"}, recorded)
+    _patch_io(monkeypatch, {"tier": "paid", "used_pct": 0, "exhausted": False, "resets_on": "x"}, recorded)
     ai_budget.note_usage("claude-sonnet-4-6", {"input_tokens": 5000, "output_tokens": 500})  # background job: no meter
     asyncio.run(asyncio.sleep(0))
     assert recorded == []
@@ -126,7 +123,7 @@ def test_usage_outside_a_metered_request_is_ignored(monkeypatch):
 def test_a_person_who_has_used_their_allowance_is_blocked_and_nothing_is_recorded(monkeypatch):
     monkeypatch.delenv("AI_BUDGET_ENFORCE", raising=False)
     recorded = []
-    _patch_io(monkeypatch, {"tier": "plus", "used_pct": 100, "exhausted": True, "resets_on": "2026-11-01"}, recorded)
+    _patch_io(monkeypatch, {"tier": "paid", "used_pct": 100, "exhausted": True, "resets_on": "2026-11-01"}, recorded)
 
     async def go():
         async with ai_budget.metered("u1", "explanation") as m:
@@ -139,7 +136,7 @@ def test_a_person_who_has_used_their_allowance_is_blocked_and_nothing_is_recorde
 def test_switching_enforcement_off_lets_them_through_but_still_counts(monkeypatch):
     monkeypatch.setenv("AI_BUDGET_ENFORCE", "false")
     recorded = []
-    _patch_io(monkeypatch, {"tier": "plus", "used_pct": 100, "exhausted": True, "resets_on": "2026-11-01"}, recorded)
+    _patch_io(monkeypatch, {"tier": "paid", "used_pct": 100, "exhausted": True, "resets_on": "2026-11-01"}, recorded)
 
     async def go():
         async with ai_budget.metered("u1", "assistant") as m:
@@ -158,7 +155,7 @@ def test_if_the_allowance_cannot_be_read_the_person_is_let_through(monkeypatch):
 
 def test_the_meter_does_not_leak_into_the_next_request(monkeypatch):
     recorded = []
-    _patch_io(monkeypatch, {"tier": "plus", "used_pct": 0, "exhausted": False, "resets_on": "x"}, recorded)
+    _patch_io(monkeypatch, {"tier": "paid", "used_pct": 0, "exhausted": False, "resets_on": "x"}, recorded)
 
     async def go():
         async with ai_budget.metered("u1", "assistant"):

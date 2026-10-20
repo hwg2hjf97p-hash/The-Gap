@@ -13,13 +13,14 @@ What "used up" means, by feature:
   - Everything else (explanations, plans, insights, recipe ideas, the daily
     plan wording) quietly shows its usual written fallback instead of AI text.
 
-The allowance depends on the person's plan (US$ of AI use a month; tune with
-environment variables, no code change):
+There is one plan. The allowance is smaller during its free month and larger
+once the person is paying (US$ of AI use a month; tune with environment
+variables, no code change):
   AI_BUDGET_TRIAL_USD  during the free month        (default 1.00)
-  AI_BUDGET_PLUS_USD   a paying subscriber           (default 2.50)
-  AI_BUDGET_PRO_USD    a higher "Pro" plan, if sold  (default 7.50)
+  AI_BUDGET_PAID_USD   once paying                   (default 2.50)
   AI_BUDGET_ENFORCE    "false" counts usage without stopping anything
-  AI_PRO_PRODUCT_MARKER  text found in the product id of Pro products (default ".pro")
+Someone in the free month who has used their allowance can end the free month
+early in the app ("Go Pro now"), which moves them to the paid allowance.
 
 It never takes a feature down by mistake: if the usage can't be read (database
 hiccup, table not created yet) the person is let through, and if it can't be
@@ -59,8 +60,8 @@ PRICES: dict[str, tuple[float, float]] = {
 }
 DEFAULT_PRICE = (3.0, 15.0)
 
-DEFAULT_BUDGET_USD = {"trial": 1.0, "plus": 2.5, "pro": 7.5}
-BUDGET_ENV = {"trial": "AI_BUDGET_TRIAL_USD", "plus": "AI_BUDGET_PLUS_USD", "pro": "AI_BUDGET_PRO_USD"}
+DEFAULT_BUDGET_USD = {"trial": 1.0, "paid": 2.5}
+BUDGET_ENV = {"trial": "AI_BUDGET_TRIAL_USD", "paid": "AI_BUDGET_PAID_USD"}
 
 
 # ── Pure rules (no network) ──────────────────────────────────────────────────
@@ -89,8 +90,8 @@ def resets_on(now: Optional[datetime] = None) -> str:
 
 
 def budget_micro(tier: str) -> int:
-    default = DEFAULT_BUDGET_USD.get(tier, DEFAULT_BUDGET_USD["plus"])
-    raw = os.getenv(BUDGET_ENV.get(tier, BUDGET_ENV["plus"]), "").strip()
+    default = DEFAULT_BUDGET_USD.get(tier, DEFAULT_BUDGET_USD["paid"])
+    raw = os.getenv(BUDGET_ENV.get(tier, BUDGET_ENV["paid"]), "").strip()
     try:
         usd = float(raw) if raw else default
     except ValueError:
@@ -105,24 +106,21 @@ def enforcing() -> bool:
 
 
 def tier_from_row(row: Optional[dict], now: Optional[datetime] = None) -> str:
-    """"trial" in the free month, "pro" for a Pro product, otherwise "plus".
-    No subscription row (testers, free access) counts as "plus"."""
+    """"trial" in the free month, otherwise "paid". No subscription row
+    (testers, free access) counts as "paid"."""
     now = now or datetime.now(timezone.utc)
     if not row or not row.get("is_active"):
-        return "plus"
+        return "paid"
     expires = row.get("expires_at")
     if expires:
         try:
             if datetime.fromisoformat(str(expires).replace("Z", "+00:00")) < now:
-                return "plus"
+                return "paid"
         except ValueError:
             pass
     if str(row.get("period_type") or "").upper() == "TRIAL":
         return "trial"
-    marker = os.getenv("AI_PRO_PRODUCT_MARKER", ".pro").strip().lower() or ".pro"
-    if marker in str(row.get("product_id") or "").lower():
-        return "pro"
-    return "plus"
+    return "paid"
 
 
 def summarize(used_micro: int, tier: str, now: Optional[datetime] = None) -> dict:
@@ -153,7 +151,7 @@ def _sb_headers() -> dict:
 async def _subscription_row(client: httpx.AsyncClient, user_id: str) -> Optional[dict]:
     resp = await client.get(
         _sb_url("user_subscriptions"), headers=_sb_headers(),
-        params={"user_id": f"eq.{user_id}", "select": "is_active,expires_at,period_type,product_id", "limit": 1},
+        params={"user_id": f"eq.{user_id}", "select": "is_active,expires_at,period_type", "limit": 1},
     )
     resp.raise_for_status()
     rows = resp.json() or []
@@ -179,7 +177,7 @@ async def status(user_id: str) -> dict:
         return summarize(used, tier)
     except Exception as exc:
         logger.warning("AI allowance check failed for %s (letting it through): %s", user_id[:8], exc)
-        return {"tier": "plus", "used_pct": 0, "exhausted": False, "resets_on": resets_on(), "unknown": True}
+        return {"tier": "paid", "used_pct": 0, "exhausted": False, "resets_on": resets_on(), "unknown": True}
 
 
 async def _record(user_id: str, feature: str, micro: int, calls: int) -> None:

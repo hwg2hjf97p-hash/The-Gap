@@ -26,11 +26,16 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import time
 from datetime import datetime, timezone
+from typing import Optional
+from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
+
+from auth import get_current_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
@@ -81,21 +86,8 @@ async def revenuecat_webhook(request_body: dict, authorization: str = Header(def
         logger.info("RC_WEBHOOK_UNHANDLED type=%s user=%s", event_type, user_id[:8])
         return JSONResponse(content={"status": "ignored"})
 
-    is_active = event_type in ACTIVE_EVENT_TYPES
-    expires_at_ms = event.get("expiration_at_ms")
-    expires_at = (
-        datetime.fromtimestamp(expires_at_ms / 1000, tz=timezone.utc).isoformat()
-        if expires_at_ms else None
-    )
-
-    payload = {
-        "user_id": user_id,
-        "is_active": is_active,
-        "product_id": event.get("product_id"),
-        "expires_at": expires_at,
-        "period_type": (event.get("period_type") or "").upper() or None,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    payload = mirror_payload(event_type, event, user_id)
+    is_active = payload["is_active"]
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -107,7 +99,7 @@ async def revenuecat_webhook(request_body: dict, authorization: str = Header(def
             )
             if resp.status_code == 400 and "period_type" in resp.text:
                 # phase12.sql hasn't been run yet: record the rest rather than lose the update.
-                payload.pop("period_type")
+                payload.pop("period_type", None)
                 resp = await client.post(
                     _sb_url("user_subscriptions"),
                     headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
@@ -121,6 +113,107 @@ async def revenuecat_webhook(request_body: dict, authorization: str = Header(def
 
     logger.info("RC_WEBHOOK_PROCESSED type=%s user=%s is_active=%s", event_type, user_id[:8], is_active)
     return JSONResponse(content={"status": "ok"})
+
+
+def mirror_payload(event_type: str, event: dict, user_id: str) -> dict:
+    """The row to keep for a RevenueCat event.
+
+    A PRODUCT_CHANGE (for example someone ending their free month early by
+    switching to the same plan without the free month) only says which product
+    they are moving to. When the change takes effect RevenueCat sends a
+    RENEWAL with the real period and expiry, so a PRODUCT_CHANGE must not
+    overwrite those with the old product's values (which could put someone who
+    has just started paying back on "free month")."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if event_type == "PRODUCT_CHANGE":
+        return {
+            "user_id": user_id,
+            "is_active": True,
+            "product_id": event.get("new_product_id") or event.get("product_id"),
+            "updated_at": now_iso,
+        }
+    expires_at_ms = event.get("expiration_at_ms")
+    expires_at = (
+        datetime.fromtimestamp(expires_at_ms / 1000, tz=timezone.utc).isoformat()
+        if expires_at_ms else None
+    )
+    return {
+        "user_id": user_id,
+        "is_active": event_type in ACTIVE_EVENT_TYPES,
+        "product_id": event.get("product_id"),
+        "expires_at": expires_at,
+        "period_type": (event.get("period_type") or "").upper() or None,
+        "updated_at": now_iso,
+    }
+
+
+REVENUECAT_API_URL = "https://api.revenuecat.com/v1/subscribers"
+ENTITLEMENT_ID = os.getenv("REVENUECAT_ENTITLEMENT", "the_gap_premium")
+_last_refresh: dict[str, float] = {}
+
+
+def parse_subscriber(data: dict, user_id: str, now: Optional[datetime] = None, entitlement: str = "") -> dict:
+    """The mirror row for a person, from RevenueCat's own record of them: is the
+    entitlement active, on which product, until when, and is it the free month."""
+    now = now or datetime.now(timezone.utc)
+    subscriber = data.get("subscriber") or {}
+    ent = (subscriber.get("entitlements") or {}).get(entitlement or ENTITLEMENT_ID) or {}
+    product = ent.get("product_identifier")
+    sub = (subscriber.get("subscriptions") or {}).get(product or "", {}) if product else {}
+    expires_raw = ent.get("expires_date") or sub.get("expires_date")
+    expires_at = None
+    active = bool(ent)
+    if expires_raw:
+        try:
+            expires_dt = datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+            expires_at = expires_dt.isoformat()
+            active = expires_dt > now
+        except ValueError:
+            pass
+    return {
+        "user_id": user_id,
+        "is_active": active,
+        "product_id": product,
+        "expires_at": expires_at,
+        "period_type": (sub.get("period_type") or "").upper() or None,
+        "updated_at": now.isoformat(),
+    }
+
+
+@router.post("/refresh")
+async def refresh_my_subscription(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """Asks RevenueCat directly what this person's subscription is now and updates our copy.
+    The app calls it right after someone ends their free month early, so they get the paid
+    allowance at once instead of waiting for RevenueCat's webhook. Needs REVENUECAT_API_KEY
+    (RevenueCat's secret API key); without it nothing happens and the webhook is relied on."""
+    key = os.getenv("REVENUECAT_API_KEY", "").strip()
+    if not key:
+        return JSONResponse(content={"refreshed": False, "reason": "not_configured"})
+    now = time.time()
+    if now - _last_refresh.get(user_id, 0) < 3:
+        return JSONResponse(content={"refreshed": False, "reason": "too_soon"})
+    _last_refresh[user_id] = now
+    if len(_last_refresh) > 5000:
+        _last_refresh.clear()
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{REVENUECAT_API_URL}/{quote(user_id, safe='')}",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            row = parse_subscriber(resp.json(), user_id)
+            write = await client.post(
+                _sb_url("user_subscriptions"),
+                headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
+                params={"on_conflict": "user_id"},
+                json=[row],
+            )
+            write.raise_for_status()
+    except Exception as exc:
+        logger.warning("Subscription refresh failed for %s: %s", user_id[:8], exc)
+        return JSONResponse(content={"refreshed": False, "reason": "failed"})
+    return JSONResponse(content={"refreshed": True, "period_type": row.get("period_type"), "is_active": row.get("is_active")})
 
 
 async def is_subscribed(user_id: str) -> bool:
