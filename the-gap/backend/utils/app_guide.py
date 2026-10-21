@@ -50,6 +50,7 @@ INSIGHTS TAB
 - Most tests need about three weeks of days with both the habit and the reading recorded. Until then the tab shows "Day X of Y" progress.
 - "Try this": starts tracking a suggestion, and the app follows up about a week later with whether it seemed to help.
 - Improve: today's focus, what the person is trying, findings ready to try, goals, food and workout cards, and short videos.
+- "Big changes in your life" card (above the patterns): the person can add a lost or new job, a move, a relationship change, a new baby, an injury or illness, or a loss of someone close, with a date and an optional short note. Once there are enough days on each side, the app shows what their HRV, sleep, resting heart rate and steps did around it. This is a description, not a cause. Events can be deleted. When a note the person logs mentions one (for example losing a job), the app offers to add it, and nothing is added unless they tap Add. Gappy can refer to them (type and date only, never the note).
 - Patterns card: best and worst days, and "What tends to come together in your days" (for example, on the days a person logged an argument, how many also had no lunch logged). These are same-day counts, not causes, and they only appear after several days of the event.
 - Findings about a supplement the person logged are only a description of their own days. There is no Try this or improvement plan for them.
 

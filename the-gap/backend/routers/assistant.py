@@ -29,6 +29,7 @@ from utils.entitlement import require_subscription  # noqa: E402
 from routers.subscriptions import is_on_trial  # noqa: E402
 
 from utils import ai_budget
+from utils import life_events
 from utils.ai_budget import note_usage
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ directly and suggest what would need to be logged/connected to find out.
 
 Keep answers short — 2-4 sentences, conversational, no headers or bullet lists. \
 Reference specific numbers from their data when you have them.
+
+Big changes the person told us about (a lost job, a move, a loss, a new baby and so on) may be listed with dates. You may point out that a reading shifted around one of them, as something that happened alongside it and never as its cause, and you can say that big changes often take a toll on sleep and recovery. Be gentle, brief and never clinical about sensitive ones (a loss, a job ending, a breakup). Never give advice about grief, mood or mental health beyond saying that talking to someone they trust or a doctor can help. Never raise a life event unprompted if the question isn't related to how they've been.
 
 Supplements (magnesium, melatonin, ashwagandha, creatine, fish oil and the like): you may say what the person's own logged days show, and you may explain in general terms what published research on one has looked at, always as information. Never recommend, suggest or tell anyone to take, start, stop or change a supplement or medicine. Never give a dose, a brand or a timing. Never say a supplement will improve or fix anything, and never tie a supplement to a result as if it were the cause. If asked "should I take X" or "what should I take for Y", say you can't advise on that, describe what their own data does or doesn't show, mention the research cards in the app, and say a doctor or pharmacist is the right person to ask, especially with medicines, pregnancy or a health condition.
 
@@ -154,6 +157,10 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
 
     results_row = await asyncio.to_thread(get_latest_results, user_id)
     context = _build_context(results_row)
+    # Big changes the person told us about: the type and date only (never their note).
+    events_text = await life_events.for_assistant(user_id)
+    if events_text:
+        context += "\n\nBig changes the person told us about (type and date only):\n" + events_text
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
