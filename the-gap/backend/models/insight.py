@@ -69,6 +69,10 @@ class Insight:
     # in plain words (see causal/engine.py). Empty for yes/no findings.
     contrast_text: str = ""
 
+    # What the person's own days looked like and how the engine got to its number (causal/evidence.py): their usual range, days
+    # with and without, a timeline, and the steps taken. Empty for findings saved before this existed.
+    evidence: dict = field(default_factory=dict)
+
     def to_dict(self) -> dict:
         d = asdict(self)
         # Convert ConfidenceLevel enum to string for JSON serialisation
@@ -84,6 +88,7 @@ from typing import List
 
 class InsightOut(BaseModel):
     contrast_text: str = ""
+    evidence: dict = {}
     hypothesis_id: str
     title: str
     headline: str

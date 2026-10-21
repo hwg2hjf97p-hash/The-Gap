@@ -13,6 +13,7 @@ import pandas as pd
 from causal.hypotheses import HYPOTHESES, Hypothesis
 from causal.estimator import run_linear_dml, run_ols
 from causal.interpreter import interpret_result, OUTCOME_HIGHER_IS_BETTER
+from causal.evidence import build_evidence, checks_text
 from models.insight import Insight, ConfidenceLevel
 
 logger = logging.getLogger(__name__)
@@ -301,6 +302,8 @@ def run_all_hypotheses(df: pd.DataFrame, extra_hypotheses: Optional[list[Hypothe
                 "A hint of this pattern exists, but with this many things being tested it could still be chance. "
                 "Keep logging — it'll firm up or fade."
             )
+            if insight.evidence:
+                insight.evidence["checks"] = checks_text("weak", demoted=True)
 
     # Sort: strong confidence first, then moderate, then weak
     order = {ConfidenceLevel.STRONG: 0, ConfidenceLevel.MODERATE: 1, ConfidenceLevel.WEAK: 2}
@@ -384,4 +387,8 @@ def _run_one(df: pd.DataFrame, hyp: Hypothesis, p_sink: Optional[list[float]] = 
     )
     if contrast:
         insight.contrast_text = contrast_sentence(hyp, contrast)
+    insight.evidence = build_evidence(
+        sub=sub, hyp=hyp, result=result, covs_used=covs_used,
+        higher_is_better=OUTCOME_HIGHER_IS_BETTER.get(hyp.outcome_col, True), confidence=insight.confidence.value,
+    )
     return insight
