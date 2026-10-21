@@ -22,7 +22,7 @@ HOME
 - Heads-up cards: short coach-style messages about today compared with the person's usual (a big step day, a short night, water or protein running behind). Tap the X to hide one. Water and protein cards go away by themselves once the person has logged enough.
 - Live strip ("So far today, live from your phone"): steps and similar numbers for today.
 - Key readings (for example from Whoop or Apple Health), tappable for history.
-- Closest to a new finding, In progress (things being tried), Goals teaser, Weekly recap, Workouts teaser.
+- Closest to a new finding, In progress (things being tried), Goals teaser, Weekly recap, Workouts teaser, and (for anyone who has trained in the last six weeks) a one-line "2 of 4 workouts this week" with a small ring, which opens Workouts. The weekly target is the one on the Workouts screen ring.
 - Cards from the "Check this out" feed: short summaries of published research, with a link to the study. The X hides a card.
 - An icon at the top of Home opens History, which shows any past day (day summary and Quick Entries).
 
