@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from causal import engine
 from causal.evidence import build_evidence, checks_text, size_word
@@ -21,8 +22,14 @@ def frame(n=70, seed=3):
 
 
 def result_for(df, hyp):
+    """The days the engine would use and a made-up estimate of the effect (the statistics library isn't needed to test the evidence)."""
     sub, covs = engine.working_frame(df, hyp)
-    return sub, covs, engine.estimate(sub, hyp, covs)
+    t, y = sub[hyp.treatment_col], sub[hyp.outcome_col]
+    if hyp.binary_treatment:
+        effect = float(y[t > 0].mean() - y[t <= 0].mean())
+    else:
+        effect = float(np.polyfit(t.values, y.values, 1)[0])
+    return sub, covs, {"effect": effect, "ci_low": effect - 2.0, "ci_high": effect + 2.0, "n_obs": len(sub), "p_value": 0.01}
 
 
 def test_a_yes_no_finding_carries_days_with_and_without_and_the_steps_taken():
@@ -67,6 +74,7 @@ def test_an_amount_finding_gets_lower_middle_and_higher_days_and_a_scatter():
     hyp = BY_ID["steps_hrv"]
     sub, covs, result = result_for(df, hyp)
     result = engine._scaled(result, hyp)
+    assert result["effect"] > 0
     ev = build_evidence(sub=sub, hyp=hyp, result=result, covs_used=covs, higher_is_better=True, confidence="strong")
     assert ev["kind"] == "amount" and [b["name"] for b in ev["bins"]] == ["lower", "middle", "higher"]
     assert ev["bins"][0]["mean"] < ev["bins"][2]["mean"]  # more steps, higher HRV in this made-up person
@@ -75,6 +83,7 @@ def test_an_amount_finding_gets_lower_middle_and_higher_days_and_a_scatter():
 
 
 def test_the_engine_attaches_it_to_a_finding_and_it_survives_saving():
+    pytest.importorskip("scipy")  # the real estimate needs it; the plain test run doesn't install it
     hyp = BY_ID["alcohol_hrv"]
     insight = engine._run_one(frame(90), hyp)
     assert insight is not None and insight.evidence["groups"]["with"]["n"] > 0
