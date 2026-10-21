@@ -17,11 +17,14 @@ data around them. Numbers are in the same units as the finding.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 TIMELINE_DAYS = 45
 SCATTER_POINTS = 60
@@ -127,7 +130,8 @@ def build_evidence(*, sub: pd.DataFrame, hyp, result: dict, covs_used: list[str]
     """The evidence for one finding. `result` is the estimator's answer already in the finding's units. Never raises."""
     try:
         return _build(sub, hyp, result, covs_used, higher_is_better, confidence)
-    except Exception:
+    except Exception as exc:
+        logger.warning("EVIDENCE_FAILED hyp=%s: %s", getattr(hyp, "id", "?"), exc)
         return {}
 
 
