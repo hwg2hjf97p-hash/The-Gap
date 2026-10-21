@@ -103,6 +103,10 @@ class ProfileBody(BaseModel):
     allergies: Optional[str] = Field(default=None, max_length=300)
     training_goal: Optional[Literal["muscle", "fat_loss", "general", "endurance"]] = None
     equipment: Optional[Literal["gym", "dumbbells", "bodyweight"]] = None
+    # Added with phase22.sql. coach_off: don't suggest targets (pregnancy, a medical reason, or "I'll set my own").
+    # plans_for: which workout plans to show first. Neither is ever worked out for the person: they choose.
+    coach_off: Optional[bool] = None
+    plans_for: Optional[Literal["women", "men", "none"]] = None
 
 
 def _clean_allergies(text: Optional[str]) -> Optional[str]:
@@ -114,10 +118,13 @@ def _clean_allergies(text: Optional[str]) -> Optional[str]:
 
 async def _load_profile(client: httpx.AsyncClient, user_id: str) -> Optional[dict]:
     try:
+        base = "diet_goal,diet_prefs,allergies,training_goal,equipment"
         resp = await client.get(
             _sb_url("health_profile"), headers=_sb_headers(),
-            params={"user_id": f"eq.{user_id}", "select": "diet_goal,diet_prefs,allergies,training_goal,equipment", "limit": "1"},
+            params={"user_id": f"eq.{user_id}", "select": base + ",coach_off,plans_for", "limit": "1"},
         )
+        if resp.status_code == 400:  # phase22.sql hasn't been run yet: read what is there
+            resp = await client.get(_sb_url("health_profile"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "select": base, "limit": "1"})
         resp.raise_for_status()
         rows = resp.json() or []
         return rows[0] if rows else None
@@ -144,19 +151,33 @@ async def put_profile(body: ProfileBody, user_id: str = Depends(get_current_user
         "equipment": body.equipment,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    # Only what was sent: an older app that doesn't know these fields must not wipe them.
+    if body.coach_off is not None:
+        payload["coach_off"] = body.coach_off
+    if body.plans_for is not None:
+        payload["plans_for"] = body.plans_for
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                _sb_url("health_profile"),
-                headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
-                params={"on_conflict": "user_id"},
-                json=payload,
-            )
+            resp = None
+            for _ in range(3):
+                resp = await client.post(
+                    _sb_url("health_profile"),
+                    headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
+                    params={"on_conflict": "user_id"},
+                    json=payload,
+                )
+                if resp.status_code == 400 and ("coach_off" in resp.text or "plans_for" in resp.text):
+                    # phase22.sql hasn't been run: save everything else rather than lose the whole save
+                    payload.pop("coach_off", None)
+                    payload.pop("plans_for", None)
+                    continue
+                break
+            assert resp is not None
             resp.raise_for_status()
     except Exception as exc:
         logger.error("Saving health profile failed for %s: %s", user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Couldn't save your preferences — please try again.")
-    return JSONResponse(content={"profile": {k: payload[k] for k in ("diet_goal", "diet_prefs", "allergies", "training_goal", "equipment")}})
+    return JSONResponse(content={"profile": {k: payload.get(k) for k in ("diet_goal", "diet_prefs", "allergies", "training_goal", "equipment", "coach_off", "plans_for")}})
 
 
 # ── Week + cache ─────────────────────────────────────────────────────────────

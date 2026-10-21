@@ -34,6 +34,7 @@ JOURNAL SCREEN (opened from Quick Entry on Home)
 
 YOUR HEALTH TAB
 - Nutrition: log food (search, scan a barcode, takeaway and restaurant items, "My regulars" saved foods and saved meals, or add your own), and water. Daily goals for calories, protein and water can be set. Tapping an entry lets you edit its servings, meal or time.
+- Daily goals (the pencil or "Daily goals" on Your Health): calories, protein and water. Under protein and water the app shows a suggested range with a "Why this?" and a "Use" button. The ranges come from published guidance and the person's weight and goal; they are general guidance, not medical or dietitian advice. Suggestions can be switched off in Food preferences ("Don't suggest targets for me"), which is meant for pregnancy, breastfeeding, a medical reason to limit protein or fluids, or preferring to set your own. The app never suggests calorie targets.
 - Weight card: log weight; body fat and weight can also arrive from Apple Health.
 - Workouts / Training: plan a workout and check it off, start a workout, see the week's schedule, and ideas for meals and training.
 - Reminders: a reminders button lets the person set water, meal, workout and check-in reminders and quiet hours. These are notifications from the phone itself.
@@ -42,6 +43,7 @@ YOUR HEALTH TAB
 WORKOUTS
 - Start a workout: Browse by type (7 types), For you (suggestions from the person's own habits), My templates, or start from scratch and pick exercises. There are about 43 ready-made workouts that can be edited.
 - During a workout: log sets, reps and weights. For-time and AMRAP workouts use one clock for the whole workout, with an Ideal split (a time per round) or a Custom split (as many sections as wanted).
+- In Training preferences the person can optionally choose which plans to show first: Women's, Men's, or No preference. It only changes the order (women's picks lead with glutes, legs and strength plans; men's with upper-body strength). Every plan stays available. The Start a workout screen also asks once if they haven't chosen.
 - Any workout can be saved as "my own template". Workouts can be planned for another day, and history shows past ones.
 
 INSIGHTS TAB
@@ -60,6 +62,7 @@ ASK GAPPY TAB
 - Each subscription has a monthly AI allowance. The free month has a smaller one and up to 10 Gappy questions a day. When it is used up the Gappy screen says when it resets and, during the free month, offers "Go Pro now".
 
 GOALS
+- When setting a goal for steps, sleep or workout days, the app shows a common range and a realistic first step based on the person's recent average, with a "Use" button.
 - Open Goals from Home (the goals teaser). Set a goal on a reading (for example sleep per night, steps, HRV), with a target. "Find research for my goals" adds research cards to Home. Achieved goals are listed.
 
 SETTINGS TAB (four sections that open when tapped)

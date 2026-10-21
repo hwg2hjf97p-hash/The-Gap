@@ -106,6 +106,7 @@ from routers import quicklog
 from routers import headsups
 from routers import help as help_mode
 from routers import life_events as life_events_router
+from routers import coach as coach_router
 from routers import sync_admin
 from routers import evidence_admin
 from routers import app_config
@@ -154,6 +155,7 @@ app.include_router(quicklog.router)
 app.include_router(headsups.router)
 app.include_router(help_mode.router)
 app.include_router(life_events_router.router)
+app.include_router(coach_router.router)
 app.include_router(sync_admin.router)
 app.include_router(evidence_admin.router)
 app.include_router(app_config.router)
@@ -171,7 +173,7 @@ async def start_background_scheduler():
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "fixes-2"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "coach-1"}
 
 @app.get("/health/deep")
 async def health_deep():
