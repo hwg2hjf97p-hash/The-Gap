@@ -4,7 +4,7 @@ export const metadata = { title: "Privacy Policy — The Gap" };
 
 const INTRO = [
   "The Gap is a personal health-insights app. It finds patterns in your own data, such as how your sleep, training, food and daily habits relate to your recovery. Much of the information involved is health information, so we want to be clear and specific about what we collect, why, and who else handles it.",
-  "In this policy, \"The Gap\", \"we\" and \"us\" mean the operator of The Gap (Samuel Roberts, Queensland, Australia). It covers the app and the website at app.causalme.com. We aim to handle personal information in line with the Australian Privacy Principles in the Privacy Act 1988 (Cth).",
+  "In this policy, \"The Gap\", \"we\" and \"us\" mean the operator of The Gap (Samuel Roberts, trading as CausalMe, ABN 60 302 249 164, Queensland, Australia). It covers the app and the website at app.causalme.com. We aim to handle personal information in line with the Australian Privacy Principles in the Privacy Act 1988 (Cth).",
 ];
 
 const SECTIONS: LegalSection[] = [
@@ -45,7 +45,8 @@ const SECTIONS: LegalSection[] = [
     ],
     bullets: [
       "Quick Entry notes: the text, so it can pick out things like stress, travel or illness.",
-      "The assistant (Gappy): your question, plus a summary of your recent insights and metrics.",
+      "The assistant (Gappy): your question, plus a summary of your recent insights and metrics, and the type and date (never the note) of any big changes in your life that you chose to add.",
+      "Help (\"How to use the app\"): your question about using the app, and a written guide to the app. Never your health data.",
       "Insight stories, plans and explanations: the details of an insight (what was compared, the size of the effect, how confident we are) and metric trends.",
       "Daily plan: your recovery readings compared with your own average, whether you've logged a workout, and how your food and water are going.",
       "Metric explanations: the reading, how it compares with your recent average, and, if you've entered them, your age, height and weight.",
@@ -128,5 +129,5 @@ const SECTIONS: LegalSection[] = [
 ];
 
 export default function PrivacyPolicyPage() {
-  return <LegalPage title="Privacy Policy" updated="20 October 2026" intro={INTRO} sections={SECTIONS} />;
+  return <LegalPage title="Privacy Policy" updated="21 October 2026" intro={INTRO} sections={SECTIONS} />;
 }

@@ -3,7 +3,7 @@ import LegalPage, { LegalSection } from "../../components/LegalPage";
 export const metadata = { title: "Terms of Service — The Gap" };
 
 const INTRO = [
-  "These terms are an agreement between you and the operator of The Gap (Samuel Roberts, Queensland, Australia; \"we\", \"us\"). By creating an account or using the app, you agree to them and to our Privacy Policy. If you don't agree, please don't use The Gap.",
+  "These terms are an agreement between you and the operator of The Gap (Samuel Roberts, trading as CausalMe, ABN 60 302 249 164, Queensland, Australia; \"we\", \"us\"). By creating an account or using the app, you agree to them and to our Privacy Policy. If you don't agree, please don't use The Gap.",
 ];
 
 const SECTIONS: LegalSection[] = [
@@ -18,6 +18,7 @@ const SECTIONS: LegalSection[] = [
     paragraphs: [
       "The Gap analyses information from your phone, connected wearables and services, and what you log, to show patterns in your own data. It also offers a daily plan, reminders, food and workout tracking, an AI assistant, and suggested foods, recipes and videos.",
       "The Gap is under active development. Features may change, be added, or be removed, and the service may be unavailable from time to time.",
+      "If you load sample data to look around, it is made up and is kept separate from your own data until you remove it.",
     ],
   },
   {
@@ -30,6 +31,8 @@ const SECTIONS: LegalSection[] = [
       "Exercise carries a risk of injury. Use weights and intensities you can control, and stop if something hurts.",
       "Food, recipe and nutrition information, including calorie and protein figures, is an estimate and can be wrong. If you have an allergy or intolerance, always check ingredients and labels yourself. Do not rely on the app to keep you safe.",
       "Insights are statistical and can be wrong, especially with little data. They show patterns, not proof of cause in your body. Do not make medical decisions based only on them.",
+      "The Gap shows short summaries of published research, including studies about supplements, on Home and beside some findings. They describe groups of people, not you. They are general information only and not a recommendation to take, start, stop or change any supplement, medicine, food or activity.",
+      "Supplements and medicines can interact with each other and aren't right for everyone. Talk to a doctor or pharmacist first, especially if you are pregnant, have a medical condition or take medication. If you log supplements you take, The Gap only compares your own days with and without them. That describes your data; it does not show that a supplement works or that you should take it.",
       "In an emergency call 000. If gambling, alcohol, tobacco or other substances are a concern for you, support is available: Gambling Help Online 1800 858 858, Quitline 13 78 48, and Lifeline 13 11 14.",
     ],
   },
@@ -142,5 +145,5 @@ const SECTIONS: LegalSection[] = [
 ];
 
 export default function TermsPage() {
-  return <LegalPage title="Terms of Service" updated="20 October 2026" intro={INTRO} sections={SECTIONS} />;
+  return <LegalPage title="Terms of Service" updated="21 October 2026" intro={INTRO} sections={SECTIONS} />;
 }
