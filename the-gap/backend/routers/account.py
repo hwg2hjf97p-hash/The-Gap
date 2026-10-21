@@ -49,7 +49,7 @@ USER_DATA_TABLES = TABLES + [
     "assistant_questions", "assistant_extractions",
     "workouts", "workout_templates", "provider_waitlist", "ai_usage_month", "food_log", "water_log", "nutrition_goals", "training_schedule",
     "health_profile", "weekly_suggestions", "user_consents", "consent_log",
-    "notification_prefs", "push_queue", "source_prefs", "feed_items", "weight_log", "saved_foods", "saved_meals", "quick_log_tokens", "headsups", "sync_state", "life_events",
+    "notification_prefs", "push_queue", "source_prefs", "feed_items", "weight_log", "saved_foods", "saved_meals", "quick_log_tokens", "headsups", "sync_state", "life_events", "training_state",
 ]
 
 # Credentials never belong in a data export, even the user's own.
