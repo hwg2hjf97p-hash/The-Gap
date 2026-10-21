@@ -102,6 +102,87 @@ async def _enqueue(user_id: str, title: str, body: str, data: dict | None) -> bo
         return False
 
 
+EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
+
+
+def read_tickets(tokens: list[str], tickets: list[dict]) -> dict:
+    """
+    What Expo said about each message: how many it accepted, the plain-words problems, the ticket ids (to ask about
+    delivery later) and which tokens belong to a phone that is gone (to forget them).
+    """
+    accepted, errors, ids, dead = 0, [], [], []
+    for token, ticket in zip(tokens, tickets):
+        if ticket.get("status") == "ok":
+            accepted += 1
+            if ticket.get("id"):
+                ids.append(ticket["id"])
+            continue
+        code = (ticket.get("details") or {}).get("error") or "error"
+        errors.append(f"{code}: {ticket.get('message', '')}".strip())
+        if code == "DeviceNotRegistered":
+            dead.append(token)
+    return {"accepted": accepted, "errors": errors, "ticket_ids": ids, "dead_tokens": dead}
+
+
+async def _forget_tokens(user_id: str, tokens: list[str]) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            for token in tokens:
+                await client.delete(_sb_url("push_tokens"), headers=_sb_headers("return=minimal"), params={"user_id": f"eq.{user_id}", "expo_push_token": f"eq.{token}"})
+    except Exception as exc:
+        logger.warning("Forgetting dead push tokens failed for %s: %s", user_id[:8], exc)
+
+
+async def get_receipts(ticket_ids: list[str]) -> dict:
+    """Expo's later word on delivery (for example a bad Apple key shows up here, not in the first answer)."""
+    if not ticket_ids:
+        return {}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(EXPO_RECEIPTS_URL, json={"ids": ticket_ids}, headers={"Content-Type": "application/json"})
+            resp.raise_for_status()
+            return (resp.json() or {}).get("data") or {}
+    except Exception as exc:
+        logger.warning("Fetching push receipts failed: %s", exc)
+        return {}
+
+
+async def send_push_detailed(user_id: str, title: str, body: str, data: dict | None = None, respect_quiet: bool = True) -> dict:
+    """send_push, but telling the caller what happened: {"held", "tokens", "accepted", "errors", "ticket_ids"}. Never raises."""
+    result: dict = {"held": False, "tokens": 0, "accepted": 0, "errors": [], "ticket_ids": []}
+    if respect_quiet and _quiet_now(await get_prefs(user_id)):
+        if await _enqueue(user_id, title, body, data):
+            logger.info("PUSH_HELD user=%s title=%r", user_id[:8], title)
+        result["held"] = True
+        return result
+
+    tokens = await _get_tokens_for_user(user_id)
+    result["tokens"] = len(tokens)
+    if not tokens:
+        logger.info("PUSH_NO_TOKEN user=%s title=%r (this person has no phone registered for notifications)", user_id[:8], title)
+        return result
+
+    messages = [{"to": token, "title": title, "body": body, "data": data or {}, "sound": "default"} for token in tokens]
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(EXPO_PUSH_URL, json=messages, headers={"Content-Type": "application/json"})
+            resp.raise_for_status()
+            tickets = (resp.json() or {}).get("data") or []
+    except Exception as exc:
+        logger.warning("Push send failed for %s: %s", user_id[:8], exc)
+        result["errors"].append(f"send failed: {exc}")
+        return result
+
+    read = read_tickets(tokens, tickets)
+    result.update({k: read[k] for k in ("accepted", "errors", "ticket_ids")})
+    if read["dead_tokens"]:
+        await _forget_tokens(user_id, read["dead_tokens"])
+    for problem in read["errors"]:
+        logger.warning("PUSH_TICKET_ERROR user=%s %s", user_id[:8], problem)
+    logger.info("PUSH_SENT user=%s tokens=%d accepted=%d title=%r", user_id[:8], len(tokens), read["accepted"], title)
+    return result
+
+
 async def send_push(user_id: str, title: str, body: str, data: dict | None = None, respect_quiet: bool = True) -> None:
     """
     Best-effort push to every device this user has registered. Never raises —
@@ -110,27 +191,7 @@ async def send_push(user_id: str, title: str, body: str, data: dict | None = Non
     During the person's quiet hours the push is held and sent by flush_queue()
     once they're past it, rather than waking them.
     """
-    if respect_quiet and _quiet_now(await get_prefs(user_id)):
-        if await _enqueue(user_id, title, body, data):
-            logger.info("PUSH_HELD user=%s title=%r", user_id[:8], title)
-        return
-
-    tokens = await _get_tokens_for_user(user_id)
-    if not tokens:
-        return
-
-    messages = [
-        {"to": token, "title": title, "body": body, "data": data or {}, "sound": "default"}
-        for token in tokens
-    ]
-
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(EXPO_PUSH_URL, json=messages, headers={"Content-Type": "application/json"})
-            resp.raise_for_status()
-            logger.info("PUSH_SENT user=%s count=%d title=%r", user_id[:8], len(tokens), title)
-    except Exception as exc:
-        logger.warning("Push send failed for %s: %s", user_id[:8], exc)
+    await send_push_detailed(user_id, title, body, data, respect_quiet)
 
 
 QUEUE_MAX_AGE_HOURS = 24

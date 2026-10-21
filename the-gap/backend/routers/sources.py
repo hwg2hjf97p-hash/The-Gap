@@ -135,6 +135,33 @@ async def get_sources(user_id: str = Depends(get_current_user_id)) -> JSONRespon
     return JSONResponse(content={"groups": groups})
 
 
+@router.get("/steps-check")
+async def steps_check(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """For "why don't my steps match?": which device supplies steps, and what is saved for today from each place."""
+    import json
+
+    from utils.local_time import user_today
+
+    today = await user_today(user_id)
+    groups = json.loads((await get_sources(user_id)).body).get("groups", [])
+    activity = next((g for g in groups if g["key"] == "activity"), {})
+    in_use = activity.get("in_use")
+    out: dict = {"date": today.isoformat(), "in_use": in_use, "in_use_label": SOURCE_LABELS.get(in_use or "", in_use), "apple_health_today": None, "saved_today": None}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            apple = await client.get(_sb_url("apple_health_daily"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "entry_date": f"eq.{today.isoformat()}", "select": "steps", "limit": "1"})
+            apple.raise_for_status()
+            rows = apple.json() or []
+            out["apple_health_today"] = rows[0].get("steps") if rows else None
+            saved = await client.get(_sb_url("metric_history"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "metric": "eq.steps", "date": f"eq.{today.isoformat()}", "select": "value", "limit": "1"})
+            saved.raise_for_status()
+            rows = saved.json() or []
+            out["saved_today"] = rows[0].get("value") if rows else None
+    except Exception as exc:
+        logger.warning("Steps check failed for %s: %s", user_id[:8], exc)
+    return JSONResponse(content=out)
+
+
 @router.put("")
 async def put_sources(body: SourcePrefsBody, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     for key, source in body.primary.items():

@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -46,6 +46,9 @@ PUSH_END_HOUR = 20.5
 RECOVERY_GOAL_COLS = {"hrv", "recovery_score", "resting_hr", "sleep_total_min"}
 # Kinds that depend only on what is logged so far today, and so can be re-checked whenever they are shown.
 LIVE_KINDS = {"water_behind", "protein_behind"}
+# Re-checked as well when the app tells us the phone's live step count (only for someone whose main steps source is the phone).
+LIVE_STEP_KINDS = {"steps_high", "steps_low"}
+MAX_PLAUSIBLE_STEPS = 100_000
 
 
 # ── small helpers ────────────────────────────────────────────────────────────
@@ -306,11 +309,25 @@ async def local_day_and_hour(user_id: str) -> tuple[date, float]:
     return now.date(), now.hour + now.minute / 60.0
 
 
-async def live_cards(user_id: str, day: date, hour: float) -> Optional[dict[str, dict]]:
+async def _usual_steps(user_id: str, day: date) -> Optional[float]:
+    """The person's usual daily steps: the mean of the days before today in their saved history, when there are enough."""
+    from utils.goals import fetch_points
+
+    points = await fetch_points(user_id, "steps", day - timedelta(days=BASELINE_DAYS))
+    values = [v for d, v in points if d < day]
+    return float(sum(values) / len(values)) if len(values) >= MIN_BASELINE_DAYS else None
+
+
+async def live_cards(
+    user_id: str, day: date, hour: float, live_steps: Optional[float] = None, insights: Optional[list[dict]] = None
+) -> tuple[Optional[dict[str, dict]], set[str]]:
     """
-    The water / protein cards that apply right now, worked out from what is logged so far, by kind. None when
-    that couldn't be worked out (the caller then leaves the stored cards as they are rather than hiding them).
+    (the cards that apply right now by kind, which kinds were re-checked). Water and protein come from what is logged so
+    far. Steps are included only when the phone's live count is given: then the step cards are worked out from that same
+    number the person sees on Home, not from the last saved total (which can be an hour old or from another device).
+    The first part is None when the logs couldn't be read (the caller then leaves stored cards as they are).
     """
+    kinds = set(LIVE_KINDS)
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             water = await client.get(_sb_url("water_log"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "local_date": f"eq.{day.isoformat()}", "select": "amount_ml"})
@@ -326,21 +343,33 @@ async def live_cards(user_id: str, day: date, hour: float) -> Optional[dict[str,
         goal_rows = goals.json() or []
     except Exception as exc:
         logger.warning("Live heads-ups failed for %s: %s", user_id[:8], exc)
-        return None
-    items = build_headsups(today={}, usual={}, hour=hour, day=day, user_key=user_id[:8], nutrition=nutrition, nutrition_goals=goal_rows[0] if goal_rows else {})
-    return {i["kind"]: i for i in items if i["kind"] in LIVE_KINDS}
+        return None, kinds
+    today_vals: dict[str, float] = {}
+    usual_vals: dict[str, float] = {}
+    if live_steps is not None and 0 <= live_steps <= MAX_PLAUSIBLE_STEPS:
+        usual = await _usual_steps(user_id, day)
+        if usual is not None:
+            today_vals, usual_vals = {"steps": float(live_steps)}, {"steps": usual}
+            kinds |= LIVE_STEP_KINDS
+    items = build_headsups(
+        today=today_vals, usual=usual_vals, hour=hour, day=day, user_key=user_id[:8],
+        nutrition=nutrition, nutrition_goals=goal_rows[0] if goal_rows else {}, insights=insights or [],
+    )
+    return {i["kind"]: i for i in items if i["kind"] in kinds}, kinds
 
 
-def apply_live(rows: list[dict], live: Optional[dict[str, dict]]) -> list[dict]:
+def apply_live(rows: list[dict], live: Optional[dict[str, dict]], kinds: Optional[set[str]] = None) -> list[dict]:
     """
-    Stored cards with the live ones brought up to date: a water/protein card that no longer applies is dropped,
-    and one that still does shows the current numbers. Everything else is untouched.
+    Stored cards with the live ones brought up to date: a card of a re-checked kind (water, protein, and steps when the
+    phone's live count was given) that no longer applies is dropped, and one that still does shows the current numbers.
+    Everything else is untouched.
     """
     if live is None:
         return rows
+    checked = LIVE_KINDS if kinds is None else kinds
     out: list[dict] = []
     for row in rows:
-        if row.get("kind") in LIVE_KINDS:
+        if row.get("kind") in checked:
             current = live.get(row["kind"])
             if not current:
                 continue

@@ -9,7 +9,9 @@ Heads-ups: short coach-style messages from today's numbers (see utils/headsups.p
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from auth import get_current_user_id
+from db.supabase_client import get_latest_results
 from utils.headsups import _save, _sb_headers, _sb_url, apply_live, headsups_enabled, live_cards, local_day_and_hour
 from utils.local_time import DEFAULT_TZ
 
@@ -27,12 +30,18 @@ MAX_CARDS = 3
 
 
 @router.get("/today")
-async def today(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+async def today(live_steps: Optional[float] = None, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     if not await headsups_enabled(user_id):
         return JSONResponse(content={"headsups": []})
     day, hour = await local_day_and_hour(user_id)
     # Water and protein are checked against what's logged right now, so logging something makes the card go away.
-    live = await live_cards(user_id, day, hour)
+    insights: list[dict] = []
+    if live_steps is not None:
+        try:
+            insights = ((await asyncio.to_thread(get_latest_results, user_id)) or {}).get("insights") or []
+        except Exception as exc:
+            logger.info("Latest insights for live heads-ups unavailable (%s)", exc)
+    live, checked = await live_cards(user_id, day, hour, live_steps, insights)
     if live:
         try:
             await _save(user_id, day.isoformat(), list(live.values()))  # a card that has only just become true
@@ -52,7 +61,7 @@ async def today(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     except Exception as exc:
         logger.warning("Loading heads-ups failed for %s: %s", user_id[:8], exc)
         rows = []
-    return JSONResponse(content={"headsups": apply_live(rows, live)[:MAX_CARDS]})
+    return JSONResponse(content={"headsups": apply_live(rows, live, checked)[:MAX_CARDS]})
 
 
 @router.post("/{headsup_id}/dismiss")

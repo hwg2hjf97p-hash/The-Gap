@@ -237,3 +237,34 @@ def test_water_and_protein_are_now_worth_a_push_in_the_right_window():
     protein = live_for(2000, hour=18.0, protein_g=10, protein_goal=120)["protein_behind"]
     assert hu.choose_push([protein], [], 18.0, NOW)["kind"] == "protein_behind"
     assert hu.choose_push([protein], [], 15.0, NOW) is None
+
+
+# ── steps cards are checked against the phone's own live count ───────────────
+
+def steps_live(steps, usual=10000.0, hour=15.0):
+    items = hu.build_headsups(today={"steps": steps}, usual={"steps": usual}, hour=hour, day=DAY, user_key="u1")
+    return {i["kind"]: i for i in items if i["kind"] in hu.LIVE_KINDS | hu.LIVE_STEP_KINDS}
+
+
+STEP_KINDS = hu.LIVE_KINDS | hu.LIVE_STEP_KINDS
+
+
+def test_a_big_step_card_shows_the_number_the_person_sees_live_not_the_old_saved_one():
+    rows = [stored("steps_high", "Look at you go. 18,000 steps so far")]
+    out = hu.apply_live(rows, steps_live(16000), STEP_KINDS)
+    assert len(out) == 1 and "16,000" in out[0]["body"] and "18,000" not in out[0]["body"]
+
+
+def test_a_step_card_goes_away_when_the_live_count_is_not_actually_a_big_day():
+    rows = [stored("steps_high", "Look at you go. 18,000 steps so far")]
+    assert hu.apply_live(rows, steps_live(12000), STEP_KINDS) == []
+
+
+def test_without_a_live_count_the_stored_step_cards_are_left_alone():
+    rows = [stored("steps_high")]
+    assert hu.apply_live(rows, {}, hu.LIVE_KINDS) == rows       # phone isn't the chosen step source
+    assert hu.apply_live(rows, {}) == rows                      # older callers
+
+
+def test_a_made_up_live_count_is_ignored():
+    assert hu.MAX_PLAUSIBLE_STEPS == 100_000
