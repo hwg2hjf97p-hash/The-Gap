@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -135,17 +136,26 @@ async def get_sources(user_id: str = Depends(get_current_user_id)) -> JSONRespon
     return JSONResponse(content={"groups": groups})
 
 
+async def activity_source(user_id: str) -> tuple[Optional[str], str]:
+    """(the device steps come from, its name), for example ("whoop", "Whoop"). (None, "") if it can't be told."""
+    import json
+
+    try:
+        groups = json.loads((await get_sources(user_id)).body).get("groups", [])
+    except Exception as exc:
+        logger.info("Steps source lookup failed for %s: %s", user_id[:8], exc)
+        return None, ""
+    in_use = next((g for g in groups if g["key"] == "activity"), {}).get("in_use")
+    return in_use, SOURCE_LABELS.get(in_use or "", "")
+
+
 @router.get("/steps-check")
 async def steps_check(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """For "why don't my steps match?": which device supplies steps, and what is saved for today from each place."""
-    import json
-
     from utils.local_time import user_today
 
     today = await user_today(user_id)
-    groups = json.loads((await get_sources(user_id)).body).get("groups", [])
-    activity = next((g for g in groups if g["key"] == "activity"), {})
-    in_use = activity.get("in_use")
+    in_use, _label = await activity_source(user_id)
     out: dict = {"date": today.isoformat(), "in_use": in_use, "in_use_label": SOURCE_LABELS.get(in_use or "", in_use), "apple_health_today": None, "saved_today": None}
     try:
         async with httpx.AsyncClient(timeout=10) as client:

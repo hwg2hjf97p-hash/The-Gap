@@ -268,3 +268,10 @@ def test_without_a_live_count_the_stored_step_cards_are_left_alone():
 
 def test_a_made_up_live_count_is_ignored():
     assert hu.MAX_PLAUSIBLE_STEPS == 100_000
+
+
+def test_a_big_step_card_names_the_device_when_it_is_not_the_phone():
+    named = build(today={"steps": 18152}, usual={"steps": 13000}, hour=15.0, steps_source="Whoop")
+    assert "Whoop has you at 18,152 steps so far" in named[0]["body"] and "40%" in named[0]["body"]
+    plain = build(today={"steps": 18152}, usual={"steps": 13000}, hour=15.0)
+    assert "Whoop" not in plain[0]["body"] and "18,152 steps so far is 40% over" in plain[0]["body"]

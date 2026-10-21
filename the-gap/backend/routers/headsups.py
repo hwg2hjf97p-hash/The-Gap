@@ -41,7 +41,13 @@ async def today(live_steps: Optional[float] = None, user_id: str = Depends(get_c
             insights = ((await asyncio.to_thread(get_latest_results, user_id)) or {}).get("insights") or []
         except Exception as exc:
             logger.info("Latest insights for live heads-ups unavailable (%s)", exc)
-    live, checked = await live_cards(user_id, day, hour, live_steps, insights)
+    steps_source = ""
+    if live_steps is not None:
+        from routers.sources import activity_source
+
+        key, label = await activity_source(user_id)
+        steps_source = label if key and key != "apple_health" else ""
+    live, checked = await live_cards(user_id, day, hour, live_steps, insights, steps_source)
     if live:
         try:
             await _save(user_id, day.isoformat(), list(live.values()))  # a card that has only just become true

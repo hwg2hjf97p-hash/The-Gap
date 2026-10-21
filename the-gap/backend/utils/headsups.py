@@ -129,6 +129,7 @@ def build_headsups(
     nutrition_goals: Optional[dict] = None,
     insights: Optional[list[dict]] = None,
     goal_cols: Optional[set[str]] = None,
+    steps_source: str = "",
 ) -> list[dict]:
     """
     The heads-ups that apply right now. `today` and `usual` hold steps, sleep_total_min, strain; `nutrition`
@@ -159,10 +160,17 @@ def build_headsups(
             f"Treat tonight like a cooldown lap: easy evening, early night{goal_clause}.",
             f"Your body just did a lot. Pay it back with an early night{goal_clause}.",
         ], seed + "steps_advice")
+        # Name the device when it isn't the phone, so the number can't be mistaken for another one on screen (a Whoop and an
+        # iPhone count steps differently and from different starting points).
+        lead = (
+            f"{steps_source} has you at {_int(steps)} steps so far, {pct}% over your usual {_int(usual_steps)}."
+            if steps_source
+            else f"{_int(steps)} steps so far is {pct}% over your usual {_int(usual_steps)}."
+        )
         items.append({
             "kind": "steps_high",
             "title": "Big step day",
-            "body": f"{opener} {_int(steps)} steps so far is {pct}% over your usual {_int(usual_steps)}.{pattern} {advice}",
+            "body": f"{opener} {lead}{pattern} {advice}",
             "tone": "easy", "priority": 80, "push": True, "window": (11.0, 20.5),
         })
 
@@ -319,7 +327,7 @@ async def _usual_steps(user_id: str, day: date) -> Optional[float]:
 
 
 async def live_cards(
-    user_id: str, day: date, hour: float, live_steps: Optional[float] = None, insights: Optional[list[dict]] = None
+    user_id: str, day: date, hour: float, live_steps: Optional[float] = None, insights: Optional[list[dict]] = None, steps_source: str = ""
 ) -> tuple[Optional[dict[str, dict]], set[str]]:
     """
     (the cards that apply right now by kind, which kinds were re-checked). Water and protein come from what is logged so
@@ -353,7 +361,7 @@ async def live_cards(
             kinds |= LIVE_STEP_KINDS
     items = build_headsups(
         today=today_vals, usual=usual_vals, hour=hour, day=day, user_key=user_id[:8],
-        nutrition=nutrition, nutrition_goals=goal_rows[0] if goal_rows else {}, insights=insights or [],
+        nutrition=nutrition, nutrition_goals=goal_rows[0] if goal_rows else {}, insights=insights or [], steps_source=steps_source,
     )
     return {i["kind"]: i for i in items if i["kind"] in kinds}, kinds
 
@@ -455,9 +463,17 @@ async def run_headsups(user_id: str, df: pd.DataFrame, insights: list[dict]) -> 
         except Exception:
             pass
 
+        steps_source = ""
+        try:
+            from routers.sources import activity_source
+
+            key, label = await activity_source(user_id)
+            steps_source = label if key and key != "apple_health" else ""
+        except Exception:
+            pass
         items = build_headsups(
             today=today, usual=usual, hour=hour, day=day, user_key=user_id[:8],
-            nutrition=nutrition, nutrition_goals=goals, insights=insights, goal_cols=goal_cols,
+            nutrition=nutrition, nutrition_goals=goals, insights=insights, goal_cols=goal_cols, steps_source=steps_source,
         )
         if not items:
             return 0
