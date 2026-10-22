@@ -93,6 +93,10 @@ VOICE LOGGING
 
 NOTIFICATIONS
 - The Gap sends: new-discovery notifications, heads-ups (at most three a day, none during quiet hours, water and protein ones only in the afternoon and evening), follow-ups on things being tried, the weekly recap, and any reminders the person set. Turn heads-ups off in Settings. Turn reminders off in the Reminders sheet. iPhone Settings, then Notifications, then The Gap controls everything.
+- Setup when the app is first opened has four steps: a welcome, what the person wears, Apple Health, and wearables to connect. It does not ask for notifications or the calendar. Those are asked later, when they have a clear use:
+  - Notifications: under the first heads-up on Home (or Your Health) a card asks "Want these on your lock screen?" with Turn on notifications and Not now. Not now hides it for a week. Tapping Turn on notifications shows the iPhone's own pop-up, which the iPhone only ever shows once. The "Check" row in Settings also asks if it has never been asked. If someone said no on the pop-up, they can turn notifications on in iPhone Settings, then Notifications, then The Gap.
+  - Calendar: on the Insights tab, under "more on the way", a card appears when patterns that need the calendar (meetings and busy days against sleep and recovery) are waiting. It uses only how many events there were and for how long, never titles or who is in them. Not now hides it for two weeks. It can also be turned on any time in Settings, under Device Calendar.
+  - A reminder before the free month ends is only delivered if notifications are on.
 - If notifications are not arriving: check iPhone Settings, then Notifications, then The Gap is allowed; check Focus modes and quiet hours.
 
 SUBSCRIPTION
