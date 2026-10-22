@@ -173,9 +173,8 @@ async def _run_one_digest(user_id: str) -> dict:
 @router.post("/run")
 async def run_weekly_digest(x_sync_secret: str = Header(default="")):
     """Generate + push this week's digest for every user with at least one saved result."""
-    if not SYNC_SECRET:
-        logger.warning("SYNC_SECRET is not set: POST /digest/run is open to anyone. Set it in the environment.")
-    elif not hmac.compare_digest(x_sync_secret.encode(), SYNC_SECRET.encode()):
+    # Fails closed: with no secret configured nothing can send everyone a digest.
+    if not SYNC_SECRET or not hmac.compare_digest(x_sync_secret.encode(), SYNC_SECRET.encode()):
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
 
     await flush_queue()

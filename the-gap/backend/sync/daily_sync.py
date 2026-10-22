@@ -207,11 +207,8 @@ async def run_sync(x_sync_secret: str = Header(default="")):
     Run the daily sync for all connected users.
     Protected by X-Sync-Secret header.
     """
-    if not SYNC_SECRET:
-        # Left open when no secret is configured, so an existing scheduled job
-        # keeps working, but anyone could then start a sync of every user.
-        logger.warning("SYNC_SECRET is not set: POST /sync/run is open to anyone. Set it in the environment.")
-    elif not hmac.compare_digest(x_sync_secret.encode(), SYNC_SECRET.encode()):
+    # Fails closed: with no secret configured nothing can start a sync of every user.
+    if not SYNC_SECRET or not hmac.compare_digest(x_sync_secret.encode(), SYNC_SECRET.encode()):
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
 
     # Release pushes held during someone's quiet hours that are now due.

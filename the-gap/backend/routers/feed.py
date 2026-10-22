@@ -70,9 +70,8 @@ async def refresh(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
 async def run_round(x_sync_secret: str = Header(default="")) -> JSONResponse:
     """The scheduled round: new cards for everyone with an active goal (see .github/workflows/scheduled-sync.yml)."""
     expected = os.getenv("SYNC_SECRET", "")
-    if not expected:
-        logger.warning("SYNC_SECRET is not set: POST /feed/run is open to anyone. Set it in the environment.")
-    elif not hmac.compare_digest(x_sync_secret.encode(), expected.encode()):
+    # Fails closed: with no secret configured nothing can start a feed round.
+    if not expected or not hmac.compare_digest(x_sync_secret.encode(), expected.encode()):
         raise HTTPException(status_code=403, detail="Invalid sync secret.")
     try:
         users = await users_for_feed()

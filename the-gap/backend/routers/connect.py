@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from auth import get_current_user_id
+from utils.debug_guard import require_debug_secret
 from utils import provider_caps
 
 logger = logging.getLogger(__name__)
@@ -195,7 +196,7 @@ def _consume_state(state: str) -> Optional[dict]:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.get("/debug/{provider}/auth-url")
+@router.get("/debug/{provider}/auth-url", dependencies=[Depends(require_debug_secret)])
 async def debug_auth_url(provider: str):
     """Return the exact auth URL (and its redirect_uri) without redirecting, for debugging."""
     cfg = _get_provider_config(provider)

@@ -28,7 +28,11 @@ init_sentry()
 app = FastAPI(
     title="The Gap API",
     description="Personal Causal Intelligence Layer — analyses wearable data to find verified cause-and-effect insights",
-    version="1.0.0"
+    version="1.0.0",
+    # The interactive API pages list every endpoint; nobody but the owner needs them in production.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 # Allow all origins — tighten after launch
