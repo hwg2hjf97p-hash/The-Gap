@@ -84,7 +84,7 @@ def interpret_result(
         )
     else:
         confidence = ConfidenceLevel.WEAK
-        confidence_label = "Early signal"
+        confidence_label = "Still checking"
         confidence_description = (
             "A hint of this pattern exists. Keep logging for a few more weeks to see if it holds."
         )

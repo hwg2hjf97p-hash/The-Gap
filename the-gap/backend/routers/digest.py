@@ -70,11 +70,11 @@ async def _supabase_get(table: str, params: dict) -> list[dict]:
 def _build_digest_text(confirmed_count: int, in_progress_count: int, streak: int, goal_lines: list[str], early_count: int = 0) -> str:
     parts = []
     if confirmed_count > 0:
-        parts.append(f"{confirmed_count} confirmed pattern{'s' if confirmed_count != 1 else ''} running on you right now")
+        parts.append(f"{confirmed_count} confirmed pattern{'s' if confirmed_count != 1 else ''} found in your data so far")
     else:
         parts.append("no confirmed patterns yet — keep logging, they take a few weeks to show up")
     if early_count > 0:
-        parts.append(f"{early_count} early signal{'s' if early_count != 1 else ''} worth watching")
+        parts.append(f"{early_count} {'are' if early_count != 1 else 'is'} still being checked")
     if in_progress_count > 0:
         parts.append(f"{in_progress_count} more still gathering data")
     if streak > 0:

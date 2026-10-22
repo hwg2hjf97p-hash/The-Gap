@@ -297,7 +297,7 @@ def run_all_hypotheses(df: pd.DataFrame, extra_hypotheses: Optional[list[Hypothe
     for insight in insights:
         if insight.confidence != ConfidenceLevel.WEAK and (insight.p_value is None or insight.p_value > threshold):
             insight.confidence = ConfidenceLevel.WEAK
-            insight.confidence_label = "Early signal"
+            insight.confidence_label = "Still checking"
             insight.confidence_description = (
                 "A hint of this pattern exists, but with this many things being tested it could still be chance. "
                 "Keep logging — it'll firm up or fade."

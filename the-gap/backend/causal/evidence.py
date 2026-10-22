@@ -112,9 +112,9 @@ def checks_text(confidence: str, demoted: bool) -> str:
     if demoted:
         return (
             "This looked real on its own, but we test dozens of possible patterns, and with that many a few will look real by luck. "
-            "It didn't clear that stricter check yet, so it's an early signal. More days will settle it."
+            "It didn't clear that stricter check yet, so it's still being checked. More days will settle it."
         )
-    return "The range is wide, or it touches zero, so this could still be chance. It's an early signal: keep logging and it will firm up or fade."
+    return "The range is wide, or it touches zero, so this could still be chance. It's still being checked: keep logging and it will firm up or fade."
 
 
 def _covariate_phrase(covs: list[str]) -> str:

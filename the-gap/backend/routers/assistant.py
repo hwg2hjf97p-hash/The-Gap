@@ -85,7 +85,7 @@ def _build_context(results_row: dict | None) -> str:
     if early:
         # Listed separately and labelled, so the assistant can mention them as
         # hints worth watching without ever stating them as established fact.
-        lines.append("\nEarly signals (NOT verified — faint hints that may be chance; never state these as fact):")
+        lines.append("\nStill-checking patterns, also called early signals (NOT verified — faint hints that may be chance; never state these as fact):")
         for i in early:
             lines.append(f"- {i.get('headline', i.get('title', ''))}")
 
