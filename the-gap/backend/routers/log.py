@@ -28,9 +28,10 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 from routers.journal import _count_today, _get_streak, save_note
-from routers.weight import save_weight
+from routers.weight import delete_weight, save_weight
 from utils import drink_times
 from utils.local_time import DEFAULT_TZ
+from utils.log_undo import Undo, restorable_fields, safe_ids, snapshot_checkin
 from utils.log_router import Action, Parsed, parse_log, spoken_summary, time_bucket
 from utils.saved_logging import (
     _sb_headers,
@@ -85,7 +86,7 @@ def hour_of(local: datetime) -> float:
 
 # ── applying what was understood ─────────────────────────────────────────────
 
-async def _add_to_checkin(client: httpx.AsyncClient, user_id: str, day: str, hour: float, adds: dict[str, float], alcohol: bool, pm_caffeine: bool) -> dict[str, int]:
+async def _add_to_checkin(client: httpx.AsyncClient, user_id: str, day: str, hour: float, adds: dict[str, float], alcohol: bool, pm_caffeine: bool, snapshot: Optional[dict] = None) -> dict[str, int]:
     """
     Adds to today's check-in counts without touching anything else in it. A day that has no
     check-in yet gets a partial one, whose unanswered questions stay unanswered (null), not "no".
@@ -95,6 +96,8 @@ async def _add_to_checkin(client: httpx.AsyncClient, user_id: str, day: str, hou
     resp.raise_for_status()
     rows = resp.json() or []
     existing = rows[0] if rows else None
+    if snapshot is not None:
+        snapshot["before"] = snapshot_checkin(existing)  # so the log can be undone exactly
 
     payload: dict = {"user_id": user_id, "date": day}
     totals: dict[str, int] = {}
@@ -144,18 +147,36 @@ async def _water_today(client: httpx.AsyncClient, user_id: str, day: str) -> int
     return sum(int(r["amount_ml"]) for r in resp.json() or [])
 
 
-async def _add_water(client: httpx.AsyncClient, user_id: str, day: str, hour: float, ml: int) -> int:
+async def _weight_on(client: httpx.AsyncClient, user_id: str, day: str) -> Optional[float]:
+    """The weight already saved for a day, if any (so a log that replaces it can be undone)."""
+    try:
+        resp = await client.get(_sb_url("weight_log"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "local_date": f"eq.{day}", "select": "weight_kg", "limit": "1"})
+        resp.raise_for_status()
+        rows = resp.json() or []
+        return float(rows[0]["weight_kg"]) if rows else None
+    except Exception:
+        return None
+
+
+async def _add_water(client: httpx.AsyncClient, user_id: str, day: str, hour: float, ml: int) -> tuple[int, Optional[str]]:
+    """Adds a water entry. Returns today's total and the new entry's id (None if the database didn't say)."""
     row = {"user_id": user_id, "local_date": day, "amount_ml": ml, "local_hour": hour}
-    resp = await client.post(_sb_url("water_log"), headers=_sb_headers("return=minimal"), json=row)
+    resp = await client.post(_sb_url("water_log"), headers=_sb_headers("return=representation"), json=row)
     if resp.status_code == 400 and "PGRST204" in resp.text:
         row.pop("local_hour")  # the time-of-day column isn't there yet
-        resp = await client.post(_sb_url("water_log"), headers=_sb_headers("return=minimal"), json=row)
+        resp = await client.post(_sb_url("water_log"), headers=_sb_headers("return=representation"), json=row)
     resp.raise_for_status()
-    return await _water_today(client, user_id, day)
+    try:
+        new_id = (resp.json() or [{}])[0].get("id")
+    except Exception:
+        new_id = None
+    return await _water_today(client, user_id, day), new_id
 
 
-async def apply_actions(user_id: str, parsed: Parsed, day: str, hour: float) -> tuple[list[dict], list[str]]:
-    """Does what was understood. Returns (what was logged, for the app; the same as short phrases for speaking)."""
+async def apply_actions(user_id: str, parsed: Parsed, day: str, hour: float, undo: Optional[dict] = None) -> tuple[list[dict], list[str]]:
+    """Does what was understood. Returns (what was logged, for the app; the same as short phrases for speaking).
+    If `undo` is given, what was created is written into it (see utils/log_undo.py) so the log can be reversed."""
+    undo = undo if undo is not None else {}
     logged: list[dict] = []
     phrases: list[str] = []
     count_adds: dict[str, float] = {}
@@ -169,7 +190,9 @@ async def apply_actions(user_id: str, parsed: Parsed, day: str, hour: float) -> 
         # Check-in counts, together in one save
         if count_adds:
             try:
-                totals = await _add_to_checkin(client, user_id, day, hour, count_adds, "alcohol_drinks" in count_adds, "caffeine_drinks" in count_adds and hour >= 14)
+                snapshot: dict = {}
+                totals = await _add_to_checkin(client, user_id, day, hour, count_adds, "alcohol_drinks" in count_adds, "caffeine_drinks" in count_adds and hour >= 14, snapshot)
+                undo.update(checkin_day=day, checkin_touched=True, checkin_before=snapshot.get("before"))
                 for field, action in count_actions.items():
                     if field not in totals:
                         continue
@@ -182,11 +205,15 @@ async def apply_actions(user_id: str, parsed: Parsed, day: str, hour: float) -> 
         for action in parsed.actions:
             try:
                 if action.kind == "water":
-                    total = await _add_water(client, user_id, day, hour, int(action.amount))
+                    total, water_id = await _add_water(client, user_id, day, hour, int(action.amount))
+                    if water_id:
+                        undo.setdefault("water_ids", []).append(water_id)
                     logged.append({"kind": "water", "summary": f"{action.label} ({total} ml today)"})
                     phrases.append(f"{action.label}, {total} ml today")
                 elif action.kind == "weight":
+                    previous_kg = await _weight_on(client, user_id, day)
                     await save_weight(user_id, day, float(action.amount))
+                    undo.update(weight_day=day, weight_touched=True, weight_previous_kg=previous_kg)
                     logged.append({"kind": "weight", "summary": f"Weight {action.label}"})
                     phrases.append(f"your weight, {action.label}")
                 elif action.kind in ("saved_food", "saved_meal"):
@@ -202,7 +229,8 @@ async def apply_actions(user_id: str, parsed: Parsed, day: str, hour: float) -> 
                         table = "saved_meals"
                     if not item or not rows or too_big(rows):
                         continue
-                    await insert_food_rows(client, rows)
+                    saved = await insert_food_rows(client, rows)
+                    undo.setdefault("food_ids", []).extend(r["id"] for r in saved if isinstance(r, dict) and r.get("id"))
                     await bump_use(client, table, user_id, item)
                     kcal = round(sum(r["calories"] for r in rows))
                     name = action.label if action.servings == 1 else f"{action.servings:g} × {action.label}"
@@ -228,14 +256,17 @@ async def process_log_text(user_id: str, text: str, local_date: Optional[str], o
         foods, meals = await load_saved(client, user_id)
     parsed = parse_log(text, hour, foods, meals)
 
-    logged, phrases = await apply_actions(user_id, parsed, day, hour)
+    undo: dict = {}
+    logged, phrases = await apply_actions(user_id, parsed, day, hour, undo)
     food_note = any(a.kind == "food_note" for a in parsed.actions)
     try:
-        await save_note(
+        note_id = await save_note(
             user_id, text, day, moment, tz_used, source,
             routed_to=[{"kind": item["kind"], "summary": item["summary"]} for item in logged] or None,
             food_note=food_note,
         )
+        if note_id:
+            undo["note_id"] = note_id
     except Exception as exc:
         logger.error("Saving the note failed for %s: %s", user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Could not save that. Please try again.")
@@ -249,6 +280,7 @@ async def process_log_text(user_id: str, text: str, local_date: Optional[str], o
         "logged": logged,
         "food_note": food_note,
         "spoken": spoken_summary(phrases, not logged, parsed.unsure, food_note and not logged),
+        "undo": undo or None,
     }
 
 
@@ -275,6 +307,87 @@ async def food_notes(user_id: str = Depends(get_current_user_id)) -> JSONRespons
     except Exception as exc:
         logger.info("Loading food notes failed (continuing without them): %s", exc)
         return JSONResponse(content={"notes": []})
+
+
+def _valid_day(value: Optional[str]) -> Optional[str]:
+    try:
+        return date_type.fromisoformat(value).isoformat() if value else None
+    except ValueError:
+        return None
+
+
+async def undo_quick_entry(user_id: str, undo: Undo) -> list[str]:
+    """Reverses one quick log. Every change is scoped to this person. Returns what couldn't be undone (empty when all went well)."""
+    failed: list[str] = []
+    async with httpx.AsyncClient(timeout=20) as client:
+
+        async def remove(table: str, params: dict, what: str) -> None:
+            try:
+                resp = await client.delete(_sb_url(table), headers=_sb_headers("return=minimal"), params={**params, "user_id": f"eq.{user_id}"})
+                resp.raise_for_status()
+            except Exception as exc:
+                logger.error("Undo: removing %s failed for %s: %s", what, user_id[:8], exc)
+                failed.append(what)
+
+        note = safe_ids([undo.note_id])
+        if note:
+            await remove("quick_entries", {"id": f"eq.{note[0]}"}, "the note")
+        water = safe_ids(undo.water_ids)
+        if water:
+            await remove("water_log", {"id": f"in.({','.join(water)})"}, "the water")
+        food = safe_ids(undo.food_ids)
+        if food:
+            await remove("food_log", {"id": f"in.({','.join(food)})"}, "the food")
+
+        day = _valid_day(undo.checkin_day)
+        if undo.checkin_touched and day:
+            try:
+                where = {"user_id": f"eq.{user_id}", "date": f"eq.{day}"}
+                if undo.checkin_before is None:
+                    # The log started this day's check-in. Take it away only while it's still that bare one.
+                    resp = await client.get(_sb_url("daily_checkins"), headers=_sb_headers(), params={**where, "select": "partial", "limit": "1"})
+                    resp.raise_for_status()
+                    rows = resp.json() or []
+                    if rows and rows[0].get("partial"):
+                        await remove("daily_checkins", {"date": f"eq.{day}", "partial": "eq.true"}, "the check-in change")
+                else:
+                    fields = restorable_fields(undo.checkin_before)
+                    for _ in range(len(fields) + 1):
+                        if not fields:
+                            break
+                        resp = await client.patch(_sb_url("daily_checkins"), headers=_sb_headers("return=minimal"), params=where, json=fields)
+                        if resp.status_code == 400 and "PGRST204" in resp.text:
+                            missing = next((c for c in fields if f"'{c}'" in resp.text), None)
+                            if missing:
+                                fields.pop(missing)
+                                continue
+                        resp.raise_for_status()
+                        break
+            except Exception as exc:
+                logger.error("Undo: restoring the check-in failed for %s: %s", user_id[:8], exc)
+                failed.append("the check-in change")
+
+    weight_day = _valid_day(undo.weight_day)
+    if undo.weight_touched and weight_day:
+        try:
+            previous = undo.weight_previous_kg
+            if previous is None:
+                await delete_weight(date_type.fromisoformat(weight_day), user_id)
+            elif 20 <= previous <= 500:
+                await save_weight(user_id, weight_day, round(previous, 2))
+        except Exception as exc:
+            logger.error("Undo: restoring the weight failed for %s: %s", user_id[:8], exc)
+            failed.append("the weight")
+    return failed
+
+
+@router.post("/undo")
+async def undo_log(body: Undo, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """Reverses a quick log, using the `undo` that came back with it."""
+    failed = await undo_quick_entry(user_id, body)
+    if failed:
+        raise HTTPException(status_code=500, detail="Couldn't undo " + " or ".join(failed) + ". You can remove it from today's log.")
+    return JSONResponse(content={"success": True})
 
 
 @router.post("/food-notes/{note_id}/resolve")

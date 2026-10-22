@@ -91,6 +91,10 @@ VOICE LOGGING
 - It is switched on in Settings, then Connections, then Voice logging. That section also has a guide for putting it on the Action Button or Back Tap: it uses a two-step shortcut (Dictate Text, then Log to The Gap) so the button listens instead of asking the person to type. In the shortcut, tap the "What happened?" box and pick the Dictated Text bubble above the keyboard; do not type the words.
 - If it logs the words "Dictated text", the shortcut has those words typed in instead of the Dictated Text bubble.
 
+UNDO
+- After logging water, a food or recipe, a saved meal, or a Quick Entry, a small bar appears at the bottom of the screen for about eight seconds saying what was logged, with an Undo button. Tapping Undo removes exactly what that one log added. For a Quick Entry it removes everything the sentence did (the note, and any water, food, check-in counts or weight it logged) and puts the words back in the box so a typo can be fixed and logged again. The bar shows one log at a time: logging something new replaces it.
+- Not covered by the bar: weight logged on the weight card (it has its own remove), the daily check-in (it has Delete), and finishing a workout. Anything can still be removed later from Your Health or the Journal.
+
 NOTIFICATIONS
 - The Gap sends: new-discovery notifications, heads-ups (at most three a day, none during quiet hours, water and protein ones only in the afternoon and evening), follow-ups on things being tried, the weekly recap, and any reminders the person set. Turn heads-ups off in Settings. Turn reminders off in the Reminders sheet. iPhone Settings, then Notifications, then The Gap controls everything.
 - Setup when the app is first opened has four steps: a welcome, what the person wears, Apple Health, and wearables to connect. It does not ask for notifications or the calendar. Those are asked later, when they have a clear use:

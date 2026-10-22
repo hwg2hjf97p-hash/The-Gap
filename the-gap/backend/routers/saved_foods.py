@@ -251,4 +251,4 @@ async def log_saved(body: LogSavedBody, user_id: str = Depends(get_current_user_
     except Exception as exc:
         logger.error("Logging a saved item failed for %s: %s", user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Couldn't log that. Please try again.")
-    return JSONResponse(content={"logged": len(saved), "name": item["name"]})
+    return JSONResponse(content={"logged": len(saved), "name": item["name"], "ids": [r["id"] for r in saved if isinstance(r, dict) and r.get("id")]})

@@ -95,9 +95,9 @@ async def save_note(
     source: Optional[str] = None,
     routed_to: Optional[list] = None,
     food_note: bool = False,
-) -> None:
+) -> Optional[str]:
     """
-    Saves one Quick Entry row. Columns added later (exact time, where it was routed) are left
+    Saves one Quick Entry row. Returns its id (None if the database didn't say). Columns added later (exact time, where it was routed) are left
     out if the table doesn't have them yet, so a note is never lost to a missing column.
     """
     full = {
@@ -114,14 +114,17 @@ async def save_note(
     payload = dict(full)
     async with httpx.AsyncClient(timeout=15) as client:
         for _ in range(len(optional) + 1):
-            resp = await client.post(_sb_url("quick_entries"), headers=_sb_headers(prefer="return=minimal"), json=payload)
+            resp = await client.post(_sb_url("quick_entries"), headers=_sb_headers(prefer="return=representation"), json=payload)
             if resp.status_code == 400 and "PGRST204" in resp.text:
                 missing = next((c for c in optional if f"'{c}'" in resp.text and c in payload), None)
                 if missing:
                     payload.pop(missing)
                     continue
             resp.raise_for_status()
-            return
+            try:
+                return (resp.json() or [{}])[0].get("id")
+            except Exception:
+                return None
     raise RuntimeError("quick_entries rejected the entry")
 
 
