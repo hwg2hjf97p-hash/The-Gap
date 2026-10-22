@@ -32,8 +32,8 @@ Respond with ONLY a JSON object, no other text, no markdown fences. Exact shape:
   "stress_event": <0 or 1 — did something notably stressful happen>,
   "travel_event": <0 or 1 — did they travel or have a disrupted routine/timezone change>,
   "illness_event": <0 or 1 — any mention of feeling sick, unwell, symptoms>,
-  "conflict_event": <0 or 1 — any interpersonal conflict, argument, tension mentioned>,
-  "big_win_event": <0 or 1 — notable good news, achievement, celebration>,
+  "conflict_event": <0 or 1 — any interpersonal conflict, argument or tension, including being criticised, snapped at, bullied, walked over, or being around people they don't get along with>,
+  "big_win_event": <0 or 1 — notable good news, achievement or celebration, praise from a boss or colleague, or a special treat such as a really nice meal out>,
   "summary": "<one short plain-English sentence summarizing the day's notes, under 20 words>"
 }
 

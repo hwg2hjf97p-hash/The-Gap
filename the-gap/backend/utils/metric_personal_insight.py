@@ -4,6 +4,9 @@ for one metric (e.g. "your HRV of 42ms..."), grounded in real numbers —
 not the model inventing anything. Same direct-httpx-to-Anthropic pattern
 as utils/journal_extract.py, for the same reason (one fewer dependency).
 
+Two lengths: the full reading behind "Understand this better", and a brief
+one or two sentence note for the Home card.
+
 Cost control lives in routers/metric_insight.py, not here: a 1-hour
 per-(user, metric) cache, and a daily cap on new generations per user.
 This module only does the actual generation when the caller has already
@@ -38,6 +41,44 @@ Write 2-4 short sentences, plain conversational language, second person ("your r
 
 Respond with ONLY the explanation text, no preamble, no markdown, no quotation marks around it."""
 
+BRIEF_SYSTEM_PROMPT = """You write a very short personal note about one health reading for the Home screen of a wellness app called The Gap.
+
+You will be given real facts about the reading. Use ONLY these facts — never invent a number, a study, a percentage or a cause.
+
+Write one or two short sentences, 35 words at most, plain conversational language, second person. If the facts say how the reading compares with the person's own usual, lead with that. Otherwise compare it with the general range given. Say what it suggests in plain words, without alarm. This is information, not medical advice: never diagnose and never tell them what to do about their health.
+
+Respond with ONLY the note, no preamble, no markdown, no quotation marks around it."""
+
+
+def build_facts(
+    metric_label: str,
+    reading_value: str,
+    unit: str,
+    comparison_text: str,
+    relevant_hypotheses: list[str],
+    profile: dict | None = None,
+    brief: bool = False,
+    personal_context: str = "",
+) -> str:
+    """The facts the writer is allowed to use. The brief note gets only the reading, how it compares, and the general range."""
+    facts = f"Metric: {metric_label}\nLatest reading: {reading_value} {unit}\n"
+    if personal_context.strip():
+        facts += f"Compared with this person's own usual: {personal_context.strip()}\n"
+    facts += f"Population comparison: {comparison_text}"
+    if brief:
+        return facts
+    facts += "\nHypotheses this metric feeds into: " + (", ".join(relevant_hypotheses) if relevant_hypotheses else "none yet")
+    if profile and any(profile.get(k) for k in ("age", "weight_kg", "height_cm")):
+        profile_bits = []
+        if profile.get("age"):
+            profile_bits.append(f"age {profile['age']}")
+        if profile.get("weight_kg"):
+            profile_bits.append(f"weight {profile['weight_kg']}kg")
+        if profile.get("height_cm"):
+            profile_bits.append(f"height {profile['height_cm']}cm")
+        facts += f"\nUser profile (optional context, not a calculated finding): {', '.join(profile_bits)}"
+    return facts
+
 
 async def generate_personal_insight(
     metric_label: str,
@@ -46,6 +87,8 @@ async def generate_personal_insight(
     comparison_text: str,
     relevant_hypotheses: list[str],
     profile: dict | None = None,
+    brief: bool = False,
+    personal_context: str = "",
 ) -> str | None:
     """
     relevant_hypotheses: list of human-readable hypothesis labels already
@@ -62,27 +105,15 @@ async def generate_personal_insight(
     real variation in a large population is what would let a model learn
     "does this effect get stronger with X", and this app only ever
     analyzes one person's own days.
+
+    brief: the one-or-two sentence Home note instead of the full reading.
+    personal_context: how the reading compares with this person's own usual, worked out on the phone.
     """
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         return None
 
-    facts = (
-        f"Metric: {metric_label}\n"
-        f"Latest reading: {reading_value} {unit}\n"
-        f"Population comparison: {comparison_text}\n"
-        f"Hypotheses this metric feeds into: "
-        + (", ".join(relevant_hypotheses) if relevant_hypotheses else "none yet")
-    )
-    if profile and any(profile.get(k) for k in ("age", "weight_kg", "height_cm")):
-        profile_bits = []
-        if profile.get("age"):
-            profile_bits.append(f"age {profile['age']}")
-        if profile.get("weight_kg"):
-            profile_bits.append(f"weight {profile['weight_kg']}kg")
-        if profile.get("height_cm"):
-            profile_bits.append(f"height {profile['height_cm']}cm")
-        facts += f"\nUser profile (optional context, not a calculated finding): {', '.join(profile_bits)}"
+    facts = build_facts(metric_label, reading_value, unit, comparison_text, relevant_hypotheses, profile, brief, personal_context)
 
     try:
         async with httpx.AsyncClient(timeout=20) as client:
@@ -95,8 +126,8 @@ async def generate_personal_insight(
                 },
                 json={
                     "model": MODEL,
-                    "max_tokens": 220,
-                    "system": SYSTEM_PROMPT,
+                    "max_tokens": 90 if brief else 220,
+                    "system": BRIEF_SYSTEM_PROMPT if brief else SYSTEM_PROMPT,
                     "messages": [{"role": "user", "content": facts}],
                 },
             )

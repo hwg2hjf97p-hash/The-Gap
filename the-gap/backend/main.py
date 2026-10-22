@@ -179,7 +179,7 @@ async def start_background_scheduler():
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "evidence-1"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "home-reading-1"}
 
 @app.get("/health/deep")
 async def health_deep():

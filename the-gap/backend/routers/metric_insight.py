@@ -40,7 +40,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 from causal.hypotheses import HYPOTHESES
@@ -60,6 +60,11 @@ router = APIRouter(prefix="/metric-insight", tags=["metric-insight"])
 # is a very small, bounded cost even at the cap.
 DAILY_GENERATION_LIMIT = 15
 CACHE_HOURS = 1
+
+# The short note on Home. Kept under its own cache key so it never uses up the allowance for the full reading.
+BRIEF_SUFFIX = ":brief"
+BRIEF_CACHE_HOURS = 1
+BRIEF_MIN_MINUTES = 10  # a changed reading earns a fresh note, but never more often than this
 
 
 def _sb_url(table: str) -> str:
@@ -81,6 +86,10 @@ class MetricInsightRequest(BaseModel):
     reading_value: float
     unit: str
     comparison_text: str
+    # The short Home note (one or two sentences, refreshed hourly) instead of the full reading.
+    brief: bool = False
+    # How the reading compares with this person's own usual, worked out on the phone.
+    personal_context: str = Field(default="", max_length=300)
 
 
 def _relevant_hypothesis_labels(metric: str) -> list[str]:
@@ -103,7 +112,7 @@ async def _get_cached(user_id: str, metric: str) -> dict | None:
                 params={
                     "user_id": f"eq.{user_id}",
                     "metric": f"eq.{metric}",
-                    "select": "insight_text,generated_at",
+                    "select": "insight_text,generated_at,reading_value",
                     "limit": 1,
                 },
             )
@@ -172,8 +181,56 @@ async def _increment_today_count(user_id: str, current: int) -> None:
         logger.warning("Metric insight usage increment failed (continuing anyway): %s", exc)
 
 
+def brief_is_fresh(cached: dict, reading_value: float, now: datetime) -> bool:
+    """Is the saved Home note still good? Always within ten minutes, never after an hour, and in between only while the reading hasn't moved."""
+    try:
+        age_minutes = (now - datetime.fromisoformat(str(cached["generated_at"]).replace("Z", "+00:00"))).total_seconds() / 60
+    except Exception:
+        return False
+    if age_minutes < BRIEF_MIN_MINUTES:
+        return True
+    if age_minutes >= BRIEF_CACHE_HOURS * 60:
+        return False
+    try:
+        return abs(float(cached.get("reading_value")) - float(reading_value)) < 0.05
+    except (TypeError, ValueError):
+        return True
+
+
+async def _brief_note(user_id: str, body: MetricInsightRequest) -> JSONResponse:
+    """The one-or-two sentence note on Home. Nothing here counts against the daily allowance for full readings."""
+    key = body.metric + BRIEF_SUFFIX
+    cached = await _get_cached(user_id, key)
+    if cached and brief_is_fresh(cached, body.reading_value, datetime.now(timezone.utc)):
+        return JSONResponse(content={"insight_text": cached["insight_text"], "cached": True, "limit_reached": False})
+
+    if not await ai_allowed(user_id):
+        return JSONResponse(content={"insight_text": None, "cached": False, "limit_reached": False, "ai_off": True})
+
+    await require_subscription(user_id)
+
+    async with ai_budget.metered(user_id, "metric_insight") as meter:
+        text = None if meter.blocked else await generate_personal_insight(
+            metric_label=body.metric_label,
+            reading_value=str(body.reading_value),
+            unit=body.unit,
+            comparison_text=body.comparison_text,
+            relevant_hypotheses=[],
+            brief=True,
+            personal_context=body.personal_context,
+        )
+    if text is None:
+        return JSONResponse(content={"insight_text": None, "cached": False, "limit_reached": False})
+
+    await _save_cache(user_id, key, body.reading_value, text)
+    return JSONResponse(content={"insight_text": text, "cached": False, "limit_reached": False})
+
+
 @router.post("")
 async def get_metric_insight(body: MetricInsightRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    if body.brief:
+        return await _brief_note(user_id, body)
+
     cached = await _get_cached(user_id, body.metric)
 
     # 1. Fresh cache (< 1 hour old) — return it, no LLM call, no cost.
