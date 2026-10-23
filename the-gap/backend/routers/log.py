@@ -32,6 +32,7 @@ from routers.weight import delete_weight, save_weight
 from utils import drink_times
 from utils.local_time import DEFAULT_TZ
 from utils.log_undo import Undo, restorable_fields, safe_ids, snapshot_checkin
+from utils.voice_commands import load_commands
 from utils.log_router import Action, Parsed, parse_log, spoken_summary, time_bucket
 from utils.saved_logging import (
     _sb_headers,
@@ -254,7 +255,8 @@ async def process_log_text(user_id: str, text: str, local_date: Optional[str], o
 
     async with httpx.AsyncClient(timeout=15) as client:
         foods, meals = await load_saved(client, user_id)
-    parsed = parse_log(text, hour, foods, meals)
+        custom = await load_commands(client, user_id)
+    parsed = parse_log(text, hour, foods, meals, custom)
 
     undo: dict = {}
     logged, phrases = await apply_actions(user_id, parsed, day, hour, undo)

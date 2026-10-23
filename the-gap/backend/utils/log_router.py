@@ -177,12 +177,79 @@ def _qty(match: re.Match, default: float = 1.0) -> float:
     return default if not q else max(0.0, _num(q))
 
 
-def parse_log(text: str, hour: float, saved_foods: Optional[list[dict]] = None, saved_meals: Optional[list[dict]] = None) -> Parsed:
-    """The actions a sentence contains. `hour` is the local clock time (0-24) it was said."""
+# ── the person's own phrases ("your voice, your command", utils/voice_commands.py) ───────────────
+
+CUSTOM_COUNT_NOUNS = {
+    "caffeine": ("1 coffee", "coffees"),
+    "alcohol": ("1 alcoholic drink", "alcoholic drinks"),
+    "energy_drink": ("1 energy drink", "energy drinks"),
+    "cigarettes": ("1 cigarette", "cigarettes"),
+}
+# A number just before a phrase multiplies it: "two big bottles". Also takes "a" and "one" (x1).
+QTY_BEFORE = re.compile(rf"(?:^|\s){QTY}\s+(?:(?:of|my|the|those|these)\s+)*$")
+
+
+def _phrase_pattern(phrase: str) -> re.Pattern:
+    """The phrase as whole words, in order, with an optional plural s on each ("big bottle" also matches "big bottles")."""
+    words = re.findall(r"[a-z0-9']+", _norm(phrase))
+    return re.compile(r"\b" + r"\s+".join(re.escape(w) + "s?" for w in words) + r"\b")
+
+
+def apply_custom(t: str, commands: list[dict]) -> tuple[str, list[Action], set[str]]:
+    """
+    Finds the person's own phrases in the sentence. Returns the sentence with those phrases (and any number said before them)
+    taken out, so the built-in rules don't count the same thing a second time; the actions; and the kinds of thing handled,
+    which the built-in rules then leave alone for this sentence. The longest phrase is tried first, so "big bottle" beats "bottle".
+    """
+    actions: list[Action] = []
+    handled: set[str] = set()
+    for cmd in sorted(commands or [], key=lambda c: -len(str(c.get("phrase") or ""))):
+        kind, phrase = cmd.get("kind"), str(cmd.get("phrase") or "").strip()
+        if not phrase or kind not in ("water", "saved_food", "saved_meal", *CUSTOM_COUNT_NOUNS):
+            continue
+        try:
+            match = _phrase_pattern(phrase).search(t)
+        except re.error:
+            continue
+        if not match:
+            continue
+        qty, cut = 1.0, match.start()
+        said = QTY_BEFORE.search(t[: match.start()])
+        if said:
+            qty, cut = max(0.25, min(20.0, _num(said.group("qty")))), said.start()
+        try:
+            amount = float(cmd.get("amount") or 1)
+        except (TypeError, ValueError):
+            amount = 1.0
+        total = amount * qty
+        if kind == "water":
+            ml = min(round(total), MAX_WATER_ML)
+            actions.append(Action("water", ml, label=f"{ml} ml of water"))
+        elif kind in CUSTOM_COUNT_NOUNS:
+            count = min(total, 20.0)
+            one, many = CUSTOM_COUNT_NOUNS[kind]
+            actions.append(Action(kind, count, label=one if count == 1 else f"{int(count)} {many}"))
+        elif cmd.get("ref_id"):
+            actions.append(Action(kind, amount=total, label=str(cmd.get("ref_name") or phrase), ref_id=str(cmd["ref_id"]), servings=total))
+        else:
+            continue
+        handled.add(kind)
+        t = re.sub(r"\s+", " ", (t[:cut] + " " + t[match.end():])).strip()
+    return t, actions, handled
+
+
+def parse_log(text: str, hour: float, saved_foods: Optional[list[dict]] = None, saved_meals: Optional[list[dict]] = None, custom: Optional[list[dict]] = None) -> Parsed:
+    """The actions a sentence contains. `hour` is the local clock time (0-24) it was said. `custom` is the person's own phrases."""
     t = _norm(text)
     out = Parsed()
     if not t:
         return out
+
+    # The person's own phrases come first and win; the built-in rules then skip anything these already logged.
+    handled: set[str] = set()
+    if custom:
+        t, custom_actions, handled = apply_custom(t, custom)
+        out.actions.extend(custom_actions)
 
     # Weight: "I weigh 72.4", "weighed in at 160 pounds"
     w = WEIGHT.search(t)
@@ -206,7 +273,7 @@ def parse_log(text: str, hour: float, saved_foods: Optional[list[dict]] = None, 
         out.actions.append(Action("saved_food", amount=servings, label=food["name"], ref_id=food["id"], servings=servings))
 
     # Water
-    if re.search(r"\b(?:water|hydrat\w*)\b", t):
+    if "water" not in handled and re.search(r"\b(?:water|hydrat\w*)\b", t):
         ml: Optional[float] = None
         m = WATER_UNIT.search(t)
         if m:
@@ -235,11 +302,13 @@ def parse_log(text: str, hour: float, saved_foods: Optional[list[dict]] = None, 
         count += _qty(m)
     if SMOKE_VERB.search(t) and not SMOKED_FOOD.search(t) and count == 0:
         count = 1.0
+    if "cigarettes" in handled:
+        count = 0.0
     if count > 0:
         out.actions.append(Action("cigarettes", min(count, 40), label="1 cigarette" if count == 1 else f"{int(count)} cigarettes"))
 
     # Alcohol
-    if not NOT_ALCOHOL.search(t):
+    if "alcohol" not in handled and not NOT_ALCOHOL.search(t):
         drinks = 0.0
         bottle = bool(re.search(r"\bbottles? of (?:wine|champagne|prosecco|spirits|whisky|whiskey|vodka|gin|rum)\b", t))
         for m in ALCOHOL.finditer(t):
@@ -251,10 +320,10 @@ def parse_log(text: str, hour: float, saved_foods: Optional[list[dict]] = None, 
             out.actions.append(Action("alcohol", min(drinks, 40), label="1 alcoholic drink" if drinks == 1 else f"{int(drinks)} alcoholic drinks"))
 
     # Energy drinks and coffee (an energy drink is not also counted as a coffee)
-    energy = sum(_qty(m) for m in ENERGY.finditer(t))
+    energy = 0.0 if "energy_drink" in handled else sum(_qty(m) for m in ENERGY.finditer(t))
     if energy > 0:
         out.actions.append(Action("energy_drink", min(energy, 20), label="1 energy drink" if energy == 1 else f"{int(energy)} energy drinks"))
-    if not re.search(r"\bdecaf\b", t):
+    if "caffeine" not in handled and not re.search(r"\bdecaf\b", t):
         coffee = sum(_qty(m) for m in COFFEE.finditer(t))
         if coffee > 0:
             out.actions.append(Action("caffeine", min(coffee, 20), label="1 coffee" if coffee == 1 else f"{int(coffee)} coffees"))
