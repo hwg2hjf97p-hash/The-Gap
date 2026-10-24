@@ -94,6 +94,7 @@ VOICE LOGGING
 
 WELL-DONE POP-UPS
 - A few moments get a short pop-up with a tick. They are used sparingly and each happens once: (1) "Good job!" the first time a day's daily check-in is saved (for today it also says Today's one thing is unlocked on Home); fixing a check-in later doesn't repeat it. (2) "Workout complete!" the moment the last set of a whole workout is marked done in the Actual view, with an offer to "Start a 5-minute stretch" or "Maybe later". For-time and AMRAP workouts get the same offer after they are saved. (3) "Weekly goal reached!" the first time a saved workout takes the person to their weekly workout target in a week. (4) "Water goal reached!" the first time each day the water total crosses the daily water goal.
+- The pop-ups can be switched off in Settings (Policies & Procedures section, "Well-done pop-ups"). It is kept on that phone. Off hides the ticks and the stretch offer after a workout; the same place has a "Start a 5-minute cool-down stretch" link so the stretch is still one tap away.
 - The cool-down stretch is a short guided screen: seven gentle moves (breathing, calf, front of thigh, back of thigh, hip flexor, chest and shoulders, child's pose), about five minutes, with a countdown, a buzz at each change and halfway through the moves done on both sides, plus pause and skip. It is general information, not medical advice, and nothing is logged or analysed from it. If the phone locks, it carries on from the clock.
 
 UNDO
