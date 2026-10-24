@@ -157,4 +157,5 @@ def public_meal(row: dict) -> dict:
         "items": [{"food_name": i.get("food_name"), "servings": i.get("servings"), "serving_label": i.get("serving_label")} for i in items],
         "totals": totals,
         "use_count": int(row.get("use_count") or 0),
+        "recipe": row.get("recipe"),  # present for meals built from ingredients; lets the app reopen them for editing
     }

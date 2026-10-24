@@ -4,6 +4,8 @@
   GET    /nutrition/saved                  -> {"foods": [...], "meals": [...]}
   POST   /nutrition/saved/food             save a food (same numbers the person logged)
   POST   /nutrition/saved/meal-from-log    save the foods logged for a meal as one saved meal
+  POST   /nutrition/saved/meal-built       save a meal built from ingredients (a home-cooked recipe, by the serve)
+  PUT    /nutrition/saved/meal-built/{id}  replace a built meal's ingredients
   PATCH  /nutrition/saved/food/{id}        rename / change the alternative names
   PATCH  /nutrition/saved/meal/{id}
   DELETE /nutrition/saved/food/{id}
@@ -26,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 from routers.nutrition import PerServing
+from utils.meal_builder import BuildProblem, build_items, check_serve_size, recipe_json
 from utils.saved_logging import (
     _sb_headers,
     _sb_url,
@@ -68,6 +71,26 @@ class SavedFoodBody(BaseModel):
 class MealFromLogBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     entry_ids: list[str] = Field(min_length=1, max_length=40)
+    aliases: list[str] = Field(default_factory=list, max_length=8)
+    meal: Optional[Literal["breakfast", "lunch", "dinner", "snack"]] = None
+
+
+class IngredientBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    brand: Optional[str] = Field(default=None, max_length=200)
+    serving_label: Optional[str] = Field(default=None, max_length=100)
+    serving_grams: Optional[float] = Field(default=None, gt=0, le=5000)
+    per_serving: PerServing
+    amount: float = Field(gt=0, le=20000)
+    unit: Literal["g", "serving"] = "serving"
+    source: Optional[str] = Field(default=None, max_length=30)
+
+
+class BuildMealBody(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    serves: float = Field(default=1, ge=1, le=40)
+    cooked_weight_g: Optional[float] = Field(default=None, gt=0, le=50000)
+    ingredients: list[IngredientBody] = Field(min_length=1, max_length=40)
     aliases: list[str] = Field(default_factory=list, max_length=8)
     meal: Optional[Literal["breakfast", "lunch", "dinner", "snack"]] = None
 
@@ -173,6 +196,59 @@ async def save_meal_from_log(body: MealFromLogBody, user_id: str = Depends(get_c
         logger.error("Saving a meal failed for %s: %s", user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Couldn't save that. Please try again.")
     return JSONResponse(content={"meal": public_meal(saved) if saved else None})
+
+
+async def _store_built(user_id: str, body: BuildMealBody, meal_id: Optional[str]) -> JSONResponse:
+    """Saves (or, with meal_id, replaces) a meal built from ingredients. See utils/meal_builder.py for how serves work."""
+    ingredients = [i.model_dump() for i in body.ingredients]
+    try:
+        items = build_items(ingredients, body.serves)
+        check_serve_size(items)
+    except BuildProblem as problem:
+        raise HTTPException(status_code=400, detail=str(problem))
+    fields: dict = {"name": body.name.strip(), "items": items}
+    if body.aliases:
+        fields["aliases"] = clean_aliases(body.aliases)
+    if body.meal:
+        fields["meal"] = body.meal
+    recipe = recipe_json(body.name, body.serves, body.cooked_weight_g, ingredients)
+    saved = None
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            for with_recipe in (True, False):
+                payload = {**fields, "recipe": recipe} if with_recipe else dict(fields)
+                if meal_id is None:
+                    resp = await client.post(_sb_url("saved_meals"), headers=_sb_headers("return=representation"), json={"user_id": user_id, **payload})
+                else:
+                    resp = await client.patch(
+                        _sb_url("saved_meals"),
+                        headers=_sb_headers("return=representation"),
+                        params={"id": f"eq.{meal_id}", "user_id": f"eq.{user_id}"},
+                        json=payload,
+                    )
+                if with_recipe and resp.status_code == 400 and "PGRST204" in resp.text and "recipe" in resp.text:
+                    continue  # phase26.sql hasn't been run: save it without the editable copy rather than not at all
+                resp.raise_for_status()
+                saved = (resp.json() or [None])[0]
+                break
+    except Exception as exc:
+        if _duplicate(exc):
+            raise HTTPException(status_code=409, detail=f"You already have a saved meal called \"{body.name.strip()}\".")
+        logger.error("Saving a built meal failed for %s: %s", user_id[:8], exc)
+        raise HTTPException(status_code=500, detail="Couldn't save that. Please try again.")
+    if saved is None:
+        raise HTTPException(status_code=404, detail="That meal wasn't found.")
+    return JSONResponse(content={"meal": public_meal(saved)})
+
+
+@router.post("/meal-built")
+async def build_meal(body: BuildMealBody, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    return await _store_built(user_id, body, None)
+
+
+@router.put("/meal-built/{item_id}")
+async def update_built_meal(item_id: str, body: BuildMealBody, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    return await _store_built(user_id, body, item_id)
 
 
 async def _rename(table: str, item_id: str, user_id: str, body: RenameBody) -> JSONResponse:
