@@ -39,6 +39,7 @@ from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
 from utils.insight_memory import stabilise
 from utils.headsups import run_headsups
+from utils import manual_sync
 from utils import sync_queue
 from sync.recent_refresh import fetch_recent_first, forget as forget_saved_reading
 from utils.token_health import PROVIDER_NAMES, RETIRED_PROVIDERS, refresh_token_is_dead
@@ -723,7 +724,15 @@ async def sync_single_user(user_id: str = Depends(get_current_user_id)):
             detail="No connected devices found. Please connect Whoop or Oura first.",
         )
 
-    result = await _sync_user(user_id, connections)
+    # A sync already running for this person, or one that only just finished, is not repeated.
+    blocked = manual_sync.check(user_id)
+    if blocked is not None:
+        return JSONResponse(content=blocked)
+    manual_sync.start(user_id)
+    try:
+        result = await _sync_user(user_id, connections)
+    finally:
+        manual_sync.finish(user_id)
 
     if result.get("status") == "no_data":
         raise HTTPException(
