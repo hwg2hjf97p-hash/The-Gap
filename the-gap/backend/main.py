@@ -112,6 +112,7 @@ from routers import help as help_mode
 from routers import life_events as life_events_router
 from routers import coach as coach_router
 from routers import voice_commands as voice_commands_router
+from routers import meal_describe as meal_describe_router
 from routers import training_state as training_state_router
 from routers import sync_admin
 from routers import evidence_admin
@@ -163,6 +164,7 @@ app.include_router(help_mode.router)
 app.include_router(life_events_router.router)
 app.include_router(coach_router.router)
 app.include_router(voice_commands_router.router)
+app.include_router(meal_describe_router.router)
 app.include_router(training_state_router.router)
 app.include_router(sync_admin.router)
 app.include_router(evidence_admin.router)
@@ -181,7 +183,7 @@ async def start_background_scheduler():
 @app.get("/health")
 def health_check():
     # "revision" changes with each backend release so a deploy can be confirmed from outside.
-    return {"status": "ok", "service": "the-gap-api", "revision": "build-1"}
+    return {"status": "ok", "service": "the-gap-api", "revision": "describe-1"}
 
 @app.get("/health/deep")
 async def health_deep():
