@@ -45,6 +45,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
+from utils import safety
 from utils.journal_extract import extract_daily_signals
 
 from utils.consent import ai_allowed  # noqa: E402
@@ -146,7 +147,11 @@ async def create_entry(body: QuickEntryRequest, user_id: str = Depends(get_curre
     count_today = await _count_today(user_id, body.local_date)
     streak = await _get_streak(user_id, body.local_date)
 
-    return JSONResponse(content={"success": True, "count_today": count_today, "streak": streak})
+    # If the note says the person may be in a very dark place, the app answers with care and the numbers (see utils/safety.py).
+    support = safety.assess(text)
+    if support:
+        logger.info("SAFETY_NOTICE level=%s source=note", support)
+    return JSONResponse(content={"success": True, "count_today": count_today, "streak": streak, "support": support})
 
 
 @router.get("/today")

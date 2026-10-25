@@ -30,6 +30,7 @@ from routers.subscriptions import is_on_trial  # noqa: E402
 
 from utils import ai_budget
 from utils import life_events
+from utils import safety
 from utils.ai_budget import note_usage
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ Reference specific numbers from their data when you have them.
 Big changes the person told us about (a lost job, a move, a loss, a new baby and so on) may be listed with dates. You may point out that a reading shifted around one of them, as something that happened alongside it and never as its cause, and you can say that big changes often take a toll on sleep and recovery. Be gentle, brief and never clinical about sensitive ones (a loss, a job ending, a breakup). Never give advice about grief, mood or mental health beyond saying that talking to someone they trust or a doctor can help. Never raise a life event unprompted if the question isn't related to how they've been.
 
 Supplements (magnesium, melatonin, ashwagandha, creatine, fish oil and the like): you may say what the person's own logged days show, and you may explain in general terms what published research on one has looked at, always as information. Never recommend, suggest or tell anyone to take, start, stop or change a supplement or medicine. Never give a dose, a brand or a timing. Never say a supplement will improve or fix anything, and never tie a supplement to a result as if it were the cause. If asked "should I take X" or "what should I take for Y", say you can't advise on that, describe what their own data does or doesn't show, mention the research cards in the app, and say a doctor or pharmacist is the right person to ask, especially with medicines, pregnancy or a health condition.
+
+If anything the person writes suggests they may harm themselves, are thinking about suicide, or are in crisis, even in wording that isn't obvious, do not analyse their data. Reply in one or two short, warm sentences that you're glad they said something, that they don't have to go through it alone, and that in Australia Lifeline is on 13 11 14 at any time and 000 is for danger right now. Never give advice about how to cope, never minimise it, and never mention numbers from their data.
 
 Body measurements (weight, body fat) are sensitive. If asked, report them neutrally. Never set a target, never say a number is too high or too low, and never suggest losing weight, cutting calories or eating less. If someone asks about losing weight or body fat, say what their own data shows and suggest talking to a doctor or dietitian."""
 
@@ -132,6 +135,13 @@ async def _questions_in_last_day(user_id: str) -> int:
 
 @router.post("/ask")
 async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    # First of all, before AI settings, subscription or limits: if the person says they may harm themselves or are in a very dark
+    # place, answer with care and the numbers. No AI call, no allowance used, nothing stored about it (see utils/safety.py).
+    support = safety.assess(body.question)
+    if support:
+        logger.info("SAFETY_NOTICE level=%s source=gappy", support)
+        return JSONResponse(content={"answer": safety.message_for(support), "support": support})
+
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="Assistant isn't configured yet.")

@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from auth import get_current_user_id
 from routers.journal import _count_today, _get_streak, save_note
 from routers.weight import delete_weight, save_weight
-from utils import drink_times
+from utils import drink_times, safety
 from utils.local_time import DEFAULT_TZ
 from utils.log_undo import Undo, restorable_fields, safe_ids, snapshot_checkin
 from utils.voice_commands import load_commands
@@ -275,14 +275,21 @@ async def process_log_text(user_id: str, text: str, local_date: Optional[str], o
 
     count_today = await _count_today(user_id, day)
     streak = await _get_streak(user_id, day)
+    spoken = spoken_summary(phrases, not logged, parsed.unsure, food_note and not logged)
+    # If the note says the person may be in a very dark place, the app answers with care and the numbers (see utils/safety.py).
+    support = safety.assess(text)
+    if support:
+        logger.info("SAFETY_NOTICE level=%s source=note", support)
+        spoken = f"{spoken} {safety.SPOKEN_SUPPORT}".strip()
     return {
         "success": True,
         "count_today": count_today,
         "streak": streak,
         "logged": logged,
         "food_note": food_note,
-        "spoken": spoken_summary(phrases, not logged, parsed.unsure, food_note and not logged),
+        "spoken": spoken,
         "undo": undo or None,
+        "support": support,
     }
 
 
