@@ -52,6 +52,8 @@ YOUR HEALTH TAB
 - Reminders: a reminders button lets the person set water, meal, workout and check-in reminders and quiet hours. These are notifications from the phone itself.
 - "Food notes to log": foods the person mentioned in a note that are not saved yet.
 
+- Personalise for me: the first time the Nutrition or the Training page on Your Health is opened (and again after a week if the person taps Not now), a card offers a few quick questions, one at a time. Nutrition: the person's food aim (lose fat, maintain, gain muscle), eating style and allergies, weight and height, then a protein target, a water target, an optional calorie goal and, when sugar tracking is on, an optional sugar limit. Training: main goal, equipment, and workouts per week. Every step can be skipped and nothing is saved until the last step. Suggested ranges are general guidance and are hidden for anyone who switched suggestions off in Food preferences. The app never suggests a calorie number. At the end it points at the Goals button, where goals are changed later. It can be run again from Goals, then "Personalise for me". The profile checklist on Home also links to it.
+
 WORKOUTS
 - Start a workout: Browse by type (7 types), For you (suggestions from the person's own habits), My templates, or start from scratch and pick exercises. There are about 43 ready-made workouts that can be edited.
 - During a workout: log sets, reps and weights. For-time and AMRAP workouts use one clock for the whole workout, with an Ideal split (a time per round) or a Custom split (as many sections as wanted).
