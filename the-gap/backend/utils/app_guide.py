@@ -17,6 +17,8 @@ The Gap finds which of a person's habits seem to move their body's numbers (slee
 THE FIVE TABS (along the bottom): Home, Your Health, Insights, Ask Gappy, Settings.
 
 HOME
+- "Make The Gap yours" card (near the top of Home): a ring showing how much of the personal set-up is done, with a list of what is left (connect Apple Health, connect a wearable the person said they own, a first daily check-in, weight and height, a health goal, a first meal, food and water targets, a workout, notifications, the calendar, a home address). It only lists things the person can actually do on their phone (a wearable only if they said they have one; notifications or the calendar are left off if the iPhone has been told no). Tapping an item opens the place where it is done. It disappears at 100%, and can be hidden with "Hide this for now" or turned off and on in Settings, under Preferences, "Profile checklist".
+- A short tour (six cards, with Next and Skip tour) appears the first time someone reaches Home after setting up. Settings, under Questions & answers, has "Take the app tour again".
 - Quick Entry button: opens the Journal screen, where the daily check-in and the "What just happened?" box live.
 - Today's one thing: a single suggestion that unlocks after the day's check-in is saved.
 - Heads-up cards: short coach-style messages about today compared with the person's usual (a big step day, a short night, water or protein running behind). Tap the X to hide one. Water and protein cards go away by themselves once the person has logged enough.
@@ -79,9 +81,10 @@ GOALS
 - When setting a goal for steps, sleep or workout days, the app shows a common range and a realistic first step based on the person's recent average, with a "Use" button.
 - Open Goals from Home (the goals teaser). Set a goal on a reading (for example sleep per night, steps, HRV), with a target. "Find research for my goals" adds research cards to Home. Achieved goals are listed.
 
-SETTINGS TAB (four sections that open when tapped)
+SETTINGS TAB (five sections that open when tapped)
 - Connections: Data sources (choose which device is the main one for each kind of reading), Apple Health, Device Calendar, "Add a Google or other calendar" (opens iPhone Settings to add the account), and the connections for Whoop, Oura, Strava, Withings and Polar. Voice logging (Siri, Action Button, Back Tap) is here. A background-sync switch for Apple Health and the heads-ups switch are here too.
-- Questions & answers: a list of common questions.
+- Questions & answers: a list of common questions, and "Take the app tour again".
+- Preferences: the switches that change how the app behaves: heads-up cards, well-done pop-ups (with a link to start a cool-down stretch), background sync for Apple Health, the check-up row, and the profile checklist switch.
 - Policies & Procedures: How your data is used, AI features (a switch to turn AI features off), Manage subscription, See The Gap Pro plans, Weekly recap, Privacy Policy, Terms of Service, Credits, export your data, and delete your data or account.
 - About You: name, height, weight and similar details.
 - Sign out is in Settings.
@@ -102,7 +105,7 @@ IF THE APP GOES WRONG
 
 WELL-DONE POP-UPS
 - A few moments get a short pop-up with a tick. They are used sparingly and each happens once: (1) "Good job!" the first time a day's daily check-in is saved (for today it also says Today's one thing is unlocked on Home); fixing a check-in later doesn't repeat it. (2) "Workout complete!" the moment the last set of a whole workout is marked done in the Actual view, with an offer to "Start a 5-minute stretch" or "Maybe later". For-time and AMRAP workouts get the same offer after they are saved. (3) "Weekly goal reached!" the first time a saved workout takes the person to their weekly workout target in a week. (4) "Water goal reached!" the first time each day the water total crosses the daily water goal.
-- The pop-ups can be switched off in Settings (Policies & Procedures section, "Well-done pop-ups"). It is kept on that phone. Off hides the ticks and the stretch offer after a workout; the same place has a "Start a 5-minute cool-down stretch" link so the stretch is still one tap away.
+- The pop-ups can be switched off in Settings (Preferences section, "Well-done pop-ups"). It is kept on that phone. Off hides the ticks and the stretch offer after a workout; the same place has a "Start a 5-minute cool-down stretch" link so the stretch is still one tap away.
 - The cool-down stretch is a short guided screen: seven gentle moves (breathing, calf, front of thigh, back of thigh, hip flexor, chest and shoulders, child's pose), about five minutes, with a countdown, a buzz at each change and halfway through the moves done on both sides, plus pause and skip. It is general information, not medical advice, and nothing is logged or analysed from it. If the phone locks, it carries on from the clock.
 
 UNDO
