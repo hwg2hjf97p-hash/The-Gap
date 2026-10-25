@@ -596,6 +596,32 @@ def interpret_result(
             else "Higher-protein days go with a lower HRV for you — it may be about what else those days include, so check meal timing and sleep."
         )
 
+    elif hid == "sugar_hrv":
+        title = "Sugar & HRV"
+        headline = (
+            f"Each extra 25 g of sugar causally {direction_word} "
+            f"your next-morning HRV by {abs_effect} ms"
+        )
+        metric_unit = "ms HRV"
+        tip = (
+            "Your HRV isn't being held back by sugar, so it's not the first thing to change."
+            if is_positive
+            else "Higher-sugar days go with a lower HRV for you. Try keeping sugar lower for a week and see if it moves."
+        )
+
+    elif hid == "sugar_sleep":
+        title = "Sugar & Sleep"
+        headline = (
+            f"Each extra 25 g of sugar causally {direction_word} "
+            f"your sleep that night by {abs_effect} minutes"
+        )
+        metric_unit = "min of sleep"
+        tip = (
+            "Sugar isn't shortening your sleep, so it's not the first thing to change."
+            if is_positive
+            else "Higher-sugar days go with shorter sleep for you. Try cutting sugar earlier in the day for a week and see if it changes."
+        )
+
     elif hid == "late_meal_deep_sleep":
         title = "Meal Timing & Deep Sleep"
         headline = (

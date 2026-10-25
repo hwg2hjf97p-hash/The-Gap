@@ -38,6 +38,7 @@ Table DDL (run once in Supabase SQL editor):
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
   CREATE INDEX IF NOT EXISTS idx_food_log_user_date ON food_log (user_id, local_date);
+  -- Sugar (phase27.sql): ALTER TABLE food_log ADD COLUMN IF NOT EXISTS sugar_g NUMERIC;
 
   CREATE TABLE IF NOT EXISTS water_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -76,6 +77,7 @@ from auth import get_current_user_id
 from utils.servings import default_serving, portion_from_measures
 from utils import meals, takeaway
 from utils.follow_ons import meal_skips
+from utils.sugar import SUGAR, add_scaled, day_total, known, tracking_on
 from routers.suggestions import current_week_recipes
 
 logger = logging.getLogger(__name__)
@@ -130,6 +132,9 @@ def _food_item(source: str, source_id: str, name: str, brand: Optional[str], per
         label = serving_label or f"{round(serving_grams)} g"
     else:
         factor, serving_grams, label = 1.0, 100.0, "100 g"
+    per_serving = {k: round(per100.get(k, 0.0) * factor, 1) for k in MACRO_KEYS}
+    if known(per100.get(SUGAR)) is not None:
+        per_serving[SUGAR] = round(float(per100[SUGAR]) * factor, 1)
     return {
         "source": source,
         "source_id": source_id,
@@ -137,7 +142,7 @@ def _food_item(source: str, source_id: str, name: str, brand: Optional[str], per
         "brand": brand or None,
         "serving_label": label,
         "serving_grams": serving_grams,
-        "per_serving": {k: round(per100.get(k, 0.0) * factor, 1) for k in MACRO_KEYS},
+        "per_serving": per_serving,
     }
 
 
@@ -152,7 +157,7 @@ def _usda_key() -> str:
 
 def _usda_per100(food: dict) -> Optional[dict]:
     vals: dict[str, float] = {}
-    numbers = {"208": "calories", "203": "protein_g", "205": "carbs_g", "204": "fat_g"}
+    numbers = {"208": "calories", "203": "protein_g", "205": "carbs_g", "204": "fat_g", "269": SUGAR, "269.3": SUGAR}
     for n in food.get("foodNutrients", []) or []:
         key = numbers.get(str(n.get("nutrientNumber")))
         if not key or n.get("value") is None:
@@ -167,7 +172,10 @@ def _usda_per100(food: dict) -> Optional[dict]:
             vals["calories"] = 4 * vals["protein_g"] + 4 * vals["carbs_g"] + 9 * vals["fat_g"]
         else:
             return None
-    return {k: vals.get(k, 0.0) for k in MACRO_KEYS}
+    per100 = {k: vals.get(k, 0.0) for k in MACRO_KEYS}
+    if SUGAR in vals:
+        per100[SUGAR] = vals[SUGAR]
+    return per100
 
 
 def _usda_to_item(food: dict) -> Optional[dict]:
@@ -207,12 +215,16 @@ def _off_per100(nutriments: dict) -> Optional[dict]:
         kcal = float(nutriments["energy_100g"]) / 4.184  # kJ -> kcal
     if kcal is None:
         return None
-    return {
+    per100 = {
         "calories": float(kcal),
         "protein_g": float(nutriments.get("proteins_100g") or 0),
         "carbs_g": float(nutriments.get("carbohydrates_100g") or 0),
         "fat_g": float(nutriments.get("fat_100g") or 0),
     }
+    sugar = known(nutriments.get("sugars_100g"))
+    if sugar is not None:
+        per100[SUGAR] = sugar
+    return per100
 
 
 def _plausible_per100(per100: dict) -> bool:
@@ -400,6 +412,8 @@ class PerServing(BaseModel):
     protein_g: float = Field(default=0, ge=0, le=500)
     carbs_g: float = Field(default=0, ge=0, le=1000)
     fat_g: float = Field(default=0, ge=0, le=500)
+    # Total sugars for one serving. Left out when the food has no figure (unknown is not zero).
+    sugar_g: Optional[float] = Field(default=None, ge=0, le=1000)
 
 
 class LogFoodRequest(BaseModel):
@@ -421,6 +435,7 @@ async def log_food(body: LogFoodRequest, user_id: str = Depends(get_current_user
     # Totals are computed here, once, from per-serving values — the client
     # never gets to send an inconsistent total.
     totals = {k: round(getattr(body.per_serving, k) * body.servings, 1) for k in MACRO_KEYS}
+    add_scaled(totals, {SUGAR: body.per_serving.sugar_g}, body.servings)
     if totals["calories"] > 10000:
         raise HTTPException(status_code=400, detail="That's more than 10,000 kcal in one entry — check the amount.")
 
@@ -440,6 +455,11 @@ async def log_food(body: LogFoodRequest, user_id: str = Depends(get_current_user
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(_sb_url("food_log"), headers=_sb_headers("return=representation"), json=payload)
+            if resp.status_code == 400 and SUGAR in payload:
+                # Sugar tracking was switched on before the database column exists: save the food without it rather than fail.
+                logger.error("food_log has no %s column yet (run phase27.sql); saving without it", SUGAR)
+                payload.pop(SUGAR)
+                resp = await client.post(_sb_url("food_log"), headers=_sb_headers("return=representation"), json=payload)
             resp.raise_for_status()
             row = resp.json()[0]
     except Exception as exc:
@@ -461,7 +481,10 @@ def rescaled_totals(row: dict, new_servings: float) -> dict:
     old = float(row.get("servings") or 0)
     if old <= 0:
         raise ValueError("entry has no servings to scale from")
-    return {k: round(float(row.get(k) or 0) / old * new_servings, 1) for k in MACRO_KEYS}
+    scaled = {k: round(float(row.get(k) or 0) / old * new_servings, 1) for k in MACRO_KEYS}
+    if known(row.get(SUGAR)) is not None:
+        scaled[SUGAR] = round(float(row[SUGAR]) / old * new_servings, 1)
+    return scaled
 
 
 @router.patch("/log/{entry_id}")
@@ -574,7 +597,7 @@ async def get_day(local_date: str, user_id: str = Depends(get_current_user_id)) 
             food, water, goals = await asyncio.gather(
                 _get_rows(client, "food_log", {**base, "local_date": f"eq.{local_date}", "select": "*", "order": "created_at.asc"}),
                 _get_rows(client, "water_log", {**base, "local_date": f"eq.{local_date}", "select": "id,amount_ml", "order": "created_at.asc"}),
-                _get_rows(client, "nutrition_goals", {**base, "select": "calorie_goal,protein_goal_g,water_goal_ml"}),
+                _get_rows(client, "nutrition_goals", {**base, "select": _goal_columns()}),
             )
     except httpx.HTTPStatusError as exc:
         # PostgREST answers 404 for a table that was never created — the
@@ -589,10 +612,15 @@ async def get_day(local_date: str, user_id: str = Depends(get_current_user_id)) 
         raise HTTPException(status_code=500, detail="Couldn't load your log — please try again.")
 
     totals = {k: round(sum(float(r.get(k) or 0) for r in food), 1) for k in MACRO_KEYS}
+    # Sugar is a total only when every entry has a figure; otherwise it is left out, and "sugar_entries" says how many had one.
+    sugar_total = day_total([r.get(SUGAR) for r in food])
+    if sugar_total is not None:
+        totals[SUGAR] = sugar_total
     return JSONResponse(content={
         "local_date": local_date,
         "entries": food,
         "totals": totals,
+        "sugar_entries": sum(1 for r in food if known(r.get(SUGAR)) is not None),
         "water_ml": sum(int(r["amount_ml"]) for r in water),
         "water_entries": water,
         "goals": goals[0] if goals else None,
@@ -630,6 +658,8 @@ async def get_recent_foods(user_id: str = Depends(get_current_user_id)) -> JSONR
             "serving_grams": r.get("serving_grams"),
             "per_serving": {k: round(float(r.get(k) or 0) / servings, 1) for k in MACRO_KEYS},
         })
+        if known(r.get(SUGAR)) is not None:
+            results[-1]["per_serving"][SUGAR] = round(float(r[SUGAR]) / servings, 1)
         if len(results) >= 25:
             break
     return JSONResponse(content={"results": results})
@@ -639,13 +669,19 @@ class GoalsRequest(BaseModel):
     calorie_goal: Optional[int] = Field(default=None, ge=500, le=10000)
     protein_goal_g: Optional[int] = Field(default=None, ge=0, le=500)
     water_goal_ml: Optional[int] = Field(default=None, ge=0, le=10000)
+    # A daily limit on total sugars. Only saved when the app sends it, so an older version of the app can't clear it.
+    sugar_goal_g: Optional[int] = Field(default=None, ge=0, le=500)
+
+
+def _goal_columns() -> str:
+    return "calorie_goal,protein_goal_g,water_goal_ml" + (",sugar_goal_g" if tracking_on() else "")
 
 
 @router.get("/goals")
 async def get_goals(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            rows = await _get_rows(client, "nutrition_goals", {"user_id": f"eq.{user_id}", "select": "calorie_goal,protein_goal_g,water_goal_ml"})
+            rows = await _get_rows(client, "nutrition_goals", {"user_id": f"eq.{user_id}", "select": _goal_columns()})
     except Exception as exc:
         logger.error("Loading nutrition goals failed for %s: %s", user_id[:8], exc)
         return JSONResponse(content={"goals": None})
@@ -661,6 +697,8 @@ async def set_goals(body: GoalsRequest, user_id: str = Depends(get_current_user_
         "water_goal_ml": body.water_goal_ml,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if tracking_on() and "sugar_goal_g" in body.model_fields_set:
+        payload["sugar_goal_g"] = body.sugar_goal_g
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
@@ -674,7 +712,10 @@ async def set_goals(body: GoalsRequest, user_id: str = Depends(get_current_user_
     except Exception as exc:
         logger.error("Saving nutrition goals failed for %s: %s", user_id[:8], exc)
         raise HTTPException(status_code=500, detail="Couldn't save your goals — please try again.")
-    return JSONResponse(content={"goals": {k: row.get(k) for k in ("calorie_goal", "protein_goal_g", "water_goal_ml")}})
+    goals = {k: row.get(k) for k in ("calorie_goal", "protein_goal_g", "water_goal_ml")}
+    if "sugar_goal_g" in row:
+        goals["sugar_goal_g"] = row["sugar_goal_g"]
+    return JSONResponse(content={"goals": goals})
 
 
 # ── Engine input ─────────────────────────────────────────────────────────────
@@ -692,10 +733,14 @@ def get_nutrition_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
     params = {"user_id": f"eq.{user_id}", "local_date": f"gte.{since}"}
     frames = []
     try:
+        columns = "local_date,calories,protein_g,carbs_g,fat_g,local_hour"
         food = httpx.get(
             _sb_url("food_log"), headers=_sb_headers(),
-            params={**params, "select": "local_date,calories,protein_g,carbs_g,fat_g,local_hour"}, timeout=10,
+            params={**params, "select": columns + (f",{SUGAR}" if tracking_on() else "")}, timeout=10,
         )
+        if food.status_code == 400 and tracking_on():
+            # Sugar tracking is on but the column isn't there yet (phase27.sql): carry on with the other nutrition.
+            food = httpx.get(_sb_url("food_log"), headers=_sb_headers(), params={**params, "select": columns}, timeout=10)
         food.raise_for_status()
         rows = food.json() or []
         if rows:
@@ -707,6 +752,10 @@ def get_nutrition_dataframe(user_id: str, days: int = 180) -> pd.DataFrame:
                 dietary_energy=("calories", "sum"), protein_g=("protein_g", "sum"),
                 carbs_g=("carbs_g", "sum"), fat_g=("fat_g", "sum"), last_meal_hour=("local_hour", "max"),
             )
+            if SUGAR in f.columns:
+                # A day's sugar only counts when every food that day had a figure; otherwise it is missing, never zero.
+                g[SUGAR] = f.groupby("local_date")[SUGAR].agg(lambda s: day_total(list(s)))
+                g[SUGAR] = pd.to_numeric(g[SUGAR], errors="coerce")
             g = g[g["dietary_energy"] >= MIN_COMPLETE_DAY_KCAL]
             # Whether breakfast or lunch is missing from an otherwise fully logged day (for "on days with X, no lunch" patterns).
             skips = meal_skips(f)

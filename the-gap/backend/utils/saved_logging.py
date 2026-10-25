@@ -18,6 +18,7 @@ from typing import Optional
 import httpx
 
 from utils.log_router import guess_meal
+from utils.sugar import SUGAR, add_scaled, known
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ def food_log_row(
     """
     per = item.get("per_serving") or item
     totals = {k: round(float(per.get(k) or 0) * servings, 1) for k in MACROS}
+    add_scaled(totals, per, servings)
     return {
         "user_id": user_id,
         "local_date": local_date,
@@ -141,7 +143,7 @@ def public_food(row: dict) -> dict:
         "serving_label": row.get("serving_label") or "serving",
         "serving_grams": row.get("serving_grams"),
         "default_servings": float(row.get("default_servings") or 1),
-        "per_serving": {k: float(row.get(k) or 0) for k in MACROS},
+        "per_serving": {**{k: float(row.get(k) or 0) for k in MACROS}, **({SUGAR: float(row[SUGAR])} if known(row.get(SUGAR)) is not None else {})},
         "use_count": int(row.get("use_count") or 0),
     }
 

@@ -698,6 +698,31 @@ HYPOTHESES: list[Hypothesis] = [
         treatment_scale=25.0,
     ),
 
+    # Sugar. "sugar_g" is the day's total sugars, present only for days where every logged food had a sugar figure, so a day with
+    # an unknown food is skipped rather than counted as low. The scale is 25 g: about six teaspoons, and the WHO's "better under" figure.
+    Hypothesis(
+        id="sugar_hrv",
+        treatment_col="sugar_g",
+        outcome_col="hrv_next",
+        covariate_cols=["hrv_lag1", "sleep_total_min", "dietary_energy", "day_of_week"],
+        min_rows=30,
+        treatment_label="Sugar eaten (per 25 g)",
+        outcome_label="Next-day HRV (ms)",
+        category="lifestyle",
+        treatment_scale=25.0,
+    ),
+    Hypothesis(
+        id="sugar_sleep",
+        treatment_col="sugar_g",
+        outcome_col="sleep_total_min",
+        covariate_cols=["sleep_lag1", "dietary_energy", "day_of_week", "is_weekend"],
+        min_rows=30,
+        treatment_label="Sugar eaten (per 25 g)",
+        outcome_label="Sleep duration that night (min)",
+        category="lifestyle",
+        treatment_scale=25.0,
+    ),
+
     # 40. Time of last meal → Deep sleep that night
     Hypothesis(
         id="late_meal_deep_sleep",

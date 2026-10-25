@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 from routers.nutrition import PerServing
+from utils.sugar import SUGAR, add_scaled, known
 from utils.meal_builder import BuildProblem, build_items, check_serve_size, recipe_json
 from utils.saved_logging import (
     _sb_headers,
@@ -143,6 +144,7 @@ async def save_food(body: SavedFoodBody, user_id: str = Depends(get_current_user
         "default_servings": body.default_servings,
         "default_meal": body.default_meal,
     }
+    add_scaled(row, {SUGAR: body.per_serving.sugar_g}, 1)
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(_sb_url("saved_foods"), headers=_sb_headers("return=representation"), json=row)
@@ -180,7 +182,10 @@ async def save_meal_from_log(body: MealFromLogBody, user_id: str = Depends(get_c
                         "serving_label": e.get("serving_label"),
                         "serving_grams": e.get("serving_grams"),
                         # The log keeps totals; a saved meal keeps what one serving is.
-                        "per_serving": {k: round(float(e.get(k) or 0) / servings, 3) for k in ("calories", "protein_g", "carbs_g", "fat_g")},
+                        "per_serving": {
+                            **{k: round(float(e.get(k) or 0) / servings, 3) for k in ("calories", "protein_g", "carbs_g", "fat_g")},
+                            **({SUGAR: round(float(e[SUGAR]) / servings, 3)} if known(e.get(SUGAR)) is not None else {}),
+                        },
                     }
                 )
             meal_name = body.meal or entries[0].get("meal") or "snack"
