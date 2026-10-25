@@ -42,6 +42,7 @@ def add_scaled(row: dict, per: dict, factor: float) -> dict:
 def day_total(values: list) -> Optional[float]:
     """A day's sugar: the sum when every entry has a figure, otherwise None (unknown, not zero)."""
     figures = [known(v) for v in values]
-    if not figures or any(v is None for v in figures):
+    numbers = [v for v in figures if v is not None]
+    if not figures or len(numbers) != len(figures):
         return None
-    return round(sum(figures), 1)
+    return round(sum(numbers), 1)
