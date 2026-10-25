@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
 from utils.app_guide import APP_GUIDE, SUPPORT_EMAIL
+from utils import safety
 from utils.consent import ai_allowed
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,12 @@ def build_request(body: HelpRequest) -> dict:
 
 @router.post("/ask")
 async def ask(body: HelpRequest, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    # Someone who says they are struggling gets care and the numbers first, whatever the AI settings (see utils/safety.py).
+    support = safety.assess(body.question)
+    if support:
+        logger.info("SAFETY_NOTICE level=%s source=help", support)
+        return JSONResponse(content={"answer": safety.message_for(support), "support": support})
+
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail=f"Help isn't available right now. You can email {SUPPORT_EMAIL}.")
