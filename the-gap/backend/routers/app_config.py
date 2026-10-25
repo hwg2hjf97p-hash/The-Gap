@@ -1,7 +1,7 @@
 """
 Settings the app reads at launch, changeable on the server without a new build.
 
-  GET /config  -> {"free_access": bool}
+  GET /config  -> {"free_access": bool, "ask_for_ratings": bool}
 
 free_access is true only while FREE_ACCESS=true is set in the server's
 environment, to let testers in without a subscription. It is OFF by default,
@@ -24,6 +24,11 @@ def free_access_enabled() -> bool:
     return os.getenv("FREE_ACCESS", "").strip().lower() in ("1", "true", "yes")
 
 
+def ask_for_ratings_enabled() -> bool:
+    """True once the app is live on the App Store (ASK_FOR_RATINGS=true on the server): the app then offers Rate The Gap and Invite a friend."""
+    return os.getenv("ASK_FOR_RATINGS", "").strip().lower() in ("1", "true", "yes")
+
+
 @router.get("")
 async def get_config() -> JSONResponse:
-    return JSONResponse(content={"free_access": free_access_enabled()}, headers={"Cache-Control": "no-store"})
+    return JSONResponse(content={"free_access": free_access_enabled(), "ask_for_ratings": ask_for_ratings_enabled()}, headers={"Cache-Control": "no-store"})
