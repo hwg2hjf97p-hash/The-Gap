@@ -621,6 +621,7 @@ async def get_day(local_date: str, user_id: str = Depends(get_current_user_id)) 
         "entries": food,
         "totals": totals,
         "sugar_entries": sum(1 for r in food if known(r.get(SUGAR)) is not None),
+        "sugar_tracking": tracking_on(),
         "water_ml": sum(int(r["amount_ml"]) for r in water),
         "water_entries": water,
         "goals": goals[0] if goals else None,

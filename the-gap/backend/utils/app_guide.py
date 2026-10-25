@@ -6,6 +6,8 @@ updated here becomes a wrong answer given with confidence. Add a line here whene
 something a person would look for. Anything not covered should make Help say it isn't sure and point to the email.
 """
 
+from utils.sugar import tracking_on
+
 SUPPORT_EMAIL = "hello@causalme.com"
 
 APP_GUIDE = """
@@ -135,3 +137,15 @@ COMMON PROBLEMS
 - "Nothing happens when I tap Log": check the internet connection and try again.
 - A check-in edit is saved by tapping Update.
 """
+
+# Sugar is only described once it is switched on (SUGAR_TRACKING on the server), so the guide never offers something the app doesn't have yet.
+SUGAR_GUIDE = """
+SUGAR
+- Foods found by search or barcode show their sugar (total sugars, in grams) beside calories, protein, carbs and fat. Each food is saved with its sugar. Foods that have no sugar figure (some takeaway items, recipes built by hand, foods typed in by hand) are shown without one: they are never counted as zero.
+- Your Health shows a Sugar box beside Protein, Carbs and Fat, with a dash if a food that day had no figure. The (i) beside Today's food gives the detail: sugar so far, its share of the day's energy, and how many foods had a figure.
+- A daily sugar limit can be set in Daily goals ("Sugar limit (g)"). The World Health Organization suggests free sugars stay under 10% of energy (about 50 g on 2,000 kcal), and under 5% (about 25 g) is better. The Gap counts all sugars in food, including those in fruit and milk, so the number runs higher than free sugars. It is a gauge, not a rule, and not medical advice.
+- Once there are several weeks of days where every food had a sugar figure, the engine starts testing whether more sugar on a day goes with a different HRV the next morning or a different amount of sleep that night. Days where some food had no sugar figure are skipped, not guessed. The results appear in Insights like any other pattern.
+"""
+
+if tracking_on():
+    APP_GUIDE = APP_GUIDE + SUGAR_GUIDE
