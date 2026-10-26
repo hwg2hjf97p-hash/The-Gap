@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ChromeWrapper from "../components/ChromeWrapper";
+import SiteBackdrop from "../components/SiteBackdrop";
 
 const TITLE = "The Gap app by CausalMe";
 const DESCRIPTION =
@@ -36,7 +37,10 @@ export default function RootLayout({
   return (
     <html lang="en-AU">
       <body className="min-h-screen" style={{ backgroundColor: "#0b1015" }}>
-        <ChromeWrapper>{children}</ChromeWrapper>
+        <SiteBackdrop />
+        <div className="relative z-10">
+          <ChromeWrapper>{children}</ChromeWrapper>
+        </div>
       </body>
     </html>
   );

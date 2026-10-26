@@ -42,7 +42,7 @@ const SHOTS = [
 
 export default function WhoopIntegrationPage() {
   return (
-    <div className="min-h-screen px-5 py-16" style={{ background: "#0b1015" }}>
+    <div className="min-h-screen px-5 py-16">
       <div className="max-w-3xl mx-auto">
         <h1 className="text-3xl font-bold mb-3" style={{ color: "#f2f6f8" }}>
           The Gap: WHOOP integration
