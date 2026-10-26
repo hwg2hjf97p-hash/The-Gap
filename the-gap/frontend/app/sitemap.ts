@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { GUIDES } from "../lib/guides";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = "https://causalme.com";
+  const base = "https://www.causalme.com";
   return [
     { url: `${base}/`, changeFrequency: "monthly", priority: 1 },
     { url: `${base}/how-it-works`, changeFrequency: "monthly", priority: 0.8 },

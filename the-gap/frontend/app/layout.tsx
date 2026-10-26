@@ -10,11 +10,11 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: { default: TITLE, template: "%s | The Gap app by CausalMe" },
   description: DESCRIPTION,
-  metadataBase: new URL("https://causalme.com"),
+  metadataBase: new URL("https://www.causalme.com"),
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
-    url: "https://causalme.com",
+    url: "https://www.causalme.com",
     siteName: "The Gap",
     type: "website",
   },

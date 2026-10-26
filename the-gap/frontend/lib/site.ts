@@ -10,7 +10,7 @@ export const SITE = {
   name: "The Gap",
   fullName: "The Gap app by CausalMe",
   tagline: "Don't just know what. Know why.",
-  url: "https://causalme.com",
+  url: "https://www.causalme.com",
   email: "hello@causalme.com",
   appStoreId: "6793031477",
   appStoreUrl: "https://apps.apple.com/app/id6793031477",
