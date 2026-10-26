@@ -342,8 +342,12 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
                             data={"kind": "connection_expired", "provider": provider},
                         )
                         continue
-                    logger.error("TOKEN_REFRESH_FAILED %s/%s: %s — continuing with old token",
-                                 user_id[:8], provider, exc)
+                    # What the provider said (an error code such as invalid_client or invalid_grant, never a secret) tells a wrong
+                    # app secret on our side apart from a login that simply expired.
+                    said = getattr(exc, "response", None)
+                    said_text = f" [HTTP {said.status_code}: {str(said.text)[:200]}]" if said is not None else ""
+                    logger.error("TOKEN_REFRESH_FAILED %s/%s: %s%s — continuing with old token",
+                                 user_id[:8], provider, exc, said_text)
                     # Don't skip — try with the existing token anyway
 
         # Fetch data
