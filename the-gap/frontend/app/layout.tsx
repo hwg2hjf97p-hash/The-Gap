@@ -2,11 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ChromeWrapper from "../components/ChromeWrapper";
 
-const TITLE = "The Gap";
-const DESCRIPTION = "The Gap by CausalMe.";
+const TITLE = "The Gap app by CausalMe";
+const DESCRIPTION =
+  "The Gap is an iPhone app that shows what seems to affect your sleep, HRV and recovery, using your own data from Apple Health, Apple Watch, Whoop, Oura and more.";
 
 export const metadata: Metadata = {
-  title: TITLE,
+  title: { default: TITLE, template: "%s | The Gap app by CausalMe" },
   description: DESCRIPTION,
   metadataBase: new URL("https://causalme.com"),
   openGraph: {
@@ -33,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en-AU">
       <body className="min-h-screen" style={{ backgroundColor: "#0b1015" }}>
         <ChromeWrapper>{children}</ChromeWrapper>
       </body>
