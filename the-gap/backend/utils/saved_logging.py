@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 MACROS = ("calories", "protein_g", "carbs_g", "fat_g")
 MAX_ENTRY_KCAL = 10000
+# Columns added after the first version of food_log. If the database doesn't have one yet (its SQL hasn't been run), the rows are saved
+# without it rather than failing: sugar_g is phase27.sql, and log_group / log_group_name (which keep a saved meal's ingredients together) is phase28.sql.
+OPTIONAL_COLUMNS = ("log_group", "log_group_name", "sugar_g")
 
 
 def _sb_url(table: str) -> str:
@@ -80,9 +84,15 @@ def saved_food_rows(user_id: str, food: dict, multiplier: float, local_date: str
 def saved_meal_rows(user_id: str, meal: dict, multiplier: float, local_date: str, local_hour: Optional[float], meal_override: Optional[str]) -> list[dict]:
     row_meal = meal_override or meal.get("meal") or guess_meal(local_hour if local_hour is not None else 12)
     rows = []
+    # One tag for the whole meal, so the app can show it as one line ("Spag bol, 11 ingredients") and not a long list.
+    group = uuid.uuid4().hex
+    name = " ".join(str(meal.get("name") or "").split())[:80]
     for item in meal.get("items") or []:
         servings = float(item.get("servings") or 1) * multiplier
-        rows.append(food_log_row(user_id, local_date, row_meal, item, servings, local_hour, "saved_meal"))
+        row = food_log_row(user_id, local_date, row_meal, item, servings, local_hour, "saved_meal")
+        row["log_group"] = group
+        row["log_group_name"] = name or None
+        rows.append(row)
     return rows
 
 
@@ -94,7 +104,17 @@ async def insert_food_rows(client: httpx.AsyncClient, rows: list[dict]) -> list[
     """Saves the rows; returns what was saved (with ids, so they can be undone)."""
     if not rows:
         return []
-    resp = await client.post(_sb_url("food_log"), headers=_sb_headers("return=representation"), json=rows)
+    payload = rows
+    for _ in range(len(OPTIONAL_COLUMNS) + 1):
+        resp = await client.post(_sb_url("food_log"), headers=_sb_headers("return=representation"), json=payload)
+        if resp.status_code == 400 and "PGRST204" in resp.text:
+            missing = next((c for c in OPTIONAL_COLUMNS if f"'{c}'" in resp.text), None)
+            if missing:
+                logger.warning("food_log has no %s column yet; saving without it", missing)
+                payload = [{k: v for k, v in r.items() if k != missing} for r in payload]
+                continue
+        resp.raise_for_status()
+        return resp.json() or []
     resp.raise_for_status()
     return resp.json() or []
 
