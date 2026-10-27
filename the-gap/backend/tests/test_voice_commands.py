@@ -123,3 +123,34 @@ def test_a_shortcut_is_described_in_words():
     assert describe({"kind": "caffeine", "amount": 3}) == "3 coffees"
     assert describe({"kind": "saved_food", "amount": 2, "ref_name": "Protein shake"}) == "2 × Protein shake"
     assert describe({"kind": "saved_food", "amount": 1, "ref_name": "Protein shake"}) == "Protein shake"
+
+
+# ── numbers in a phrase: said as a word or a digit ──────────────────────────
+TWO_DRINKS = {"phrase": "had 2 drinks of water", "kind": "water", "amount": 500}
+
+
+def test_a_phrase_with_a_digit_matches_the_number_said_as_a_word():
+    # iPhone dictation writes "two" where the phrase was typed as "2".
+    got = actions("had two drinks of water", [TWO_DRINKS])
+    assert [(a.kind, a.amount) for a in got] == [("water", 500)]
+
+
+def test_a_phrase_with_a_digit_still_matches_the_digit():
+    got = actions("had 2 drinks of water", [TWO_DRINKS])
+    assert [(a.kind, a.amount) for a in got] == [("water", 500)]
+
+
+def test_a_phrase_typed_as_a_word_matches_the_digit_said():
+    got = actions("had 2 drinks of water", [{"phrase": "had two drinks of water", "kind": "water", "amount": 500}])
+    assert [(a.kind, a.amount) for a in got] == [("water", 500)]
+
+
+def test_a_different_number_does_not_match_the_phrase():
+    got = actions("had three drinks of water", [TWO_DRINKS])
+    assert [(a.kind, a.amount) for a in got] != [("water", 500)]
+
+
+def test_ten_matches_as_a_digit_and_a_word():
+    cmd = {"phrase": "ten sips", "kind": "water", "amount": 100}
+    assert [(a.kind, a.amount) for a in actions("took 10 sips", [cmd])] == [("water", 100)]
+    assert [(a.kind, a.amount) for a in actions("took ten sips", [cmd])] == [("water", 100)]
