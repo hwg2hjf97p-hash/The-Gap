@@ -27,6 +27,27 @@ logger = logging.getLogger(__name__)
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
+# The person decides which notifications from The Gap they get. Each kind below sits behind one of their switches
+# (notification_prefs.push_kinds, see phase29.sql) and stays OFF until they turn it on. A kind not listed here is not
+# held back by this: a test notification, and a coach heads-up, which has its own switch.
+PUSH_SWITCHES = ("findings", "recap", "followups", "connections")
+PUSH_KIND_SWITCH = {
+    "discovery": "findings",
+    "proactive_nudge": "findings",
+    "digest": "recap",
+    "intervention_followup": "followups",
+    "connection_expired": "connections",
+    "connection_open": "connections",
+}
+
+
+def kind_allowed(prefs: dict | None, kind: str | None) -> bool:
+    """False for a gated kind of notification the person hasn't switched on (the default)."""
+    switch = PUSH_KIND_SWITCH.get(kind or "")
+    if switch is None:
+        return True
+    return ((prefs or {}).get("push_kinds") or {}).get(switch) is True
+
 
 def _sb_url(table: str) -> str:
     base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
@@ -61,14 +82,17 @@ async def get_prefs(user_id: str) -> dict | None:
     (or the table isn't there yet)."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                _sb_url("notification_prefs"),
-                headers=_sb_headers(),
-                params={"user_id": f"eq.{user_id}", "select": "tz,quiet_start,quiet_end", "limit": "1"},
-            )
-            resp.raise_for_status()
-            rows = resp.json() or []
-            return rows[0] if rows else None
+            for select in ("tz,quiet_start,quiet_end,push_kinds", "tz,quiet_start,quiet_end"):
+                resp = await client.get(
+                    _sb_url("notification_prefs"),
+                    headers=_sb_headers(),
+                    params={"user_id": f"eq.{user_id}", "select": select, "limit": "1"},
+                )
+                if resp.status_code == 400 and "push_kinds" in select:
+                    continue  # phase29.sql hasn't been run yet: read what's there without it
+                resp.raise_for_status()
+                rows = resp.json() or []
+                return rows[0] if rows else None
     except Exception as exc:
         logger.warning("Notification prefs lookup failed for %s: %s", user_id[:8], exc)
         return None
@@ -150,7 +174,12 @@ async def get_receipts(ticket_ids: list[str]) -> dict:
 async def send_push_detailed(user_id: str, title: str, body: str, data: dict | None = None, respect_quiet: bool = True) -> dict:
     """send_push, but telling the caller what happened: {"held", "tokens", "accepted", "errors", "ticket_ids"}. Never raises."""
     result: dict = {"held": False, "tokens": 0, "accepted": 0, "errors": [], "ticket_ids": []}
-    if respect_quiet and _quiet_now(await get_prefs(user_id)):
+    prefs = await get_prefs(user_id)
+    if not kind_allowed(prefs, (data or {}).get("kind")):
+        logger.info("PUSH_OFF user=%s kind=%s (this person hasn't switched that notification on)", user_id[:8], (data or {}).get("kind"))
+        result["off"] = True
+        return result
+    if respect_quiet and _quiet_now(prefs):
         if await _enqueue(user_id, title, body, data):
             logger.info("PUSH_HELD user=%s title=%r", user_id[:8], title)
         result["held"] = True
