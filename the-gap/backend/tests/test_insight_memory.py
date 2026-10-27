@@ -76,3 +76,43 @@ def test_the_discovery_check_sees_a_held_insight_as_already_known():
     # next run it is confirmed again: it was already in the confirmed list, so no new "discovery"
     previous_ids = {i["hypothesis_id"] for i in first if i["confidence"] != "weak"}
     assert "a" in previous_ids
+
+
+# ── the record of findings that were once confirmed ─────────────────────────────
+
+from utils.insight_memory import MAX_PAST_FINDINGS, past_findings  # noqa: E402
+
+
+def test_a_finding_is_held_for_two_weeks_before_it_gives_way():
+    assert GRACE_DAYS == 14
+
+
+def test_a_finding_whose_hold_ran_out_goes_into_the_record_with_its_dates():
+    first, last = (NOW - timedelta(days=40)).isoformat(), (NOW - timedelta(days=15)).isoformat()
+    previous = [ins("a", first_confirmed_at=first, last_confirmed_at=last, title="Steps & Recovery", carried=True)]
+    shown = stabilise(previous, last, [ins("a", "weak")], NOW)  # past the hold: gives way to the early signal
+    record = past_findings([], previous, shown, NOW)
+    assert [p["hypothesis_id"] for p in record] == ["a"]
+    assert record[0]["first_confirmed_at"] == first and record[0]["last_confirmed_at"] == last
+    assert record[0]["lapsed_at"] == NOW.isoformat() and record[0]["title"] == "Steps & Recovery"
+
+
+def test_a_finding_that_is_only_being_held_is_not_in_the_record():
+    saved = (NOW - timedelta(days=3)).isoformat()
+    previous = [ins("a", last_confirmed_at=saved)]
+    shown = stabilise(previous, saved, [], NOW)  # held, still shown as confirmed
+    assert past_findings([], previous, shown, NOW) == []
+
+
+def test_a_finding_that_is_confirmed_again_comes_off_the_record():
+    lapsed = {"hypothesis_id": "a", "lapsed_at": (NOW - timedelta(days=5)).isoformat()}
+    assert past_findings([lapsed], [], [ins("a")], NOW) == []
+    still_gone = past_findings([lapsed], [], [ins("a", "weak")], NOW)
+    assert [p["hypothesis_id"] for p in still_gone] == ["a"] and still_gone[0]["lapsed_at"] == lapsed["lapsed_at"]
+
+
+def test_early_signals_never_enter_the_record_and_it_has_a_limit():
+    assert past_findings([], [ins("w", "weak")], [], NOW) == []
+    many = [{"hypothesis_id": f"h{i}", "lapsed_at": (NOW - timedelta(days=i)).isoformat()} for i in range(MAX_PAST_FINDINGS + 5)]
+    out = past_findings(many, [], [], NOW)
+    assert len(out) == MAX_PAST_FINDINGS and out[0]["hypothesis_id"] == "h0"

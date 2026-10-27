@@ -37,7 +37,7 @@ from utils.goals import check_goal_achievements
 from utils.patterns import build_patterns
 from utils.snapshot import build_snapshot, METRIC_DISPLAY
 from causal.engine import run_all_hypotheses, get_experiments_in_progress
-from utils.insight_memory import stabilise
+from utils.insight_memory import past_findings, stabilise
 from utils.headsups import run_headsups
 from utils import manual_sync
 from utils import sync_queue
@@ -638,6 +638,17 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
             insights_dicts = stabilise((previous or {}).get("insights"), (previous or {}).get("created_at"), insights_dicts)
         except Exception as exc:
             logger.warning("Insight stabilising failed for %s (using this run's as they are): %s", user_id[:8], exc)
+
+        # A confirmed finding whose hold has run out isn't thrown away: a short record is saved with the results, so the app can show
+        # what was once confirmed and offer to check it again.
+        try:
+            snapshot["past_findings"] = past_findings(
+                ((previous or {}).get("snapshot") or {}).get("past_findings"),
+                (previous or {}).get("insights"),
+                insights_dicts,
+            )
+        except Exception as exc:
+            logger.warning("Past-findings record failed for %s (continuing without it): %s", user_id[:8], exc)
 
         # Early signals (confidence "weak") are never pushed — with this many
         # hypotheses running, announcing every faint hint would be mostly noise.
