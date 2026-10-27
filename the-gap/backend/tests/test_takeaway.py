@@ -1,6 +1,6 @@
 from utils import takeaway
 
-CHAINS = ("McDonald's", "Guzman y Gomez", "Hungry Jack's", "KFC", "Domino's", "Subway", "Nando's")
+CHAINS = ("McDonald's", "Guzman y Gomez", "Hungry Jack's", "KFC", "Domino's", "Subway", "Nando's", "Zambrero")
 
 
 def chain(name):
@@ -67,6 +67,7 @@ def test_the_chain_name_or_a_nickname_finds_its_dishes():
         ("hungry jacks", "Hungry Jack's"), ("hj", "Hungry Jack's"), ("kfc", "KFC"),
         ("dominos", "Domino's"), ("domino's", "Domino's"), ("subway", "Subway"),
         ("nandos", "Nando's"), ("nando's", "Nando's"),
+        ("zambrero", "Zambrero"), ("zam", "Zambrero"),
     ):
         results = takeaway.search(text, 8)
         assert results and all(r["brand"] == brand for r in results), text
@@ -81,6 +82,17 @@ def test_a_dish_name_finds_it_with_or_without_the_chain():
     assert takeaway.search("gyg burrito grilled chicken")[0]["name"] == "Burrito - Grilled Chicken"
     assert takeaway.search("dominos hawaiian")[0]["name"] == "Hawaiian Pizza"
     assert takeaway.search("subway italian")[0]["name"].startswith("Italian B.M.T.")
+    assert takeaway.search("zambrero classic burrito chicken")[0]["name"] == "Classic Burrito - Grilled Chicken"
+
+
+def test_zambrero_is_per_serve_without_sauce_and_leaves_out_rows_that_dont_add_up():
+    c = chain("Zambrero")
+    assert len(c["items"]) >= 200 and "zambrero.com.au" in c["source"]
+    names = {i["name"] for i in c["items"]}
+    assert "Classic Burrito - Grilled Chicken" in names
+    # four rows disagreed with their own protein, carbohydrate and fat in the published guide, so they were left out
+    for left_out in ("Small Toasted Burrito - Vegetarian", "Big Toasted Burrito - Barbacoa Beef", "Big Signature Burrito - Lamb", "Small Signature Bowl - Pork"):
+        assert left_out not in names
 
 
 def test_a_word_every_chain_has_gives_a_few_from_each_not_all_from_one():
