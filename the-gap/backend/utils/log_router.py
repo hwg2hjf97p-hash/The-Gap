@@ -189,10 +189,24 @@ CUSTOM_COUNT_NOUNS = {
 QTY_BEFORE = re.compile(rf"(?:^|\s){QTY}\s+(?:(?:of|my|the|those|these)\s+)*$")
 
 
+_WORD_FOR_DIGIT = {str(int(v)): w for w, v in NUMBER_WORDS.items() if w not in ("a", "an", "couple", "half") and float(v) == int(v)}
+
+
+def _word_alternatives(word: str) -> str:
+    """One word of a phrase as a pattern. A number matches whether it was said as a digit or a word, because iPhone dictation writes
+    "two drinks of water" where the person may have typed "2 drinks of water" (and the other way round)."""
+    options = {word}
+    if word in _WORD_FOR_DIGIT:
+        options.add(_WORD_FOR_DIGIT[word])
+    elif word in NUMBER_WORDS and word not in ("a", "an", "couple", "half"):
+        options.add(str(int(NUMBER_WORDS[word])))
+    return "(?:" + "|".join(re.escape(o) for o in sorted(options, key=len, reverse=True)) + ")s?"
+
+
 def _phrase_pattern(phrase: str) -> re.Pattern:
     """The phrase as whole words, in order, with an optional plural s on each ("big bottle" also matches "big bottles")."""
     words = re.findall(r"[a-z0-9']+", _norm(phrase))
-    return re.compile(r"\b" + r"\s+".join(re.escape(w) + "s?" for w in words) + r"\b")
+    return re.compile(r"\b" + r"\s+".join(_word_alternatives(w) for w in words) + r"\b")
 
 
 def apply_custom(t: str, commands: list[dict]) -> tuple[str, list[Action], set[str]]:
