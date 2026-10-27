@@ -105,6 +105,21 @@ def test_something_that_isnt_on_a_menu_finds_nothing():
     assert takeaway.search("x") == []
 
 
+def test_the_full_menu_has_every_item_in_sections_not_just_the_featured_ones():
+    # Tapping a chain used to show only its featured dishes (burgers), so fries, drinks and desserts only turned up by typing.
+    for name in CHAINS:
+        full = takeaway.menu(name)
+        listed = [i["name"] for s in full["sections"] for i in s["items"]]
+        assert len(listed) == len(chain(name)["items"]) and len(set(listed)) == len(listed), name
+        assert all(s["title"] and s["items"] for s in full["sections"]), name
+    assert len(takeaway.menu("Hungry Jack's")["sections"]) > 1
+
+
+def test_the_full_menu_accepts_a_nickname_and_an_unknown_chain_gives_nothing():
+    assert takeaway.menu("maccas")["name"] == "McDonald's"
+    assert takeaway.menu("not a chain") is None
+
+
 def test_the_summary_lists_each_chain():
     names = [c["name"] for c in takeaway.chains_summary()]
     for name in CHAINS:

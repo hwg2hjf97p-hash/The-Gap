@@ -144,5 +144,24 @@ def search(query: str, limit: int = 8) -> list[dict]:
     return [i for g in groups for i in g][:limit]
 
 
+def menu(chain_name: str) -> Optional[dict]:
+    """A chain's whole menu, section by section in the order the chain lists it (burgers, sides, drinks, desserts).
+
+    The made-up combos ("Big Mac Meal (large) with Coke") are left out here: there are hundreds, and a dish name plus "meal" finds them.
+    """
+    wanted = _norm(chain_name)
+    for chain in load_chains():
+        if wanted not in chain["aliases"]:
+            continue
+        sections: dict[str, list[dict]] = {}
+        for item in chain["items"]:
+            sections.setdefault(item["category"], []).append(item)
+        return {
+            "name": chain["name"], "collected": chain["collected"],
+            "sections": [{"title": key.replace("_", " ").replace("-", " ").capitalize(), "items": items} for key, items in sections.items()],
+        }
+    return None
+
+
 def chains_summary() -> list[dict]:
     return [{"name": c["name"], "items": len(c["items"]), "meals": len(c["meals"]), "collected": c["collected"]} for c in load_chains()]

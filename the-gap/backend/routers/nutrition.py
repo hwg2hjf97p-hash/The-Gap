@@ -370,6 +370,18 @@ async def takeaway_chains(user_id: str = Depends(get_current_user_id)) -> JSONRe
     return JSONResponse(content={"chains": takeaway.chains_summary()})
 
 
+@router.get("/takeaway/menu")
+async def takeaway_menu(
+    chain: str = Query(..., min_length=2, max_length=60),
+    user_id: str = Depends(get_current_user_id),
+) -> JSONResponse:
+    """One chain's whole menu in sections, for the "See the full menu" list."""
+    found = takeaway.menu(chain)
+    if not found:
+        raise HTTPException(status_code=404, detail="That menu isn't available.")
+    return JSONResponse(content=found)
+
+
 @router.get("/barcode/{code}")
 async def lookup_barcode(code: str, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     if not re.fullmatch(r"\d{6,14}", code):
