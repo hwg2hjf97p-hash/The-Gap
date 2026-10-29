@@ -63,10 +63,10 @@ def _clock(hour: float) -> str:
 
 # outcome column -> how to talk about its best and worst days, and when the habit happened
 OUTCOMES: dict[str, dict] = {
-    "sleep_total_min": {"best": "longest-sleep nights", "worst": "shortest-sleep nights", "higher_is_better": True, "when": " that day", "fmt": _hours},
-    "sleep_deep_min": {"best": "deepest-sleep nights", "worst": "lightest-sleep nights", "higher_is_better": True, "when": " that day", "fmt": _amount("min", 0)},
-    "hrv_next": {"best": "highest-HRV mornings", "worst": "lowest-HRV mornings", "higher_is_better": True, "when": " the day before", "fmt": _amount("ms", 0)},
-    "resting_hr_next": {"best": "lowest resting-heart-rate mornings", "worst": "highest resting-heart-rate mornings", "higher_is_better": False, "when": " the day before", "fmt": _amount("bpm", 0)},
+    "sleep_total_min": {"label": "how long you slept", "best": "longest-sleep nights", "worst": "shortest-sleep nights", "higher_is_better": True, "when": " that day", "fmt": _hours},
+    "sleep_deep_min": {"label": "how much deep sleep you got", "best": "deepest-sleep nights", "worst": "lightest-sleep nights", "higher_is_better": True, "when": " that day", "fmt": _amount("min", 0)},
+    "hrv_next": {"label": "your morning HRV", "best": "highest-HRV mornings", "worst": "lowest-HRV mornings", "higher_is_better": True, "when": " the day before", "fmt": _amount("ms", 0)},
+    "resting_hr_next": {"label": "your morning resting heart rate", "best": "lowest resting-heart-rate mornings", "worst": "highest resting-heart-rate mornings", "higher_is_better": False, "when": " the day before", "fmt": _amount("bpm", 0)},
 }
 
 # Habits: a yes/no ("binary") or an amount. Private ones (other substances, gambling) are never used here.
@@ -160,6 +160,35 @@ def _headline(driver: dict, outcome: dict, found: dict) -> str:
     return f"{driver['noun']}{when}: averaged {fmt(found['best'])} on your {outcome['best']} vs {fmt(found['worst'])} on your {outcome['worst']}"
 
 
+def _one_in(p: float) -> str:
+    """'about 1 in 40' for a chance of 0.025: the p value in words a person can picture."""
+    if not p or p <= 0:
+        return "very unlikely"
+    n = int(round(1 / p))
+    return f"about 1 in {n:,}" if n >= 2 else "quite possible"
+
+
+def _working(driver: dict, outcome: dict, found: dict, k: int) -> str:
+    """How a pattern was worked out, in plain steps, so the person can check it against their own days."""
+    when = outcome["when"].strip()
+    if driver["kind"] == "binary":
+        b_yes, w_yes = round(found["best"] * found["n_best"]), round(found["worst"] * found["n_worst"])
+        counted = (
+            f"{driver['noun']} {when} came up on {b_yes} of {found['n_best']} of your {outcome['best']} "
+            f"and on {w_yes} of {found['n_worst']} of your {outcome['worst']}."
+        )
+    else:
+        fmt = driver["fmt"]
+        counted = (
+            f"{driver['noun']} {when} averaged {fmt(found['best'])} across your {outcome['best']} "
+            f"and {fmt(found['worst'])} across your {outcome['worst']}."
+        )
+    return (
+        f"We ranked your days by {outcome['label']} and took the best {k} and the worst {k}. {counted} "
+        f"A gap this big would turn up by luck {_one_in(found['p'])} times. Only gaps that big are shown."
+    )
+
+
 def best_vs_worst(df: pd.DataFrame) -> list[dict]:
     """The strongest few patterns separating the person's best days from their worst."""
     if df is None or df.empty:
@@ -200,6 +229,7 @@ def best_vs_worst(df: pd.DataFrame) -> list[dict]:
                     "worst_value": round(found["worst"], 3),
                     "n_best": found["n_best"],
                     "n_worst": found["n_worst"],
+                    "working": _working(driver, outcome, found, k),
                     "_p": found["p"],
                     "_size": found["size"],
                 }
@@ -236,6 +266,14 @@ def tracking_suggestions(df: pd.DataFrame, limit: int = 3) -> list[dict]:
     return out
 
 
+def progress(df: pd.DataFrame) -> dict:
+    """How close best-vs-worst is to running: days with a sleep or HRV reading, against the days it needs."""
+    have = 0
+    if df is not None and not df.empty:
+        have = max((int(df[col].notna().sum()) for col in OUTCOMES if col in df.columns), default=0)
+    return {"have": have, "needed": MIN_DAYS, "group": MIN_GROUP}
+
+
 def build_patterns(df: pd.DataFrame) -> dict:
     """What the Insights screen shows: patterns, what to log next, and the honest caveat."""
     from utils.follow_ons import CAVEAT as FOLLOW_ON_CAVEAT, follow_ons  # imported here: follow_ons uses this module's exact test
@@ -246,6 +284,7 @@ def build_patterns(df: pd.DataFrame) -> dict:
         together = []  # never let this take the rest of the patterns down
     return {
         "items": best_vs_worst(df),
+        "progress": progress(df),
         "suggestions": tracking_suggestions(df),
         "caveat": CAVEAT,
         "follow_ons": together,

@@ -82,6 +82,18 @@ def test_pure_noise_produces_no_patterns():
     assert best_vs_worst(df) == []
 
 
+def test_each_pattern_carries_its_working():
+    top = best_vs_worst(_two_habits())[0]
+    working = top["working"]
+    assert "how long you slept" in working and "best" in working and "luck" in working
+    assert f"of {top['n_best']} of your longest-sleep nights" in working  # the counts can be checked against the person's own days
+
+
+def test_progress_says_how_many_days_there_are_and_how_many_are_needed():
+    assert build_patterns(_two_habits(days=20))["progress"] == {"have": 20, "needed": 28, "group": 7}
+    assert build_patterns(pd.DataFrame())["progress"] == {"have": 0, "needed": 28, "group": 7}
+
+
 def test_too_few_days_gives_nothing():
     assert best_vs_worst(_two_habits(days=20)) == []
     assert best_vs_worst(pd.DataFrame()) == []
