@@ -108,7 +108,7 @@ def _build_context(results_row: dict | None) -> str:
 
 
 MAX_QUESTIONS_PER_DAY = 40
-# During the free month the assistant is the one feature that costs real money per use, so it is kept modest.
+# During the free week the assistant is the one feature that costs real money per use, so it is kept modest.
 TRIAL_QUESTIONS_PER_DAY = 10
 
 
@@ -154,7 +154,7 @@ async def ask(body: AskRequest, user_id: str = Depends(get_current_user_id)) -> 
     limit = TRIAL_QUESTIONS_PER_DAY if on_trial else MAX_QUESTIONS_PER_DAY
     if await _questions_in_last_day(user_id) >= limit:
         detail = (
-            f"You've used your {limit} questions for Gappy today. During your free month it's {limit} a day. Try again tomorrow."
+            f"You've used your {limit} questions for Gappy today. During your free week it's {limit} a day. Try again tomorrow."
             if on_trial
             else "You've reached today's question limit for Gappy. Try again tomorrow."
         )

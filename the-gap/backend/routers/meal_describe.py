@@ -4,7 +4,7 @@
   POST /nutrition/describe   {"text": "Spag bol for 4: 500 g mince, a jar of sauce, 200 g spaghetti, a tablespoon of oil"}
 
 Nothing is saved or logged here. The app puts the list into the meal builder for the person to check and change.
-It follows the other AI features: off when the person has turned AI off, needs an active subscription or free month, and counts
+It follows the other AI features: off when the person has turned AI off, needs an active subscription or free week, and counts
 against their monthly AI allowance.
 
 The answer is one of:

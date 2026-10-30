@@ -75,7 +75,7 @@ def test_the_message_names_the_reset_date_and_says_the_rest_still_works():
     m = ai_budget.blocked_message({"tier": "paid", "resets_on": "2026-11-01"})
     assert "2026-11-01" in m and "rest of The Gap" in m
     t = ai_budget.blocked_message({"tier": "trial", "resets_on": "2026-11-01"})
-    assert "free month" in t
+    assert "free week" in t
 
 
 def test_enforcement_can_be_switched_off(monkeypatch):

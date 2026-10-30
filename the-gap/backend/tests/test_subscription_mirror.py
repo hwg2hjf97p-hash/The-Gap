@@ -19,8 +19,8 @@ def test_an_expiry_switches_access_off():
 
 
 def test_a_product_change_does_not_overwrite_the_period_or_expiry():
-    """Someone ending their free month early switches products. That event carries the OLD
-    product's trial values, which must not put a person who has started paying back on the free month."""
+    """Someone ending their free week early switches products. That event carries the OLD
+    product's trial values, which must not put a person who has started paying back on the free week."""
     event = {
         "period_type": "TRIAL", "product_id": "com.x.pro.monthly", "new_product_id": "com.x.pro.monthly.startnow",
         "expiration_at_ms": 1795000000000,

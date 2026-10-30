@@ -13,13 +13,13 @@ What "used up" means, by feature:
   - Everything else (explanations, plans, insights, recipe ideas, the daily
     plan wording) quietly shows its usual written fallback instead of AI text.
 
-There is one plan. The allowance is smaller during its free month and larger
+There is one plan. The allowance is smaller during its free week and larger
 once the person is paying (US$ of AI use a month; tune with environment
 variables, no code change):
-  AI_BUDGET_TRIAL_USD  during the free month        (default 1.00)
+  AI_BUDGET_TRIAL_USD  during the free week        (default 1.00)
   AI_BUDGET_PAID_USD   once paying                   (default 2.50)
   AI_BUDGET_ENFORCE    "false" counts usage without stopping anything
-Someone in the free month who has used their allowance can end the free month
+Someone in the free week who has used their allowance can end the free week
 early in the app ("Go Pro now"), which moves them to the paid allowance.
 
 It never takes a feature down by mistake: if the usage can't be read (database
@@ -106,7 +106,7 @@ def enforcing() -> bool:
 
 
 def tier_from_row(row: Optional[dict], now: Optional[datetime] = None) -> str:
-    """"trial" in the free month, otherwise "paid". No subscription row
+    """"trial" in the free week, otherwise "paid". No subscription row
     (testers, free access) counts as "paid"."""
     now = now or datetime.now(timezone.utc)
     if not row or not row.get("is_active"):
@@ -132,7 +132,7 @@ def summarize(used_micro: int, tier: str, now: Optional[datetime] = None) -> dic
 def blocked_message(status: dict) -> str:
     when = status.get("resets_on", "the 1st")
     if status.get("tier") == "trial":
-        return f"You've used the AI allowance for your free month. It starts again on {when}, and the rest of The Gap keeps working."
+        return f"You've used the AI allowance for your free week. It starts again on {when}, and the rest of The Gap keeps working."
     return f"You've used this month's AI allowance. It starts again on {when}, and the rest of The Gap keeps working."
 
 

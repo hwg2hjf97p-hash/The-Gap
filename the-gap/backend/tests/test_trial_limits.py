@@ -137,7 +137,7 @@ def ask(monkeypatch, *, asked, on_trial):
 def test_the_trial_gets_ten_questions_a_day(monkeypatch):
     with pytest.raises(HTTPException) as err:
         ask(monkeypatch, asked=10, on_trial=True)
-    assert err.value.status_code == 429 and "10" in err.value.detail and "free month" in err.value.detail
+    assert err.value.status_code == 429 and "10" in err.value.detail and "free week" in err.value.detail
 
 
 def test_the_ninth_trial_question_still_goes_through(monkeypatch):
@@ -150,4 +150,4 @@ def test_a_paying_person_keeps_the_normal_limit(monkeypatch):
         ask(monkeypatch, asked=10, on_trial=False)
     with pytest.raises(HTTPException) as err:
         ask(monkeypatch, asked=assistant.MAX_QUESTIONS_PER_DAY, on_trial=False)
-    assert err.value.status_code == 429 and "free month" not in err.value.detail
+    assert err.value.status_code == 429 and "free week" not in err.value.detail

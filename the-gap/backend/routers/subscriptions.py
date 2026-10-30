@@ -11,7 +11,7 @@ Table DDL (run once in Supabase SQL editor):
     is_active BOOLEAN NOT NULL DEFAULT false,
     product_id TEXT,
     expires_at TIMESTAMPTZ,
-    period_type TEXT,            -- TRIAL while in the free month, NORMAL once paying (phase12.sql)
+    period_type TEXT,            -- TRIAL while in the free week, NORMAL once paying (phase12.sql)
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
 
@@ -118,12 +118,12 @@ async def revenuecat_webhook(request_body: dict, authorization: str = Header(def
 def mirror_payload(event_type: str, event: dict, user_id: str) -> dict:
     """The row to keep for a RevenueCat event.
 
-    A PRODUCT_CHANGE (for example someone ending their free month early by
-    switching to the same plan without the free month) only says which product
+    A PRODUCT_CHANGE (for example someone ending their free week early by
+    switching to the same plan without the free week) only says which product
     they are moving to. When the change takes effect RevenueCat sends a
     RENEWAL with the real period and expiry, so a PRODUCT_CHANGE must not
     overwrite those with the old product's values (which could put someone who
-    has just started paying back on "free month")."""
+    has just started paying back on "free week")."""
     now_iso = datetime.now(timezone.utc).isoformat()
     if event_type == "PRODUCT_CHANGE":
         return {
@@ -154,7 +154,7 @@ _last_refresh: dict[str, float] = {}
 
 def parse_subscriber(data: dict, user_id: str, now: Optional[datetime] = None, entitlement: str = "") -> dict:
     """The mirror row for a person, from RevenueCat's own record of them: is the
-    entitlement active, on which product, until when, and is it the free month."""
+    entitlement active, on which product, until when, and is it the free week."""
     now = now or datetime.now(timezone.utc)
     subscriber = data.get("subscriber") or {}
     ent = (subscriber.get("entitlements") or {}).get(entitlement or ENTITLEMENT_ID) or {}
@@ -183,7 +183,7 @@ def parse_subscriber(data: dict, user_id: str, now: Optional[datetime] = None, e
 @router.post("/refresh")
 async def refresh_my_subscription(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """Asks RevenueCat directly what this person's subscription is now and updates our copy.
-    The app calls it right after someone ends their free month early, so they get the paid
+    The app calls it right after someone ends their free week early, so they get the paid
     allowance at once instead of waiting for RevenueCat's webhook. Needs REVENUECAT_API_KEY
     (RevenueCat's secret API key); without it nothing happens and the webhook is relied on."""
     key = os.getenv("REVENUECAT_API_KEY", "").strip()
@@ -243,7 +243,7 @@ async def is_subscribed(user_id: str) -> bool:
 
 
 async def is_on_trial(user_id: str) -> bool:
-    """True while this person is in their free month (a live subscription whose current period is the trial).
+    """True while this person is in their free week (a live subscription whose current period is the trial).
     Used to keep the costly features modest for people who haven't paid yet. If it can't be read, they are
     treated as paying: the limit is there to protect spend, not to lock anyone out."""
     try:

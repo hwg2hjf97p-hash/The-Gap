@@ -52,21 +52,21 @@ const SECTIONS: LegalSection[] = [
     ],
   },
   {
-    heading: "The free month",
+    heading: "The free week",
     paragraphs: [
-      "New subscribers are offered a free month, if Apple shows it on the purchase screen. It is an introductory offer run by Apple, and Apple decides who is eligible: Apple normally allows one free introductory offer per Apple Account for a subscription group, so if you have used one before you may not be offered another. The purchase screen shows the exact offer and the price that applies afterwards before you confirm.",
-      "What you get during the free month:",
+      "New subscribers are offered a free week, if Apple shows it on the purchase screen. It is an introductory offer run by Apple, and Apple decides who is eligible: Apple normally allows one free introductory offer per Apple Account for a subscription group, so if you have used one before you may not be offered another. The purchase screen shows the exact offer and the price that applies afterwards before you confirm.",
+      "What you get during the free week:",
     ],
     bullets: [
       "Everything in The Gap that a paying subscriber gets: connecting Apple Health and wearables, the analysis and findings, the daily plan, food, water and workout tracking and templates, goals, reminders, suggested foods, recipes and videos, and Gappy, our AI assistant.",
-      "One difference: the AI features have a smaller allowance than a paid subscription. During the free month Gappy answers up to 10 questions a day, and there is a smaller monthly AI allowance than a paid subscription has (see AI allowance below). Everything else works the same.",
-      "No charge. Nothing is taken from your Apple Account during the free month.",
+      "One difference: the AI features have a smaller allowance than a paid subscription. During the free week Gappy answers up to 10 questions a day, and there is a smaller monthly AI allowance than a paid subscription has (see AI allowance below). Everything else works the same.",
+      "No charge. Nothing is taken from your Apple Account during the free week.",
     ],
     after: [
-      "Ending the free month early: if you use up the free month's AI allowance, the Gappy screen offers Go Pro now. Choosing it ends your free month straight away, charges you today the full price shown for the plan you chose, starts your paid subscription (which then renews each period unless you cancel), and gives you the paid AI allowance. You are not charged anything for the unused days of the free month, so there is nothing to refund for them, and once the free month has ended it cannot be added back. Purchases are handled by Apple, which decides refunds under its own policies.",
-      "What happens at the end: unless you cancel at least 24 hours before the free month ends, Apple automatically starts the paid subscription and charges the price shown on the purchase screen for the plan you chose (monthly or yearly), and then renews it each period. If you cancel before then, you are not charged and you keep access until the free month ends. To cancel, open Settings on your iPhone, tap your name, then Subscriptions. We cannot cancel it for you, because Apple handles the subscription.",
-      "If notifications are on, we send one reminder a few days before the free month ends. It is a courtesy only: the end date is shown in your Apple subscription settings, and you are responsible for cancelling in time if you do not want to continue.",
-      "If you do not continue after the free month, you will not have access to the app's features. You can still ask us to delete your information at any time, in Settings or by writing to hello@causalme.com.",
+      "Ending the free week early: if you use up the free week's AI allowance, the Gappy screen offers Go Pro now. Choosing it ends your free week straight away, charges you today the full price shown for the plan you chose, starts your paid subscription (which then renews each period unless you cancel), and gives you the paid AI allowance. You are not charged anything for the unused days of the free week, so there is nothing to refund for them, and once the free week has ended it cannot be added back. Purchases are handled by Apple, which decides refunds under its own policies.",
+      "What happens at the end: unless you cancel at least 24 hours before the free week ends, Apple automatically starts the paid subscription and charges the price shown on the purchase screen for the plan you chose (monthly or yearly), and then renews it each period. If you cancel before then, you are not charged and you keep access until the free week ends. To cancel, open Settings on your iPhone, tap your name, then Subscriptions. We cannot cancel it for you, because Apple handles the subscription.",
+      "If notifications are on, we send one reminder about two days before the free week ends. It is a courtesy only: the end date is shown in your Apple subscription settings, and you are responsible for cancelling in time if you do not want to continue.",
+      "If you do not continue after the free week, you will not have access to the app's features. You can still ask us to delete your information at any time, in Settings or by writing to hello@causalme.com.",
     ],
   },
   {
@@ -74,7 +74,7 @@ const SECTIONS: LegalSection[] = [
     paragraphs: [
       "The AI features (Gappy, AI-written explanations, improvement plans, reading insights, recipe and food ideas, and the wording of your daily plan) cost us money each time they are used, so each subscription includes a monthly AI allowance. It is a fair-use allowance measured by how much AI is used, not by a number of messages, and it starts again on the first day of each month (UTC).",
       "When you have used your allowance, Gappy tells you so and when it starts again, and the other AI features show their ordinary written text instead of AI-written text. The rest of The Gap keeps working. There are also daily limits on some AI features, for example the number of questions you can ask Gappy in a day.",
-      "The allowance during the free month is smaller than for a paid subscription. If we offer a higher plan, the purchase screen says how its allowance differs. We may change allowances and limits over time, for example to keep the service sustainable, and will tell you in the app if a change affects what you have paid for in a significant way.",
+      "The allowance during the free week is smaller than for a paid subscription. If we offer a higher plan, the purchase screen says how its allowance differs. We may change allowances and limits over time, for example to keep the service sustainable, and will tell you in the app if a change affects what you have paid for in a significant way.",
     ],
   },
   {
