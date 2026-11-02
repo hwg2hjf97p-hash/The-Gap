@@ -20,7 +20,7 @@ const SECTIONS: LegalSection[] = [
       "About you: height, weight and age if you enter them; your calorie, protein and water goals; your workout schedule; your diet goal, eating style, allergies or foods to avoid; your training goal and equipment; your goals and experiments; and the questions you ask the in-app assistant (Gappy).",
       "Places: a home and work address if you enter them, the coordinates we look up from them, the weather for that place, and estimated commute times. The app does not use your phone's GPS.",
       "Results we create: insights, scores, summaries, daily plans, recipe and video suggestions, and weekly recaps produced from the information above.",
-      "Technical information: your notification token, and standard server logs (such as IP address, time, and error details) used to keep the service running and secure.",
+      "Technical information: your notification token, and standard server logs (such as IP address, time, and error details) used to keep the service running and secure. If the app crashes, it sends us a short report so we can fix it: the error message and where in the code it happened, the app and build version, which update of the app was running, and your phone's system version. It does not include your health data, journal text or name.",
     ],
     after: [
       "A lot of this is health information, which the Privacy Act treats as sensitive. We collect it only with your consent, which you give when you first open the app and by connecting a source, turning on a feature, or logging something. You can withdraw consent at any time by disconnecting a source, switching a check-in category off, or deleting your account (see section 8).",
@@ -129,5 +129,5 @@ const SECTIONS: LegalSection[] = [
 ];
 
 export default function PrivacyPolicyPage() {
-  return <LegalPage title="Privacy Policy" updated="21 October 2026" intro={INTRO} sections={SECTIONS} />;
+  return <LegalPage title="Privacy Policy" updated="2 November 2026" intro={INTRO} sections={SECTIONS} />;
 }
