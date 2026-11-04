@@ -121,3 +121,25 @@ def test_sugar_patterns_exist_and_scale_to_25_grams():
     assert set(found) == {"sugar_hrv", "sugar_sleep"}
     assert all(h.treatment_scale == 25.0 and h.min_rows >= 30 for h in found.values())
     assert not any(math.isnan(h.treatment_scale) for h in found.values())
+
+
+# ── switching sugar on before phase27.sql must not break the day's log ───────
+
+def test_goals_still_load_if_sugar_is_on_before_the_column_exists(tracking, monkeypatch):
+    import asyncio
+
+    import httpx
+
+    seen = []
+
+    async def fake_rows(client, table, params):
+        seen.append(params["select"])
+        if "sugar_goal_g" in params["select"]:
+            request = httpx.Request("GET", "https://example.test/rest/v1/nutrition_goals")
+            raise httpx.HTTPStatusError("no such column", request=request, response=httpx.Response(400, request=request))
+        return [{"calorie_goal": 2000, "protein_goal_g": 120, "water_goal_ml": 2500}]
+
+    monkeypatch.setattr(nutrition, "_get_rows", fake_rows)
+    rows = asyncio.run(nutrition._goal_rows(None, {"user_id": "eq.u1"}))
+    assert rows == [{"calorie_goal": 2000, "protein_goal_g": 120, "water_goal_ml": 2500}]
+    assert "sugar_goal_g" in seen[0] and "sugar_goal_g" not in seen[1]

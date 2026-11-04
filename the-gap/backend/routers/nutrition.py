@@ -600,6 +600,18 @@ async def _get_rows(client: httpx.AsyncClient, table: str, params: dict) -> list
     return resp.json() or []
 
 
+async def _goal_rows(client: httpx.AsyncClient, base: dict) -> list[dict]:
+    """The goals row. If sugar tracking is on before phase27.sql has been run (no sugar_goal_g column yet), read it without that column
+    rather than fail, so the day's log still loads."""
+    try:
+        return await _get_rows(client, "nutrition_goals", {**base, "select": _goal_columns()})
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 400 and tracking_on():
+            logger.error("nutrition_goals has no sugar_goal_g column yet (run phase27.sql); reading goals without it")
+            return await _get_rows(client, "nutrition_goals", {**base, "select": "calorie_goal,protein_goal_g,water_goal_ml"})
+        raise
+
+
 @router.get("/day")
 async def get_day(local_date: str, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     _check_date(local_date)
@@ -609,7 +621,7 @@ async def get_day(local_date: str, user_id: str = Depends(get_current_user_id)) 
             food, water, goals = await asyncio.gather(
                 _get_rows(client, "food_log", {**base, "local_date": f"eq.{local_date}", "select": "*", "order": "created_at.asc"}),
                 _get_rows(client, "water_log", {**base, "local_date": f"eq.{local_date}", "select": "id,amount_ml", "order": "created_at.asc"}),
-                _get_rows(client, "nutrition_goals", {**base, "select": _goal_columns()}),
+                _goal_rows(client, base),
             )
     except httpx.HTTPStatusError as exc:
         # PostgREST answers 404 for a table that was never created — the
@@ -694,7 +706,7 @@ def _goal_columns() -> str:
 async def get_goals(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            rows = await _get_rows(client, "nutrition_goals", {"user_id": f"eq.{user_id}", "select": _goal_columns()})
+            rows = await _goal_rows(client, {"user_id": f"eq.{user_id}"})
     except Exception as exc:
         logger.error("Loading nutrition goals failed for %s: %s", user_id[:8], exc)
         return JSONResponse(content={"goals": None})
