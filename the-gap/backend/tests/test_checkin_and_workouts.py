@@ -129,3 +129,28 @@ def test_workout_dataframe_summarises_completed_days(monkeypatch):
     assert done["workout_volume_kg"] == 500
     assert done["leg_day_flag"] == 1
     assert planned["workout_completed_flag"] == 0
+
+
+def test_a_workout_keeps_its_supersets_and_drop_sets():
+    body = workouts.WorkoutBody(
+        workout_type="Strength",
+        planned_date="2026-11-05",
+        exercises=[
+            {"exercise_id": "a", "name": "Bench press", "link_id": "x1", "sets": [{"reps": 8, "weight_kg": 60}, {"reps": 8, "weight_kg": 48, "kind": "drop"}]},
+            {"exercise_id": "b", "name": "Row", "link_id": "x1", "sets": [{"reps": 10, "weight_kg": 50}]},
+        ],
+    )
+    saved = [e.model_dump() for e in body.exercises]
+    assert saved[0]["link_id"] == "x1" and saved[1]["link_id"] == "x1"
+    assert [s["kind"] for s in saved[0]["sets"]] == ["normal", "drop"]
+    assert saved[1]["sets"][0]["kind"] == "normal"  # older workouts and the plain case read as normal sets
+
+
+def test_a_workout_without_links_still_reads_the_old_way():
+    body = workouts.WorkoutBody(workout_type="Strength", planned_date="2026-11-05", exercises=[{"exercise_id": "a", "name": "Squat", "sets": [{"reps": 5}]}])
+    assert body.exercises[0].link_id is None
+
+
+def test_a_set_kind_other_than_normal_or_drop_is_refused():
+    with pytest.raises(Exception):
+        workouts.WorkoutBody(workout_type="Strength", planned_date="2026-11-05", exercises=[{"exercise_id": "a", "name": "Squat", "sets": [{"kind": "mystery"}]}])

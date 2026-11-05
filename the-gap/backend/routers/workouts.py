@@ -107,6 +107,8 @@ class SetModel(BaseModel):
     hr_peak: Optional[float] = Field(default=None, ge=0, le=260)
     # The suggestion shown for this set, kept so it can be shown again.
     tip: Optional[str] = Field(default=None, max_length=400)
+    # "drop": a lighter set done straight after the set before it, with no rest. Everything else is a normal set.
+    kind: Literal["normal", "drop"] = "normal"
 
 
 class ExerciseModel(BaseModel):
@@ -114,6 +116,8 @@ class ExerciseModel(BaseModel):
     name: str = Field(max_length=200)
     group: str = Field(default="Other", max_length=40)
     category: str = Field(default="strength", max_length=40)
+    # Movements next to each other that share a link_id are done as rounds: 2 is a superset, 3 a tri-set, 4 or more a giant set.
+    link_id: Optional[str] = Field(default=None, max_length=40)
     sets: list[SetModel] = Field(default_factory=list)
 
 

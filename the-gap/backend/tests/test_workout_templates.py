@@ -28,7 +28,18 @@ def test_template_keeps_the_plan_and_drops_what_happened_on_the_day():
     row = wt.template_row(body, "u1")
     assert row["name"] == "My Fran"
     sets = row["exercises"][0]["sets"]
-    assert sets == [{"reps": 21, "weight_kg": 0, "duration_min": None}]
+    assert sets == [{"reps": 21, "weight_kg": 0, "duration_min": None, "kind": "normal"}]
+    assert row["exercises"][0]["link_id"] is None
+
+
+def test_template_keeps_supersets_and_drop_sets():
+    first = _ex(link_id="lk-1", sets=[{"reps": 10, "weight_kg": 40, "kind": "normal", "done": True, "actual_reps": 9}, {"reps": 10, "weight_kg": 32, "kind": "drop"}])
+    second = _ex(exercise_id="Rows", name="Rows", link_id="lk-1")
+    row = wt.template_row(wt.TemplateBody(name="Upper", exercises=[first, second]), "u1")
+    ex = row["exercises"]
+    assert ex[0]["link_id"] == "lk-1" and ex[1]["link_id"] == "lk-1"
+    assert [s["kind"] for s in ex[0]["sets"]] == ["normal", "drop"]
+    assert "done" not in ex[0]["sets"][0] and "actual_reps" not in ex[0]["sets"][0]
 
 
 def test_template_format_keeps_style_and_cap_but_never_a_result():

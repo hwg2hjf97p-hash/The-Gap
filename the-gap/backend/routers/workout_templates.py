@@ -68,8 +68,15 @@ def planned_only(exercises: list[dict]) -> list[dict]:
                 "name": ex.get("name"),
                 "group": ex.get("group") or "Other",
                 "category": ex.get("category") or "strength",
+                # supersets and drop sets are part of the plan, so a template keeps them
+                "link_id": ex.get("link_id"),
                 "sets": [
-                    {"reps": s.get("reps"), "weight_kg": s.get("weight_kg"), "duration_min": s.get("duration_min")}
+                    {
+                        "reps": s.get("reps"),
+                        "weight_kg": s.get("weight_kg"),
+                        "duration_min": s.get("duration_min"),
+                        "kind": s.get("kind") or "normal",
+                    }
                     for s in (ex.get("sets") or [])
                 ],
             }
