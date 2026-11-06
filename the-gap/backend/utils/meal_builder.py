@@ -75,9 +75,32 @@ def check_serve_size(items: list[dict]) -> None:
         raise BuildProblem("That's over 10,000 kcal in one serve. Check the amounts and how many serves it makes.")
 
 
-def recipe_json(name: str, serves: float, cooked_weight_g: Optional[float], ingredients: list[dict]) -> dict:
-    """What is needed to open the meal again for editing, exactly as the person entered it."""
-    return {
+def clean_suggested(raw) -> Optional[dict]:
+    """
+    The recipe text of a suggested recipe the person saved (its ingredients and method as written), tidied for storage: only the
+    fields we keep, lines trimmed and capped, blanks dropped. None if there is nothing worth keeping.
+    """
+    if not isinstance(raw, dict):
+        return None
+    ingredients = [" ".join(str(x).split())[:200] for x in (raw.get("ingredients") or [])[:40] if str(x).strip()]
+    steps = [" ".join(str(x).split())[:600] for x in (raw.get("steps") or [])[:30] if str(x).strip()]
+    summary = " ".join(str(raw.get("summary") or "").split())[:400]
+    if not (ingredients or steps or summary):
+        return None
+
+    def whole(value, low: int, high: int) -> Optional[int]:
+        try:
+            n = int(round(float(value)))
+        except (TypeError, ValueError):
+            return None
+        return n if low <= n <= high else None
+
+    return {"summary": summary, "time_min": whole(raw.get("time_min"), 0, 1440), "servings": whole(raw.get("servings"), 1, 100), "ingredients": ingredients, "steps": steps}
+
+
+def recipe_json(name: str, serves: float, cooked_weight_g: Optional[float], ingredients: list[dict], suggested: Optional[dict] = None) -> dict:
+    """What is needed to open the meal again for editing, exactly as the person entered it. `suggested` keeps the text of a saved recipe idea."""
+    out = {
         "serves": serves,
         "cooked_weight_g": cooked_weight_g,
         "ingredients": [
@@ -94,3 +117,6 @@ def recipe_json(name: str, serves: float, cooked_weight_g: Optional[float], ingr
             for i in ingredients
         ],
     }
+    if suggested:
+        out["suggested"] = suggested
+    return out

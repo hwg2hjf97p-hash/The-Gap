@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from auth import get_current_user_id
 from routers.nutrition import PerServing
 from utils.sugar import SUGAR, add_scaled, known
-from utils.meal_builder import BuildProblem, build_items, check_serve_size, recipe_json
+from utils.meal_builder import BuildProblem, build_items, check_serve_size, clean_suggested, recipe_json
 from utils.saved_logging import (
     _sb_headers,
     _sb_url,
@@ -87,6 +87,16 @@ class IngredientBody(BaseModel):
     source: Optional[str] = Field(default=None, max_length=30)
 
 
+class SuggestedRecipeBody(BaseModel):
+    """A suggested recipe idea the person saved to My meals: its ingredients and method, kept so a new batch of ideas can't lose it."""
+
+    summary: str = Field(default="", max_length=400)
+    time_min: Optional[int] = Field(default=None, ge=0, le=1440)
+    servings: Optional[int] = Field(default=None, ge=1, le=100)
+    ingredients: list[str] = Field(default_factory=list, max_length=40)
+    steps: list[str] = Field(default_factory=list, max_length=30)
+
+
 class BuildMealBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     serves: float = Field(default=1, ge=1, le=40)
@@ -94,6 +104,7 @@ class BuildMealBody(BaseModel):
     ingredients: list[IngredientBody] = Field(min_length=1, max_length=40)
     aliases: list[str] = Field(default_factory=list, max_length=8)
     meal: Optional[Literal["breakfast", "lunch", "dinner", "snack"]] = None
+    suggested: Optional[SuggestedRecipeBody] = None
 
 
 class RenameBody(BaseModel):
@@ -203,6 +214,20 @@ async def save_meal_from_log(body: MealFromLogBody, user_id: str = Depends(get_c
     return JSONResponse(content={"meal": public_meal(saved) if saved else None})
 
 
+async def _existing_suggested(user_id: str, meal_id: str) -> Optional[dict]:
+    """The recipe text already saved with a meal, so editing its ingredients later doesn't lose it."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(_sb_url("saved_meals"), headers=_sb_headers(), params={"id": f"eq.{meal_id}", "user_id": f"eq.{user_id}", "select": "recipe", "limit": "1"})
+            resp.raise_for_status()
+            rows = resp.json() or []
+        recipe = rows[0].get("recipe") if rows else None
+        return clean_suggested(recipe.get("suggested")) if isinstance(recipe, dict) else None
+    except Exception as exc:
+        logger.warning("Reading a saved meal's recipe text failed: %s", exc)
+        return None
+
+
 async def _store_built(user_id: str, body: BuildMealBody, meal_id: Optional[str]) -> JSONResponse:
     """Saves (or, with meal_id, replaces) a meal built from ingredients. See utils/meal_builder.py for how serves work."""
     ingredients = [i.model_dump() for i in body.ingredients]
@@ -216,7 +241,10 @@ async def _store_built(user_id: str, body: BuildMealBody, meal_id: Optional[str]
         fields["aliases"] = clean_aliases(body.aliases)
     if body.meal:
         fields["meal"] = body.meal
-    recipe = recipe_json(body.name, body.serves, body.cooked_weight_g, ingredients)
+    suggested = clean_suggested(body.suggested.model_dump()) if body.suggested else None
+    if suggested is None and meal_id is not None:
+        suggested = await _existing_suggested(user_id, meal_id)  # an edit that doesn't send the recipe text keeps what was saved
+    recipe = recipe_json(body.name, body.serves, body.cooked_weight_g, ingredients, suggested)
     saved = None
     try:
         async with httpx.AsyncClient(timeout=20) as client:
