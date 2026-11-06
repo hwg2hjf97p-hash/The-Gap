@@ -154,6 +154,22 @@ def test_the_app_sees_a_day_with_garmins_wording_for_the_sleep_score():
     assert view["steps"] == 5000 and view["sleep"]["score_label"] == "GOOD" and view["resting_hr"] is None
 
 
+def test_the_kinds_of_a_day_are_put_back_together_newest_day_first():
+    rows = [
+        {"local_date": "2026-11-04", "kind": "dailies", "data": {"steps": 8000, "resting_hr": 52}},
+        {"local_date": "2026-11-05", "kind": "sleeps", "data": {"sleeps": {"night": {"total_min": 450.0}}}},
+        {"local_date": "2026-11-05", "kind": "hrv", "data": {"hrv": 44}},
+        {"local_date": "2026-11-05", "kind": "sleeps", "data": {"sleeps": {"nap": {"total_min": 20.0}}}},
+        {"local_date": "2026-11-05", "kind": "dailies", "data": {"steps": 9000}},
+        {"local_date": None, "kind": "dailies", "data": {"steps": 1}},
+        {"local_date": "2026-11-03", "kind": "dailies", "data": "not a dict"},
+    ]
+    merged = g.merge_kinds(rows)
+    assert [r["local_date"] for r in merged] == ["2026-11-05", "2026-11-04"]
+    assert merged[0]["data"] == {"sleeps": {"night": {"total_min": 450.0}, "nap": {"total_min": 20.0}}, "hrv": 44, "steps": 9000}
+    assert merged[1]["data"] == {"steps": 8000, "resting_hr": 52}
+
+
 def test_the_engines_columns_come_from_stored_days():
     rows = [
         {"local_date": "2026-11-04", "data": {"steps": 8000, "resting_hr": 52, "active_energy": 400, "hrv": 44, "sleeps": {"s": {"total_min": 450.0, "deep_min": 90.0, "score": 87}}}},
@@ -361,11 +377,11 @@ def store(monkeypatch):
     async def user_for(garmin_user):
         return people.get(garmin_user)
 
-    async def load(client, user_id, local_date):
-        return days.get((user_id, local_date))
+    async def load(client, user_id, local_date, kind):
+        return days.get((user_id, local_date, kind))
 
-    async def save(client, user_id, local_date, data):
-        days[(user_id, local_date)] = data
+    async def save(client, user_id, local_date, kind, data):
+        days[(user_id, local_date, kind)] = data
 
     monkeypatch.setattr(route, "user_for", user_for)
     monkeypatch.setattr(route, "_load_day", load)
@@ -375,12 +391,14 @@ def store(monkeypatch):
 
 def test_pushed_numbers_are_filed_for_the_right_person_and_updates_replace_earlier_ones(store):
     run(route.process_push("dailies", {"dailies": [DAILY, {**DAILY, "userId": "stranger"}]}))
-    assert store == {("user-1", "2026-11-04"): {"steps": 8123, "resting_hr": 52, "active_energy": 410, "stress_avg": 31, "body_battery_charged": 64}}
+    assert store == {("user-1", "2026-11-04", "dailies"): {"steps": 8123, "resting_hr": 52, "active_energy": 410, "stress_avg": 31, "body_battery_charged": 64}}
     run(route.process_push("dailies", {"dailies": [{**DAILY, "steps": 9500}]}))
-    assert store[("user-1", "2026-11-04")]["steps"] == 9500
+    assert store[("user-1", "2026-11-04", "dailies")]["steps"] == 9500
     run(route.process_push("sleeps", {"sleeps": [SLEEP]}))
     run(route.process_push("hrv", {"hrv": [{"userId": "gu1", "calendarDate": "2026-11-05", "lastNightAvg": 44}]}))
-    assert store[("user-1", "2026-11-05")]["hrv"] == 44 and store[("user-1", "2026-11-05")]["sleeps"]["s1"]["score"] == 87
+    # each kind of summary has its own row, so a sleep push and an HRV push for the same night can never overwrite each other
+    assert store[("user-1", "2026-11-05", "hrv")] == {"hrv": 44}
+    assert store[("user-1", "2026-11-05", "sleeps")]["sleeps"]["s1"]["score"] == 87
 
 
 def test_a_disconnect_notice_switches_the_person_off(monkeypatch, store):

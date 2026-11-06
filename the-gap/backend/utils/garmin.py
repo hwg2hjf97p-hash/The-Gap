@@ -207,6 +207,26 @@ def day_view(local_date: str, day: dict) -> dict:
     }
 
 
+def merge_kinds(rows: list[dict]) -> list[dict]:
+    """
+    garmin_daily keeps one row per person per day per kind of summary (dailies, sleeps, hrv), so two pushes for the same day can never
+    overwrite each other. This puts the kinds of each day back together as one day, newest day first.
+    """
+    days: dict[str, dict] = {}
+    for row in rows:
+        local_date = row.get("local_date")
+        data = row.get("data")
+        if not local_date or not isinstance(data, dict):
+            continue
+        day = days.setdefault(str(local_date), {})
+        for key, value in data.items():
+            if key == "sleeps" and isinstance(value, dict):
+                day["sleeps"] = {**(day.get("sleeps") or {}), **value}
+            else:
+                day[key] = value
+    return [{"local_date": d, "data": days[d]} for d in sorted(days, reverse=True)]
+
+
 def frame_rows(rows: list[dict]) -> dict[str, dict]:
     """Stored days as the engine's standard daily columns, keyed by date. Only used when engine_allowed()."""
     out: dict[str, dict] = {}

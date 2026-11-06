@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
+from utils import garmin as garmin_utils
 from utils.source_merge import (
     DEFAULT_FILL_GAPS,
     DEFAULT_PRIORITY,
@@ -86,7 +87,8 @@ async def _available_sources(user_id: str) -> list[str]:
                 params={"user_id": f"eq.{user_id}", "is_active": "eq.true", "select": "provider"},
             )
             conns.raise_for_status()
-            available = [c["provider"] for c in (conns.json() or []) if c.get("provider") in SOURCE_LABELS]
+            # Garmin only counts as a source for the insights when its numbers are allowed into them (GARMIN_AI_ALLOWED), so it isn't offered before then.
+            available = [c["provider"] for c in (conns.json() or []) if c.get("provider") in SOURCE_LABELS and (c.get("provider") != "garmin" or garmin_utils.engine_allowed())]
             apple = await client.get(
                 _sb_url("apple_health_daily"), headers=_sb_headers(),
                 params={"user_id": f"eq.{user_id}", "select": "entry_date", "limit": "1"},

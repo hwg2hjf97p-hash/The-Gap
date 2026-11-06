@@ -5,12 +5,14 @@ import logging
 import os
 
 import httpx
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from auth import get_current_user_id
 from sync.user_profile_store import save_user_profile, get_user_profile
+from utils import onboarding_answers
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -36,6 +38,20 @@ async def read_profile(user_id: str = Depends(get_current_user_id)) -> JSONRespo
     if not profile:
         return JSONResponse(content={"weight_kg": None, "height_cm": None, "age": None})
     return JSONResponse(content=profile)
+
+
+@router.put("/onboarding")
+async def put_onboarding(body: dict[str, Any], user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    """What the person told the setup (sex if they chose to say, what they want, their prime suspect). Everything optional; unknown
+    choices are dropped, not refused. Their first name is never sent."""
+    saved = await onboarding_answers.save_answers(user_id, onboarding_answers.clean_answers(body))
+    return JSONResponse(content={"saved": saved})
+
+
+@router.get("/onboarding")
+async def get_onboarding(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+    answers = await onboarding_answers.load_answers(user_id)
+    return JSONResponse(content=answers or {"sex": None, "wants": [], "suspect": None})
 
 
 # ── Profile checklist ─────────────────────────────────────────────────────────

@@ -298,7 +298,8 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
 
         # Only refresh if token is actually expired (not just 0)
         # expires_at=0 means we don't know — try with existing token first
-        token_expired = expires_at > 0 and time.time() > (expires_at - 300)
+        # Garmin's login is only used to disconnect (see routers/garmin.py); its data arrives by push, so there is nothing to renew here.
+        token_expired = provider != "garmin" and expires_at > 0 and time.time() > (expires_at - 300)
         if token_expired:
             logger.info("TOKEN_EXPIRED refreshing %s/%s", user_id[:8], provider)
             refresh_func = REFRESH_FUNCS.get(provider)

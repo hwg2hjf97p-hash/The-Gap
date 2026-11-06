@@ -8,7 +8,8 @@ Garmin: where Garmin's pushes arrive, what the app shows of them, and how a pers
 The sign-in itself (start, callback, disconnect) is in routers/connect.py. All of the rules, and why, are in utils/garmin.py. In short:
 Garmin numbers live in garmin_daily, apart from everything else, and only reach the insights engine and Gappy when GARMIN_AI_ALLOWED is on.
 
-Tables (phase30.sql): garmin_links (which Garmin account is which person) and garmin_daily (one row per person per day).
+Tables (phase30.sql): garmin_links (which Garmin account is which person) and garmin_daily (one row per person per day per kind of summary,
+so two pushes for the same day can't overwrite each other).
 """
 
 from __future__ import annotations
@@ -71,19 +72,19 @@ async def link_user(user_id: str, garmin_user_id: str) -> None:
         resp.raise_for_status()
 
 
-async def _load_day(client: httpx.AsyncClient, user_id: str, local_date: str) -> Optional[dict]:
-    resp = await client.get(_sb_url("garmin_daily"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "local_date": f"eq.{local_date}", "select": "data", "limit": "1"})
+async def _load_day(client: httpx.AsyncClient, user_id: str, local_date: str, kind: str) -> Optional[dict]:
+    resp = await client.get(_sb_url("garmin_daily"), headers=_sb_headers(), params={"user_id": f"eq.{user_id}", "local_date": f"eq.{local_date}", "kind": f"eq.{kind}", "select": "data", "limit": "1"})
     resp.raise_for_status()
     rows = resp.json() or []
     return rows[0].get("data") if rows else None
 
 
-async def _save_day(client: httpx.AsyncClient, user_id: str, local_date: str, data: dict) -> None:
+async def _save_day(client: httpx.AsyncClient, user_id: str, local_date: str, kind: str, data: dict) -> None:
     resp = await client.post(
         _sb_url("garmin_daily"),
         headers=_sb_headers("resolution=merge-duplicates,return=minimal"),
-        params={"on_conflict": "user_id,local_date"},
-        json={"user_id": user_id, "local_date": local_date, "data": data, "updated_at": datetime.now(timezone.utc).isoformat()},
+        params={"on_conflict": "user_id,local_date,kind"},
+        json={"user_id": user_id, "local_date": local_date, "kind": kind, "data": data, "updated_at": datetime.now(timezone.utc).isoformat()},
     )
     resp.raise_for_status()
 
@@ -94,10 +95,10 @@ async def recent_rows(user_id: str, days: int) -> list[dict]:
         resp = await client.get(
             _sb_url("garmin_daily"),
             headers=_sb_headers(),
-            params={"user_id": f"eq.{user_id}", "local_date": f"gte.{since}", "select": "local_date,data", "order": "local_date.desc", "limit": str(days + 1)},
+            params={"user_id": f"eq.{user_id}", "local_date": f"gte.{since}", "select": "local_date,kind,data", "order": "local_date.desc", "limit": str((days + 1) * len(garmin.KEPT_SUMMARIES))},
         )
         resp.raise_for_status()
-        return resp.json() or []
+        return garmin.merge_kinds(resp.json() or [])
 
 
 async def forget_data(user_id: str) -> None:
@@ -148,8 +149,8 @@ async def process_push(kind: str, payload) -> None:
                     user_id = people[garmin_user]
                     if not user_id:
                         continue
-                    existing = await _load_day(client, user_id, local_date)
-                    await _save_day(client, user_id, local_date, garmin.merge_day(existing, patch))
+                    existing = await _load_day(client, user_id, local_date, kind)
+                    await _save_day(client, user_id, local_date, kind, garmin.merge_day(existing, patch))
         elif kind == "deregistrations":
             for garmin_user in garmin.parse_deregistrations(payload):
                 user_id = await user_for(garmin_user)
