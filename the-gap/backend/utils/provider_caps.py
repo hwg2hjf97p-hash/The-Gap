@@ -6,8 +6,8 @@ the service refuses the sign-in, which looks like a bug to the person. So The Ga
 when a service is full, the app says so plainly and offers Apple Health instead, plus a notice when room opens.
 
 Limits are in Render environment variables, so raising one after approval needs no code change:
-  WHOOP_USER_CAP, OURA_USER_CAP, STRAVA_USER_CAP, WITHINGS_USER_CAP, POLAR_USER_CAP
-A service with no variable uses CAP_DEFAULTS (10 for Whoop and Oura); "0" or "none" means no limit.
+  WHOOP_USER_CAP, OURA_USER_CAP, STRAVA_USER_CAP, WITHINGS_USER_CAP, POLAR_USER_CAP, GARMIN_USER_CAP
+A service with no variable uses CAP_DEFAULTS (10 for Whoop and Oura, 1,000 for Garmin, which approved The Gap for 1,000 people); "0" or "none" means no limit.
 
 The waitlist is the provider_waitlist table (phase15.sql). Until it exists the list simply doesn't save and nothing breaks.
 """
@@ -23,9 +23,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-CAP_DEFAULTS: dict[str, Optional[int]] = {"whoop": 10, "oura": 10}
-CAPPED_PROVIDERS = ("whoop", "oura", "strava", "withings", "polar")
-DISPLAY = {"whoop": "Whoop", "oura": "Oura", "strava": "Strava", "withings": "Withings", "polar": "Polar"}
+CAP_DEFAULTS: dict[str, Optional[int]] = {"whoop": 10, "oura": 10, "garmin": 1000}
+CAPPED_PROVIDERS = ("whoop", "oura", "strava", "withings", "polar", "garmin")
+DISPLAY = {"whoop": "Whoop", "oura": "Oura", "strava": "Strava", "withings": "Withings", "polar": "Polar", "garmin": "Garmin"}
 
 
 def cap_for(provider: str) -> Optional[int]:

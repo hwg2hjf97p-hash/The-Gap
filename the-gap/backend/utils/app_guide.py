@@ -102,7 +102,7 @@ SETTINGS TAB (five sections that open when tapped)
 - Sign out is in Settings.
 
 CONNECTING DEVICES
-- Settings, then Connections. Apple Health, Whoop, Oura, Strava, Withings and Polar can be connected. Hume body scales can send weight and body fat through Apple Health (turn on Apple Health syncing in the Hume app). Garmin and Fitbit cannot be connected directly yet.
+- Settings, then Connections. Apple Health, Whoop, Oura, Strava, Withings, Polar and Garmin can be connected. Hume body scales can send weight and body fat through Apple Health (turn on Apple Health syncing in the Hume app). Fitbit cannot be connected directly yet (share it to Apple Health instead). Garmin: after connecting, Garmin sends each day’s steps, sleep, resting heart rate and overnight HRV as the watch syncs with the Garmin Connect app. Garmin cannot send days from before the person connected. The numbers show on a Garmin card on Your Health, labelled Garmin. Whether Garmin numbers also feed the insights depends on a setting we control, and the card says which it is. Disconnecting Garmin in the app also removes the connection at Garmin and deletes the Garmin numbers The Gap stored. The person must leave Health switched on when Garmin asks, or it won’t connect.
 - Whoop, Oura and the other connected services sync about every hour. Apple Health updates when the app is opened and about hourly in the background while the phone is in use. Background updates stop if the app is swiped away, Low Power Mode is on, or Background App Refresh is off.
 - With more than one device, Data sources lets the person choose which one is the main one for each reading.
 

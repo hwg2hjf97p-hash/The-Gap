@@ -52,6 +52,7 @@ SOURCE_LABELS = {
     "whoop": "Whoop",
     "oura": "Oura",
     "polar": "Polar",
+    "garmin": "Garmin",
     "withings": "Withings",
     "manual": "Logged in the app",
     "strava": "Strava",
@@ -61,13 +62,13 @@ SOURCE_LABELS = {
 # Used when the person hasn't chosen. Wearables built for sleep and recovery
 # come first for those; Apple Health leads for steps and activity.
 DEFAULT_PRIORITY: dict[str, list[str]] = {
-    "sleep": ["whoop", "oura", "polar", "withings", "apple_health"],
-    "recovery": ["whoop", "oura", "polar", "withings", "apple_health"],
-    "activity": ["apple_health", "oura", "withings", "strava", "polar", "whoop"],
-    "energy": ["apple_health", "oura", "whoop", "withings", "strava", "polar"],
+    "sleep": ["whoop", "oura", "polar", "garmin", "withings", "apple_health"],
+    "recovery": ["whoop", "oura", "polar", "garmin", "withings", "apple_health"],
+    "activity": ["apple_health", "oura", "withings", "strava", "polar", "garmin", "whoop"],
+    "energy": ["apple_health", "oura", "whoop", "withings", "strava", "polar", "garmin"],
     "body": ["manual", "withings", "apple_health"],
 }
-GENERAL_ORDER = ["whoop", "oura", "polar", "withings", "strava", "apple_health"]
+GENERAL_ORDER = ["whoop", "oura", "polar", "garmin", "withings", "strava", "apple_health"]
 
 # Whether a group fills days its main source is missing from the other sources.
 DEFAULT_FILL_GAPS = {"sleep": True, "recovery": True, "activity": True, "energy": True, "body": True}

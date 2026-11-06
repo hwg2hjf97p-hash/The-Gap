@@ -114,6 +114,7 @@ from routers import coach as coach_router
 from routers import voice_commands as voice_commands_router
 from routers import meal_describe as meal_describe_router
 from routers import rundown_summary as rundown_summary_router
+from routers import garmin as garmin_router
 from routers import diagnostics as diagnostics_router
 from routers import training_state as training_state_router
 from routers import sync_admin
@@ -168,6 +169,7 @@ app.include_router(coach_router.router)
 app.include_router(voice_commands_router.router)
 app.include_router(meal_describe_router.router)
 app.include_router(rundown_summary_router.router)
+app.include_router(garmin_router.router)
 app.include_router(diagnostics_router.router)
 app.include_router(training_state_router.router)
 app.include_router(sync_admin.router)

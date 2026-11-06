@@ -1,6 +1,6 @@
 """
 OAuth connection router for The Gap.
-Handles connect/callback flows for Whoop, Oura, Strava, Withings and Polar. (Google Calendar was retired: the phone's own calendar covers it.)
+Handles connect/callback flows for Whoop, Oura, Strava, Withings, Polar and Garmin (Garmin's own steps are in utils/garmin.py). (Google Calendar was retired: the phone's own calendar covers it.)
 
 Flow:
   1. GET /connect/{provider}        → redirect user to provider OAuth page
@@ -71,6 +71,15 @@ PROVIDERS = {
         "scopes": "user.info,user.metrics,user.activity",
         "client_id_env": "WITHINGS_CLIENT_ID",
         "client_secret_env": "WITHINGS_CLIENT_SECRET",
+    },
+    "garmin": {
+        # Garmin uses OAuth 2.0 with PKCE and sends its data to us (see utils/garmin.py), so there are no scopes and nothing is fetched
+        # on a schedule. The sign-in and sign-up are handled as their own branches below.
+        "auth_url": "https://connect.garmin.com/oauth2Confirm",
+        "token_url": "https://diauth.garmin.com/di-oauth2-service/oauth/token",
+        "scopes": "",
+        "client_id_env": "GARMIN_CLIENT_ID",
+        "client_secret_env": "GARMIN_CLIENT_SECRET",
     },
     "polar": {
         # Polar's token exchange uses HTTP Basic Auth (client_id:client_secret
@@ -159,13 +168,14 @@ def _supabase_rest_url(table: str) -> str:
 _STATE_SECRET = (os.getenv("OAUTH_STATE_SECRET") or os.getenv("SYNC_SECRET") or secrets.token_hex(32)).encode()
 
 
-def _store_state(state_unused: str, user_id: str, provider: str, platform: str = "web") -> str:
+def _store_state(state_unused: str, user_id: str, provider: str, platform: str = "web", nonce: str = "") -> str:
     """Create a signed state token. Returns the token (ignore state_unused)."""
     payload = _json.dumps({
         "u": user_id,
         "p": provider,
         "e": int(time.time()) + 600,  # expires in 10 min
         "m": platform,  # "web" or "mobile" — determines where oauth_callback redirects to
+        **({"n": nonce} if nonce else {}),  # a one-off value (Garmin's PKCE)
     }, separators=(",", ":")).encode()
     b64 = base64.urlsafe_b64encode(payload).rstrip(b"=").decode()
     sig = hmac.new(_STATE_SECRET, b64.encode(), hashlib.sha256).hexdigest()[:16]
@@ -188,7 +198,7 @@ def _consume_state(state: str) -> Optional[dict]:
         if int(time.time()) > payload["e"]:
             logger.warning("OAuth state expired")
             return None
-        return {"user_id": payload["u"], "provider": payload["p"], "platform": payload.get("m", "web")}
+        return {"user_id": payload["u"], "provider": payload["p"], "platform": payload.get("m", "web"), "nonce": payload.get("n", "")}
     except Exception as exc:
         logger.warning("Could not decode OAuth state: %s", exc)
         return None
@@ -257,6 +267,21 @@ def _build_auth_url(provider: str, user_id: str, platform: str) -> str:
     cfg = _get_provider_config(provider)
     client_id, _ = _get_client_credentials(provider)
     platform = platform if platform in ("web", "mobile") else "web"
+
+    if provider == "garmin":
+        from utils import garmin
+
+        nonce = secrets.token_hex(16)
+        state = _store_state("", user_id, provider, platform, nonce)
+        params = {
+            "client_id": client_id,
+            "redirect_uri": _redirect_uri(provider),
+            "response_type": "code",
+            "state": state,
+            "code_challenge": garmin.pkce_challenge(garmin.pkce_verifier(_STATE_SECRET, nonce)),
+            "code_challenge_method": "S256",
+        }
+        return cfg["auth_url"] + "?" + urlencode(params)
 
     state = _store_state("", user_id, provider, platform)  # stateless signed token
 
@@ -336,6 +361,8 @@ async def start_oauth(
     should be done once everyone has updated to a version that calls
     POST /connect/{provider}/start.
     """
+    if provider == "garmin":
+        raise HTTPException(status_code=403, detail="Please update The Gap to connect Garmin.")
     if os.getenv("ALLOW_LEGACY_CONNECT", "true").strip().lower() in ("0", "false", "no"):
         raise HTTPException(status_code=403, detail="Please update The Gap to connect a device.")
     await _refuse_if_full(provider, user_id)
@@ -379,6 +406,9 @@ async def oauth_callback(
     platform = state_data.get("platform", "web")
     cfg = _get_provider_config(provider)
     client_id, client_secret = _get_client_credentials(provider)
+
+    if provider == "garmin":
+        return await _garmin_callback(user_id, platform, code, state_data.get("nonce", ""))
 
     if provider == "withings":
         try:
@@ -552,12 +582,56 @@ async def oauth_callback(
     )
 
 
+async def _garmin_callback(user_id: str, platform: str, code: str, nonce: str) -> RedirectResponse:
+    """
+    Garmin sent the person back with a code. Exchange it (proving the PKCE secret), learn which Garmin account this is, check they
+    agreed to share health data, then save the login and the link. If they said no to health data the registration is taken back.
+    """
+    from routers import garmin as garmin_router
+    from utils import garmin
+
+    def fail(error: str) -> RedirectResponse:
+        return RedirectResponse(url=_final_redirect(platform, success=False, error=error, provider="garmin"))
+
+    if not nonce:
+        return fail("token_exchange_failed")
+    try:
+        token_data = await garmin.exchange_code(code, garmin.pkce_verifier(_STATE_SECRET, nonce), _redirect_uri("garmin"))
+        access = token_data.get("access_token", "")
+        garmin_user = await garmin.fetch_user_id(access)
+        permissions = await garmin.fetch_permissions(access)
+    except Exception as exc:
+        logger.error("Garmin sign-in failed: %s", exc)
+        return fail("token_exchange_failed")
+    if not garmin_user:
+        return fail("user_registration_failed")
+    if garmin.REQUIRED_PERMISSION not in permissions:
+        await garmin.delete_registration(access)
+        return fail("permission_missing")
+    try:
+        await _save_tokens_rest(user_id=user_id, provider="garmin", access_token=access, refresh_token=token_data.get("refresh_token", ""), expires_in=token_data.get("expires_in", 86400))
+        await garmin_router.link_user(user_id, garmin_user)
+    except Exception as exc:
+        logger.error("Saving a Garmin connection failed: %s", exc)
+        return fail("storage_failed")
+    logger.info("GARMIN_CONNECTED user=%s", user_id[:8])
+    return RedirectResponse(url=_final_redirect(platform, success=True, provider="garmin"))
+
+
 @router.delete("/{provider}")
 async def disconnect(provider: str, user_id: str = Depends(get_current_user_id)):
     """
     Disconnect a provider for the authenticated user. The saved login (access and refresh tokens) is deleted, not just
     switched off, so nothing that could read the person's data from that service is kept once they disconnect.
     """
+    if provider == "garmin":
+        # Garmin's licence: when someone disconnects here, their registration at Garmin is removed too, and their Garmin numbers go.
+        import asyncio
+
+        from routers import garmin as garmin_router
+
+        await garmin_router.disconnect_user(user_id, await asyncio.to_thread(get_user_tokens, user_id, "garmin"))
+
     url = _supabase_rest_url("user_connections")
     headers = _supabase_headers()
     headers["Prefer"] = "return=minimal"

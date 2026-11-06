@@ -44,8 +44,8 @@ router = APIRouter(prefix="/sources", tags=["sources"])
 # Only sources that really report that reading (checked against each sync file): Strava shares
 # workouts and training load only. Apple Health supplies weight and body fat when a scale or app writes them there.
 CAN_SUPPLY = {
-    "sleep": ["whoop", "oura", "withings", "polar", "apple_health"],
-    "recovery": ["whoop", "oura", "withings", "polar", "apple_health"],
+    "sleep": ["whoop", "oura", "withings", "polar", "garmin", "apple_health"],
+    "recovery": ["whoop", "oura", "withings", "polar", "garmin", "apple_health"],
     "activity": ["apple_health", "whoop", "oura"],
     "energy": ["apple_health", "whoop", "oura"],
     "body": ["manual", "withings", "apple_health"],

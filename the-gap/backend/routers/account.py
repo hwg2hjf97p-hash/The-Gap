@@ -49,7 +49,7 @@ USER_DATA_TABLES = TABLES + [
     "assistant_questions", "assistant_extractions",
     "workouts", "workout_templates", "provider_waitlist", "ai_usage_month", "food_log", "water_log", "nutrition_goals", "training_schedule",
     "health_profile", "weekly_suggestions", "user_consents", "consent_log",
-    "notification_prefs", "push_queue", "source_prefs", "feed_items", "weight_log", "saved_foods", "saved_meals", "quick_log_tokens", "headsups", "sync_state", "life_events", "training_state", "voice_commands",
+    "garmin_links", "garmin_daily", "notification_prefs", "push_queue", "source_prefs", "feed_items", "weight_log", "saved_foods", "saved_meals", "quick_log_tokens", "headsups", "sync_state", "life_events", "training_state", "voice_commands",
 ]
 
 # Credentials never belong in a data export, even the user's own.
@@ -105,6 +105,20 @@ async def delete_my_account(user_id: str = Depends(get_current_user_id)) -> JSON
     that requires the user to also disconnect via each provider's own
     account settings if they want to fully revoke access at the source.
     """
+    # Garmin's licence says a person's registration at Garmin must be removed when they delete their account. It needs the saved
+    # Garmin login, which is deleted with the rest below, so it has to come first. It never fails the deletion.
+    try:
+        import asyncio
+
+        from routers import garmin as garmin_router
+        from routers.connect import get_user_tokens
+
+        tokens = await asyncio.to_thread(get_user_tokens, user_id, "garmin")
+        if tokens:
+            await garmin_router.disconnect_user(user_id, tokens)
+    except Exception as exc:
+        logger.warning("Garmin clean-up during account deletion hit an error for %s: %s", user_id[:8], exc)
+
     deleted: dict[str, str] = {}
     async with httpx.AsyncClient(timeout=20) as client:
         for table in USER_DATA_TABLES:

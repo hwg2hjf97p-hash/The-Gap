@@ -30,6 +30,8 @@ from sync.whoop_sync import fetch_whoop_data, refresh_whoop_token
 from sync.oura_sync import fetch_oura_data, refresh_oura_token
 from sync.withings_sync import fetch_withings_data, refresh_withings_token
 from sync.polar_sync import fetch_polar_data
+from sync.garmin_sync import fetch_garmin_data
+from utils import garmin as garmin_utils
 from utils.data_cleaning import clean_dataframe
 from utils.experiments import check_card_experiments
 from utils.goal_catalog import GOAL_HISTORY_COLUMNS
@@ -382,6 +384,15 @@ async def _sync_user_unlocked(user_id: str, connections: list[dict]) -> dict:
                 if fetched is not None and not fetched.empty:
                     frames[provider] = fetched
                     providers_synced.append(provider)
+            elif provider == "garmin":
+                # Garmin sends its numbers to us (routers/garmin.py); nothing is fetched. Garmin's licence does not allow its data to feed
+                # an AI system without Garmin's written agreement, so they only reach the engine when GARMIN_AI_ALLOWED is switched on.
+                if garmin_utils.engine_allowed():
+                    fetched = await fetch_garmin_data(user_id)
+                    logger.info("FETCH_DONE provider=garmin rows=%d", len(fetched) if fetched is not None else 0)
+                    if fetched is not None and not fetched.empty:
+                        frames[provider] = fetched
+                        providers_synced.append(provider)
             elif provider == "polar":
                 # Polar's user_id was stashed in refresh_token at connect time
                 # (see routers/connect.py) since Polar tokens never expire and

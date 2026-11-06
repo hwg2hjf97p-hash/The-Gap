@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-PROVIDER_NAMES = {"google": "Google Calendar", "whoop": "Whoop", "oura": "Oura", "strava": "Strava", "withings": "Withings", "polar": "Polar"}
+PROVIDER_NAMES = {"google": "Google Calendar", "whoop": "Whoop", "oura": "Oura", "strava": "Strava", "withings": "Withings", "polar": "Polar", "garmin": "Garmin"}
 
 
 # Connections that are no longer offered. Any that still exist are switched off the next time they would sync.
