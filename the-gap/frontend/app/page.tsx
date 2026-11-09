@@ -39,6 +39,7 @@ export default function Home() {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "CausalMe",
+    legalName: SITE.companyName,
     url: SITE.url,
     logo: `${SITE.url}/garmin-logo-300.png`,
     email: SITE.email,

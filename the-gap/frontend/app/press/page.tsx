@@ -31,6 +31,7 @@ export default function PressPage() {
           <Card title="Platform">{SITE.platform}. Android is planned.</Card>
           <Card title="Status">{APP_LIVE ? "Available on the Apple App Store." : "Launching on the Apple App Store soon."}</Card>
           <Card title="Price">Free to download. First month free, then {SITE.priceMonthly} a month or {SITE.priceYearly} a year (AUD), auto-renewing, cancel any time.</Card>
+          <Card title="Company">{SITE.companyName} (ACN {SITE.companyAcn})</Card>
           <Card title="Based in">Queensland, Australia</Card>
           <Card title="Contact">{SITE.email}</Card>
         </div>

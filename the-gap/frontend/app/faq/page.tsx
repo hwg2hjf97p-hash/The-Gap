@@ -64,7 +64,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Who makes The Gap?",
-    a: "The Gap is made by CausalMe, a small Australian business based in Queensland. You can reach us at " + SITE.email + ".",
+    a: "The Gap is made by CausalMe, a small Australian company based in Queensland (" + SITE.companyName + ", ACN " + SITE.companyAcn + "). You can reach us at " + SITE.email + ".",
   },
 ];
 

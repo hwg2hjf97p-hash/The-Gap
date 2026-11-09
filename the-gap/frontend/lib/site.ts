@@ -9,6 +9,8 @@ export const APP_LIVE = false;
 export const SITE = {
   name: "The Gap",
   fullName: "The Gap app by CausalMe",
+  companyName: "CAUSALME PTY LTD",
+  companyAcn: "703 949 811",
   tagline: "Don't just know what. Know why.",
   url: "https://www.causalme.com",
   email: "hello@causalme.com",

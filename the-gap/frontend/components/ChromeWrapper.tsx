@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Logo } from "./Logo";
+import { SITE } from "../lib/site";
 
 const NAV = [
   { href: "/how-it-works", label: "How it works" },
@@ -50,7 +51,7 @@ export default function ChromeWrapper({ children }: { children: ReactNode }) {
           </ul>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p>
-              © 2026 The Gap app by CausalMe ·{" "}
+              © 2026 {SITE.companyName} (ACN {SITE.companyAcn}) · The Gap app by CausalMe ·{" "}
               <a href="mailto:hello@causalme.com" style={{ color: "#22d3ee" }}>
                 hello@causalme.com
               </a>
