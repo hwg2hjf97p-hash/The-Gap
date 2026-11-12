@@ -7,12 +7,12 @@ export function Logo({ size = 48, className }: { size?: number; className?: stri
     <svg width={size} height={size} viewBox="0 0 1024 1024" className={className} role="img" aria-label="The Gap logo">
       <defs>
         <linearGradient id="gapRing" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#f2b866" />
-          <stop offset="1" stopColor="#c8743a" />
+          <stop offset="0" stopColor="#7fd1bf" />
+          <stop offset="1" stopColor="#3a9c8b" />
         </linearGradient>
       </defs>
       <path d="M 772.8 442.1 A 270 270 0 1 1 581.9 251.2" fill="none" stroke="url(#gapRing)" strokeWidth="76" strokeLinecap="round" />
-      <circle cx="702.9" cy="321.1" r="42" fill="#f1ebe2" />
+      <circle cx="702.9" cy="321.1" r="42" fill="#e0a458" />
     </svg>
   );
 }
