@@ -59,7 +59,7 @@ export default function Home() {
               <Eyebrow>The Gap app by CausalMe</Eyebrow>
               <H1>Don&apos;t just know what. Know why.</H1>
               <P>
-                Your watch shows what happened. <strong style={{ color: "#f2f6f8" }}>The Gap</strong> helps you find what&apos;s behind it, using <strong style={{ color: "#f2f6f8" }}>your own data</strong>, not averages from other people. It&apos;s an iPhone app that works out which of your habits seem to move your sleep, HRV and recovery.
+                Your watch shows what happened. <strong style={{ color: "#f1ebe2" }}>The Gap</strong> helps you find what&apos;s behind it, using <strong style={{ color: "#f1ebe2" }}>your own data</strong>, not averages from other people. It&apos;s an iPhone app that works out which of your habits seem to move your sleep, HRV and recovery.
               </P>
               <GetTheApp />
             </div>
@@ -79,7 +79,7 @@ export default function Home() {
             <Card title="3. Discover">The Gap tests which habits seem to change your numbers, and shows you the ones that hold up in your own data.</Card>
           </div>
           <P muted>
-            <a href="/how-it-works" style={{ color: "#22d3ee", textDecoration: "underline" }}>
+            <a href="/how-it-works" style={{ color: "#e0a458", textDecoration: "underline" }}>
               Read how it works in plain English
             </a>
           </P>
@@ -118,7 +118,7 @@ export default function Home() {
           <P muted>
             Garmin data can come in through Apple Health today (some measures, such as HRV, may not). A direct Garmin connection is being built. Direct Whoop and Oura connections have limited places at launch; Apple Health always works.
           </P>
-          <p className="mt-3 text-xs leading-relaxed" style={{ color: "#6f7f8a" }}>
+          <p className="mt-3 text-xs leading-relaxed" style={{ color: "#857c71" }}>
             {TRADEMARK_NOTE}
           </p>
         </Wrap>
@@ -128,10 +128,10 @@ export default function Home() {
         <Wrap>
           <H2>Price</H2>
           <P>
-            Free to download, with <strong style={{ color: "#f2f6f8" }}>your first month free</strong>. After that it&apos;s {SITE.priceMonthly} a month or {SITE.priceYearly} a year (Australian dollars), as an auto-renewing subscription through the App Store. You can cancel any time in your Apple ID settings.
+            Free to download, with <strong style={{ color: "#f1ebe2" }}>your first month free</strong>. After that it&apos;s {SITE.priceMonthly} a month or {SITE.priceYearly} a year (Australian dollars), as an auto-renewing subscription through the App Store. You can cancel any time in your Apple ID settings.
           </P>
           <Note>
-            Questions? Read the <a href="/faq" style={{ color: "#22d3ee", textDecoration: "underline" }}>FAQ</a>, see <a href="/compare" style={{ color: "#22d3ee", textDecoration: "underline" }}>how The Gap compares with your wearable&apos;s own app</a>, or browse the <a href="/guides" style={{ color: "#22d3ee", textDecoration: "underline" }}>guides</a>.
+            Questions? Read the <a href="/faq" style={{ color: "#e0a458", textDecoration: "underline" }}>FAQ</a>, see <a href="/compare" style={{ color: "#e0a458", textDecoration: "underline" }}>how The Gap compares with your wearable&apos;s own app</a>, or browse the <a href="/guides" style={{ color: "#e0a458", textDecoration: "underline" }}>guides</a>.
           </Note>
           <GetTheApp compact />
         </Wrap>

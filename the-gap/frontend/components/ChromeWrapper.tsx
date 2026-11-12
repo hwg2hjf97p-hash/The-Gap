@@ -15,16 +15,16 @@ export default function ChromeWrapper({ children }: { children: ReactNode }) {
     <>
       <header
         className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md"
-        style={{ background: "rgba(11,16,21,0.72)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+        style={{ background: "rgba(22,19,15,0.72)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       >
         <nav className="mx-auto max-w-5xl flex items-center justify-between gap-4 px-5 py-3" aria-label="Main">
           <a href="/" className="flex items-center gap-2.5 shrink-0" aria-label="The Gap home">
             <Logo size={30} />
-            <span className="text-lg font-semibold tracking-tight" style={{ color: "#f2f6f8" }}>
+            <span className="text-lg font-semibold tracking-tight" style={{ color: "#f1ebe2" }}>
               The Gap
             </span>
           </a>
-          <ul className="hidden sm:flex items-center gap-5 text-sm" style={{ color: "#9aa8b2" }}>
+          <ul className="hidden sm:flex items-center gap-5 text-sm" style={{ color: "#a0968a" }}>
             {NAV.map((n) => (
               <li key={n.href}>
                 <a href={n.href} className="hover:text-white transition-colors">
@@ -38,7 +38,7 @@ export default function ChromeWrapper({ children }: { children: ReactNode }) {
 
       <main className="pt-14">{children}</main>
 
-      <footer className="mt-24 px-5 pb-12" style={{ color: "#9aa8b2" }}>
+      <footer className="mt-24 px-5 pb-12" style={{ color: "#a0968a" }}>
         <div className="mx-auto max-w-5xl pt-8 text-xs leading-relaxed" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
           <ul className="flex flex-wrap gap-x-5 gap-y-2 mb-4 sm:hidden">
             {NAV.map((n) => (
@@ -52,7 +52,7 @@ export default function ChromeWrapper({ children }: { children: ReactNode }) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p>
               © 2026 {SITE.companyName} (ACN {SITE.companyAcn}) · The Gap app by CausalMe ·{" "}
-              <a href="mailto:hello@causalme.com" style={{ color: "#22d3ee" }}>
+              <a href="mailto:hello@causalme.com" style={{ color: "#e0a458" }}>
                 hello@causalme.com
               </a>
             </p>

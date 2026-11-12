@@ -49,17 +49,17 @@ export default function AssistantPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "#0a1710" }}>
+    <div className="min-h-screen flex flex-col" style={{ background: "#16130f" }}>
       <div className="max-w-lg mx-auto w-full px-5 py-8 flex-1 flex flex-col">
         {messages.length === 0 ? (
           <>
-            <p className="text-xs font-mono tracking-widest mb-3" style={{ color: "#c9a84c" }}>
+            <p className="text-xs font-mono tracking-widest mb-3" style={{ color: "#e0a458" }}>
               YOUR PERSONAL SCIENTIST
             </p>
-            <h1 className="text-3xl font-bold mb-6" style={{ color: "#eef3f0" }}>
+            <h1 className="text-3xl font-bold mb-6" style={{ color: "#f1ebe2" }}>
               Ask anything
             </h1>
-            <p className="text-lg mb-8" style={{ color: "#eef3f0" }}>
+            <p className="text-lg mb-8" style={{ color: "#f1ebe2" }}>
               I&apos;ve been watching your data. Ask me something.
             </p>
             <div className="space-y-3 mb-8">
@@ -68,10 +68,10 @@ export default function AssistantPage() {
                   key={q}
                   onClick={() => ask(q)}
                   className="w-full flex items-center justify-between rounded-2xl px-5 py-4 text-left"
-                  style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                  style={{ background: "#211d18", border: "1px solid #2f2a23" }}
                 >
-                  <span style={{ color: "#eef3f0" }}>{q}</span>
-                  <span style={{ color: "#c9a84c" }}>→</span>
+                  <span style={{ color: "#f1ebe2" }}>{q}</span>
+                  <span style={{ color: "#e0a458" }}>→</span>
                 </button>
               ))}
             </div>
@@ -83,19 +83,19 @@ export default function AssistantPage() {
                 key={i}
                 className="rounded-2xl px-4 py-3 max-w-[85%]"
                 style={{
-                  background: m.role === "user" ? "#c9a84c" : "#132c1f",
-                  border: m.role === "assistant" ? "1px solid #1a3d2b" : "none",
+                  background: m.role === "user" ? "#e0a458" : "#211d18",
+                  border: m.role === "assistant" ? "1px solid #2f2a23" : "none",
                   marginLeft: m.role === "user" ? "auto" : 0,
                 }}
               >
-                <p className="text-sm" style={{ color: m.role === "user" ? "#0a1710" : "#eef3f0" }}>
+                <p className="text-sm" style={{ color: m.role === "user" ? "#16130f" : "#f1ebe2" }}>
                   {m.text}
                 </p>
               </div>
             ))}
             {asking && (
-              <div className="rounded-2xl px-4 py-3 max-w-[85%]" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
-                <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
+              <div className="rounded-2xl px-4 py-3 max-w-[85%]" style={{ background: "#211d18", border: "1px solid #2f2a23" }}>
+                <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: "#e0a458", borderTopColor: "transparent" }} />
               </div>
             )}
           </div>
@@ -104,7 +104,7 @@ export default function AssistantPage() {
         {/* Input */}
         <div
           className="flex items-center gap-3 rounded-2xl px-5 py-3 mt-auto"
-          style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+          style={{ background: "#211d18", border: "1px solid #2f2a23" }}
         >
           <input
             value={input}
@@ -112,15 +112,15 @@ export default function AssistantPage() {
             onKeyDown={(e) => e.key === "Enter" && ask(input)}
             placeholder="Ask about your patterns…"
             className="flex-1 bg-transparent outline-none text-sm"
-            style={{ color: "#eef3f0" }}
+            style={{ color: "#f1ebe2" }}
           />
           <button
             onClick={() => ask(input)}
             disabled={!input.trim() || asking}
             className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-40"
-            style={{ background: "#c9a84c" }}
+            style={{ background: "#e0a458" }}
           >
-            <ArrowUp size={18} color="#0a1710" />
+            <ArrowUp size={18} color="#16130f" />
           </button>
         </div>
       </div>

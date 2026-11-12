@@ -27,23 +27,23 @@ export default function LegalPage({
   return (
     <div className="min-h-screen px-5 py-16">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2" style={{ color: "#f2f6f8" }}>
+        <h1 className="text-3xl font-bold mb-2" style={{ color: "#f1ebe2" }}>
           {title}
         </h1>
-        <p className="text-sm mb-8" style={{ color: "#9aa8b2" }}>
+        <p className="text-sm mb-8" style={{ color: "#a0968a" }}>
           Last updated: {updated}
         </p>
 
         {intro?.map((p) => (
-          <p key={p} className="text-sm leading-relaxed mb-4" style={{ color: "#d3dde3" }}>
+          <p key={p} className="text-sm leading-relaxed mb-4" style={{ color: "#d8d0c4" }}>
             {p}
           </p>
         ))}
 
-        <div className="space-y-8 mt-8" style={{ color: "#d3dde3" }}>
+        <div className="space-y-8 mt-8" style={{ color: "#d8d0c4" }}>
           {sections.map((s, i) => (
             <section key={s.heading}>
-              <h2 className="text-lg font-semibold mb-2" style={{ color: "#22d3ee" }}>
+              <h2 className="text-lg font-semibold mb-2" style={{ color: "#e0a458" }}>
                 {i + 1}. {s.heading}
               </h2>
               {s.paragraphs?.map((p) => (
@@ -62,7 +62,7 @@ export default function LegalPage({
                 <div className="text-sm leading-relaxed space-y-2 mb-3">
                   {s.rows.map((r) => (
                     <p key={r.label}>
-                      <span style={{ color: "#f2f6f8", fontWeight: 600 }}>{r.label}.</span> {r.text}
+                      <span style={{ color: "#f1ebe2", fontWeight: 600 }}>{r.label}.</span> {r.text}
                     </p>
                   ))}
                 </div>
@@ -76,7 +76,7 @@ export default function LegalPage({
           ))}
         </div>
 
-        {footer && <div className="mt-12 text-sm" style={{ color: "#9aa8b2" }}>{footer}</div>}
+        {footer && <div className="mt-12 text-sm" style={{ color: "#a0968a" }}>{footer}</div>}
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ type Status = {
   error?: string;
 };
 
-const colors = { bg: "#0b1015", panel: "#121a21", border: "rgba(255,255,255,0.1)", text: "#f2f6f8", muted: "#9aa8b2", accent: "#22d3ee", good: "#34e07a", bad: "#ff6b81", warn: "#fbbf24" };
+const colors = { bg: "#16130f", panel: "#211d18", border: "rgba(255,255,255,0.1)", text: "#f1ebe2", muted: "#a0968a", accent: "#e0a458", good: "#34e07a", bad: "#ff6b81", warn: "#fbbf24" };
 const box: React.CSSProperties = { background: colors.panel, border: `1px solid ${colors.border}`, borderRadius: 14, padding: 18, marginBottom: 16 };
 const input: React.CSSProperties = { width: "100%", background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 14 };
 const button: React.CSSProperties = { background: "transparent", color: colors.accent, border: `1px solid ${colors.accent}`, borderRadius: 999, padding: "8px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" };

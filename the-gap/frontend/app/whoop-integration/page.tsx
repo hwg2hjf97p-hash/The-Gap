@@ -44,15 +44,15 @@ export default function WhoopIntegrationPage() {
   return (
     <div className="min-h-screen px-5 py-16">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold mb-3" style={{ color: "#f2f6f8" }}>
+        <h1 className="text-3xl font-bold mb-3" style={{ color: "#f1ebe2" }}>
           The Gap: WHOOP integration
         </h1>
-        <p className="text-sm leading-relaxed mb-3" style={{ color: "#d3dde3" }}>
+        <p className="text-sm leading-relaxed mb-3" style={{ color: "#d8d0c4" }}>
           The Gap is a wellness app for iPhone by Causal Me, an Australian sole trader. It helps a person find which of their own habits are associated with changes in their next-day recovery, HRV and sleep, by combining
           their own WHOOP data with what they log in the app and explaining each pattern in plain language. It is currently in private testing (TestFlight). These screenshots are from a real WHOOP member's account (the founder's).
         </p>
-        <p className="text-sm leading-relaxed mb-8" style={{ color: "#d3dde3" }}>
-          <strong style={{ color: "#f2f6f8" }}>WHOOP data used (scopes: read:recovery, read:sleep, read:cycles, offline):</strong> recovery score, HRV, resting heart rate; sleep duration, sleep stages and sleep performance; and, from the daily
+        <p className="text-sm leading-relaxed mb-8" style={{ color: "#d8d0c4" }}>
+          <strong style={{ color: "#f1ebe2" }}>WHOOP data used (scopes: read:recovery, read:sleep, read:cycles, offline):</strong> recovery score, HRV, resting heart rate; sleep duration, sleep stages and sleep performance; and, from the daily
           cycle, day strain, energy burned and step count where WHOOP returns it. We request nothing else. We store one summary value per day for each reading under the member's own account, never sell it, never use it
           for advertising and never show it to other members.
         </p>
@@ -68,10 +68,10 @@ export default function WhoopIntegrationPage() {
                 style={{ border: "1px solid rgba(255,255,255,0.12)", maxWidth: "100%", height: "auto" }}
               />
               <figcaption>
-                <h2 className="text-lg font-semibold mb-1" style={{ color: "#f2f6f8" }}>
+                <h2 className="text-lg font-semibold mb-1" style={{ color: "#f1ebe2" }}>
                   {s.title}
                 </h2>
-                <p className="text-sm leading-relaxed" style={{ color: "#d3dde3" }}>
+                <p className="text-sm leading-relaxed" style={{ color: "#d8d0c4" }}>
                   {s.text}
                 </p>
               </figcaption>
@@ -79,9 +79,9 @@ export default function WhoopIntegrationPage() {
           ))}
         </div>
 
-        <p className="text-sm leading-relaxed mt-12" style={{ color: "#9aa8b2" }}>
-          Privacy policy: <a href="/privacy" style={{ color: "#22d3ee" }}>app.causalme.com/privacy</a> · Terms: <a href="/terms" style={{ color: "#22d3ee" }}>app.causalme.com/terms</a> · Contact:{" "}
-          <a href="mailto:hello@causalme.com" style={{ color: "#22d3ee" }}>hello@causalme.com</a>
+        <p className="text-sm leading-relaxed mt-12" style={{ color: "#a0968a" }}>
+          Privacy policy: <a href="/privacy" style={{ color: "#e0a458" }}>app.causalme.com/privacy</a> · Terms: <a href="/terms" style={{ color: "#e0a458" }}>app.causalme.com/terms</a> · Contact:{" "}
+          <a href="mailto:hello@causalme.com" style={{ color: "#e0a458" }}>hello@causalme.com</a>
         </p>
       </div>
     </div>

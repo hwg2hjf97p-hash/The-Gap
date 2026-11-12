@@ -43,7 +43,7 @@ export default function HowItWorks() {
 
         <H2>3. It tests, not just compares</H2>
         <P>
-          Plenty of apps can show that two things move together. But two things moving together doesn&apos;t mean one causes the other: a stressful day might cause both a late dinner and a poor night&apos;s sleep. The Gap runs a statistical test on <strong style={{ color: "#f2f6f8" }}>your</strong> days that tries to separate the two. For each habit it asks whether it seems to change a reading, once other things going on (like the day of the week and how you slept the night before) are taken into account. It also corrects for the fact that if you test many patterns, some will look real by luck.
+          Plenty of apps can show that two things move together. But two things moving together doesn&apos;t mean one causes the other: a stressful day might cause both a late dinner and a poor night&apos;s sleep. The Gap runs a statistical test on <strong style={{ color: "#f1ebe2" }}>your</strong> days that tries to separate the two. For each habit it asks whether it seems to change a reading, once other things going on (like the day of the week and how you slept the night before) are taken into account. It also corrects for the fact that if you test many patterns, some will look real by luck.
         </P>
         <Note>
           This is analysis of everyday data, not a controlled experiment, so it can show what seems to affect you, not prove it. That&apos;s why every finding carries a confidence label.
@@ -52,9 +52,9 @@ export default function HowItWorks() {
         <H2>4. It tells you how sure it is</H2>
         <UL
           items={[
-            <><strong style={{ color: "#f2f6f8" }}>Early</strong>: a pattern is showing but hasn&apos;t held up for long enough yet. Worth watching, not worth acting on.</>,
-            <><strong style={{ color: "#f2f6f8" }}>Confirmed</strong>: it has held up and passed the checks. These open as discoveries.</>,
-            <><strong style={{ color: "#f2f6f8" }}>Tests running</strong>: patterns that need more days of data, with a counter showing how far along each one is.</>,
+            <><strong style={{ color: "#f1ebe2" }}>Early</strong>: a pattern is showing but hasn&apos;t held up for long enough yet. Worth watching, not worth acting on.</>,
+            <><strong style={{ color: "#f1ebe2" }}>Confirmed</strong>: it has held up and passed the checks. These open as discoveries.</>,
+            <><strong style={{ color: "#f1ebe2" }}>Tests running</strong>: patterns that need more days of data, with a counter showing how far along each one is.</>,
           ]}
         />
 
@@ -74,7 +74,7 @@ export default function HowItWorks() {
             "Your data isn’t sold, and there is no advertising.",
             "AI features (such as Gappy, the in-app assistant, and the reading of your written notes) are optional and can be switched off. The statistics themselves are done by The Gap’s own engine, not by AI.",
             "You can export or permanently delete your data from inside the app, and disconnect any source at any time.",
-            <>See the <a href="/privacy" style={{ color: "#22d3ee", textDecoration: "underline" }}>privacy policy</a> for exactly what is collected and who handles it.</>,
+            <>See the <a href="/privacy" style={{ color: "#e0a458", textDecoration: "underline" }}>privacy policy</a> for exactly what is collected and who handles it.</>,
           ]}
         />
 

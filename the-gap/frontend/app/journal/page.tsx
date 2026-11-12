@@ -126,27 +126,27 @@ export default function JournalPage() {
   const remaining = MAX_LENGTH - text.length;
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a1710" }}>
+    <div className="min-h-screen" style={{ background: "#16130f" }}>
       <div className="max-w-lg mx-auto px-5 py-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
-          <Link href="/results/live" className="text-sm" style={{ color: "#a2bcaf" }}>
+          <Link href="/results/live" className="text-sm" style={{ color: "#a0968a" }}>
             ← Back
           </Link>
           {streak > 0 && (
             <div
               className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-mono"
-              style={{ background: "#132c1f", color: "#c9a84c", border: "1px solid #1a3d2b" }}
+              style={{ background: "#211d18", color: "#e0a458", border: "1px solid #2f2a23" }}
             >
               🔥 {streak} day{streak !== 1 ? "s" : ""}
             </div>
           )}
         </div>
 
-        <h1 className="text-3xl font-bold tracking-tight mb-2" style={{ color: "#eef3f0" }}>
+        <h1 className="text-3xl font-bold tracking-tight mb-2" style={{ color: "#f1ebe2" }}>
           Quick Entry
         </h1>
-        <p className="text-sm mb-8" style={{ color: "#a2bcaf" }}>
+        <p className="text-sm mb-8" style={{ color: "#a0968a" }}>
           Not a journal — just moments. Log the small stuff as it happens; a few
           words is plenty. The more you log, the more The Gap has to work with.
         </p>
@@ -154,7 +154,7 @@ export default function JournalPage() {
         {/* Input box */}
         <div
           className="rounded-2xl p-4 mb-6"
-          style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+          style={{ background: "#211d18", border: "1px solid #2f2a23" }}
         >
           <textarea
             ref={inputRef}
@@ -164,18 +164,18 @@ export default function JournalPage() {
             placeholder={prompt}
             rows={2}
             className="w-full bg-transparent resize-none outline-none text-base"
-            style={{ color: "#eef3f0" }}
+            style={{ color: "#f1ebe2" }}
             autoFocus
           />
           <div className="flex items-center justify-between mt-2">
-            <span className="text-xs" style={{ color: remaining < 30 ? "#f87171" : "#a2bcaf" }}>
+            <span className="text-xs" style={{ color: remaining < 30 ? "#f87171" : "#a0968a" }}>
               {remaining} left
             </span>
             <button
               onClick={handleSend}
               disabled={!text.trim() || sending}
               className="px-5 py-2 rounded-xl font-semibold text-sm disabled:opacity-40"
-              style={{ background: "#34d399", color: "#0a1710" }}
+              style={{ background: "#e0a458", color: "#16130f" }}
             >
               {sending ? "Logging…" : "Log it →"}
             </button>
@@ -183,19 +183,19 @@ export default function JournalPage() {
         </div>
 
         {justLogged && (
-          <p className="text-xs text-center mb-6" style={{ color: "#34d399" }}>
+          <p className="text-xs text-center mb-6" style={{ color: "#e0a458" }}>
             Got it — logged. Anything else on your mind?
           </p>
         )}
 
         {/* Today's entries */}
         <div>
-          <h3 className="text-xs font-semibold mb-3 tracking-wide" style={{ color: "#a2bcaf" }}>
+          <h3 className="text-xs font-semibold mb-3 tracking-wide" style={{ color: "#a0968a" }}>
             TODAY — {entries.length} moment{entries.length !== 1 ? "s" : ""} logged
           </h3>
 
           {entries.length === 0 ? (
-            <p className="text-sm" style={{ color: "#5c7568" }}>
+            <p className="text-sm" style={{ color: "#857c71" }}>
               Nothing logged yet today. First one's the hardest — just a sentence is enough.
             </p>
           ) : (
@@ -204,12 +204,12 @@ export default function JournalPage() {
                 <div
                   key={e.id}
                   className="rounded-xl px-4 py-3 flex items-start justify-between gap-3"
-                  style={{ background: "#0f1f17", border: "1px solid #1a3d2b" }}
+                  style={{ background: "#1b1712", border: "1px solid #2f2a23" }}
                 >
-                  <p className="text-sm flex-1" style={{ color: "#eef3f0" }}>
+                  <p className="text-sm flex-1" style={{ color: "#f1ebe2" }}>
                     {e.entry_text}
                   </p>
-                  <span className="text-xs flex-shrink-0" style={{ color: "#5c7568" }}>
+                  <span className="text-xs flex-shrink-0" style={{ color: "#857c71" }}>
                     {timeAgo(e.created_at)}
                   </span>
                 </div>
@@ -224,7 +224,7 @@ export default function JournalPage() {
             <button
               onClick={() => setShowExtracted((s) => !s)}
               className="w-full flex items-center justify-between text-xs font-semibold mb-3 tracking-wide"
-              style={{ color: "#a2bcaf" }}
+              style={{ color: "#a0968a" }}
             >
               <span>WHAT CLAUDE EXTRACTED ({extracted.length} day{extracted.length !== 1 ? "s" : ""})</span>
               <span>{showExtracted ? "▲" : "▼"}</span>
@@ -245,10 +245,10 @@ export default function JournalPage() {
                     <div
                       key={d.entry_date}
                       className="rounded-xl px-4 py-3"
-                      style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                      style={{ background: "#211d18", border: "1px solid #2f2a23" }}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-mono" style={{ color: "#a2bcaf" }}>
+                        <span className="text-xs font-mono" style={{ color: "#a0968a" }}>
                           {d.entry_date} · {d.entry_count} entr{d.entry_count !== 1 ? "ies" : "y"}
                         </span>
                         {d.mood_score !== null && (
@@ -257,16 +257,16 @@ export default function JournalPage() {
                             style={{
                               background:
                                 d.mood_score > 0.15
-                                  ? "rgba(52,211,153,0.1)"
+                                  ? "rgba(224,164,88,0.1)"
                                   : d.mood_score < -0.15
                                   ? "rgba(248,113,113,0.1)"
-                                  : "rgba(162,188,175,0.1)",
+                                  : "rgba(160,150,138,0.1)",
                               color:
                                 d.mood_score > 0.15
-                                  ? "#34d399"
+                                  ? "#e0a458"
                                   : d.mood_score < -0.15
                                   ? "#f87171"
-                                  : "#a2bcaf",
+                                  : "#a0968a",
                             }}
                           >
                             mood {d.mood_score > 0 ? "+" : ""}
@@ -274,7 +274,7 @@ export default function JournalPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm mb-2" style={{ color: "#eef3f0" }}>
+                      <p className="text-sm mb-2" style={{ color: "#f1ebe2" }}>
                         {d.summary || "—"}
                       </p>
                       {flags.length > 0 && (
@@ -283,7 +283,7 @@ export default function JournalPage() {
                             <span
                               key={f}
                               className="text-xs px-2 py-0.5 rounded-full"
-                              style={{ background: "rgba(201,168,76,0.1)", color: "#c9a84c" }}
+                              style={{ background: "rgba(224,164,88,0.1)", color: "#e0a458" }}
                             >
                               {f}
                             </span>

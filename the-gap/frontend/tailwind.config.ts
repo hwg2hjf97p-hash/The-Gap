@@ -10,13 +10,13 @@ const config: Config = {
     extend: {
       colors: {
         // The Gap design palette
-        bg:       "#0a1710",
-        surface:  "#132c1f",
-        surface2: "#1a3d2b",
-        gold:     "#c9a84c",
-        text:     "#eef3f0",
-        muted:    "#a2bcaf",
-        mint:     "#34d399",
+        bg:       "#16130f",
+        surface:  "#211d18",
+        surface2: "#2f2a23",
+        gold:     "#e0a458",
+        text:     "#f1ebe2",
+        muted:    "#a0968a",
+        mint:     "#e0a458",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

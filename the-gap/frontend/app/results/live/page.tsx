@@ -137,53 +137,53 @@ function MetricInfoModal({ metric, value, unit, onClose }: { metric: SnapshotMet
     >
       <div
         className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] overflow-y-auto"
-        style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+        style={{ background: "#211d18", border: "1px solid #2f2a23" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold" style={{ color: "#eef3f0" }}>
+          <h3 className="text-xl font-bold" style={{ color: "#f1ebe2" }}>
             {info.label}
           </h3>
-          <button onClick={onClose} className="text-2xl leading-none" style={{ color: "#a2bcaf" }}>
+          <button onClick={onClose} className="text-2xl leading-none" style={{ color: "#a0968a" }}>
             ×
           </button>
         </div>
 
         <div className="flex items-baseline gap-2 mb-6">
-          <span className="text-4xl font-bold" style={{ color: "#eef3f0" }}>
+          <span className="text-4xl font-bold" style={{ color: "#f1ebe2" }}>
             {value}
           </span>
-          <span className="text-sm" style={{ color: "#a2bcaf" }}>
+          <span className="text-sm" style={{ color: "#a0968a" }}>
             {unit} · your latest reading
           </span>
         </div>
 
         <div className="mb-5">
-          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#c9a84c" }}>
+          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#e0a458" }}>
             WHAT IT IS
           </p>
-          <p className="text-sm" style={{ color: "#eef3f0" }}>
+          <p className="text-sm" style={{ color: "#f1ebe2" }}>
             {info.explanation}
           </p>
         </div>
 
         <div className="mb-5">
-          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#c9a84c" }}>
+          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#e0a458" }}>
             WHY IT MATTERS
           </p>
-          <p className="text-sm" style={{ color: "#eef3f0" }}>
+          <p className="text-sm" style={{ color: "#f1ebe2" }}>
             {info.whyItMatters}
           </p>
         </div>
 
-        <div className="rounded-2xl p-4" style={{ background: "#0f1f17", border: "1px solid #1a3d2b" }}>
-          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#a2bcaf" }}>
+        <div className="rounded-2xl p-4" style={{ background: "#1b1712", border: "1px solid #2f2a23" }}>
+          <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "#a0968a" }}>
             {info.comparisonLabel.toUpperCase()}
           </p>
-          <p className="text-sm mb-2" style={{ color: "#eef3f0" }}>
+          <p className="text-sm mb-2" style={{ color: "#f1ebe2" }}>
             {info.comparisonText}
           </p>
-          <p className="text-xs" style={{ color: "#5c7568" }}>
+          <p className="text-xs" style={{ color: "#857c71" }}>
             {info.goodDirection} — but your own trend over time matters more than any single reading.
           </p>
         </div>
@@ -302,35 +302,35 @@ function HomeContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a1710" }}>
-        <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#16130f" }}>
+        <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#e0a458", borderTopColor: "transparent" }} />
       </div>
     );
   }
 
   if (!hasAnyConnection) {
     return (
-      <div className="min-h-screen px-5 py-10" style={{ background: "#0a1710" }}>
+      <div className="min-h-screen px-5 py-10" style={{ background: "#16130f" }}>
         <div className="max-w-lg mx-auto text-center pt-16">
-          <p className="text-xs font-mono tracking-widest mb-3" style={{ color: "#c9a84c" }}>
+          <p className="text-xs font-mono tracking-widest mb-3" style={{ color: "#e0a458" }}>
             PERSONAL CAUSAL INTELLIGENCE
           </p>
-          <h1 className="text-3xl font-bold mb-3" style={{ color: "#eef3f0" }}>
+          <h1 className="text-3xl font-bold mb-3" style={{ color: "#f1ebe2" }}>
             Let&apos;s connect your first data source
           </h1>
-          <p className="text-sm mb-8" style={{ color: "#a2bcaf" }}>
+          <p className="text-sm mb-8" style={{ color: "#a0968a" }}>
             Your dashboard fills in automatically once something&apos;s connected —
             Whoop, Oura, or your calendar all work.
           </p>
           <Link
             href="/settings"
             className="inline-block px-8 py-3 rounded-xl font-semibold text-sm"
-            style={{ background: "#34d399", color: "#0a1710" }}
+            style={{ background: "#e0a458", color: "#16130f" }}
           >
             Connect a data source →
           </Link>
           <p className="text-sm mt-4">
-            <a href="/upload" style={{ color: "#c9a84c" }}>
+            <a href="/upload" style={{ color: "#e0a458" }}>
               Or analyse a file you already have →
             </a>
           </p>
@@ -345,11 +345,11 @@ function HomeContent() {
   const rawSignals = results?.snapshot?.raw_signals ?? [];
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a1710" }}>
+    <div className="min-h-screen" style={{ background: "#16130f" }}>
       {toast && (
         <div
           className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm max-w-[90%] text-center"
-          style={{ background: "#132c1f", border: "1px solid #34d399", color: "#eef3f0" }}
+          style={{ background: "#211d18", border: "1px solid #e0a458", color: "#f1ebe2" }}
         >
           {toast}
         </div>
@@ -358,10 +358,10 @@ function HomeContent() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-sm" style={{ color: "#a2bcaf" }}>
+            <p className="text-sm" style={{ color: "#a0968a" }}>
               {greeting()},
             </p>
-            <h1 className="text-3xl font-bold" style={{ color: "#eef3f0" }}>
+            <h1 className="text-3xl font-bold" style={{ color: "#f1ebe2" }}>
               {displayName || "there"}
             </h1>
           </div>
@@ -370,54 +370,54 @@ function HomeContent() {
               onClick={handleManualRefresh}
               disabled={refreshing}
               className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+              style={{ background: "#211d18", border: "1px solid #2f2a23" }}
               title="Refresh insights"
             >
-              <RefreshCw size={18} color="#a2bcaf" className={refreshing ? "animate-spin" : ""} />
+              <RefreshCw size={18} color="#a0968a" className={refreshing ? "animate-spin" : ""} />
             </button>
             <Link
               href="/settings"
               className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+              style={{ background: "#211d18", border: "1px solid #2f2a23" }}
             >
-              <SettingsIcon size={20} color="#a2bcaf" />
+              <SettingsIcon size={20} color="#a0968a" />
             </Link>
           </div>
         </div>
 
         {refreshing && (
-          <p className="text-xs text-center mb-4" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs text-center mb-4" style={{ color: "#a0968a" }}>
             Running your analysis — this can take up to a minute…
           </p>
         )}
 
         {/* Weekly stats strip */}
-        <div className="rounded-2xl p-5 mb-6" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
-          <p className="text-xs font-mono tracking-widest mb-4" style={{ color: "#c9a84c" }}>
+        <div className="rounded-2xl p-5 mb-6" style={{ background: "#211d18", border: "1px solid #2f2a23" }}>
+          <p className="text-xs font-mono tracking-widest mb-4" style={{ color: "#e0a458" }}>
             THIS WEEK
           </p>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
-              <p className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+              <p className="text-2xl font-bold" style={{ color: "#f1ebe2" }}>
                 {experiments.length}
               </p>
-              <p className="text-xs mt-1" style={{ color: "#a2bcaf" }}>
+              <p className="text-xs mt-1" style={{ color: "#a0968a" }}>
                 Experiments running
               </p>
             </div>
-            <div style={{ borderLeft: "1px solid #1a3d2b", borderRight: "1px solid #1a3d2b" }}>
-              <p className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+            <div style={{ borderLeft: "1px solid #2f2a23", borderRight: "1px solid #2f2a23" }}>
+              <p className="text-2xl font-bold" style={{ color: "#f1ebe2" }}>
                 {insightsCount}
               </p>
-              <p className="text-xs mt-1" style={{ color: "#a2bcaf" }}>
+              <p className="text-xs mt-1" style={{ color: "#a0968a" }}>
                 Insights discovered
               </p>
             </div>
             <div>
-              <p className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+              <p className="text-2xl font-bold" style={{ color: "#f1ebe2" }}>
                 {weekCount}
               </p>
-              <p className="text-xs mt-1" style={{ color: "#a2bcaf" }}>
+              <p className="text-xs mt-1" style={{ color: "#a0968a" }}>
                 Quick entries logged
               </p>
             </div>
@@ -429,7 +429,7 @@ function HomeContent() {
           <div className="grid grid-cols-2 gap-3 mb-6">
             {metrics.map((m) => {
               const color =
-                m.is_improving === null ? "#c9a84c" : m.is_improving ? "#34d399" : "#f87171";
+                m.is_improving === null ? "#e0a458" : m.is_improving ? "#e0a458" : "#f87171";
               const hasInfo = !!METRIC_INFO[m.metric];
               return (
                 <button
@@ -437,22 +437,22 @@ function HomeContent() {
                   onClick={() => hasInfo && setSelectedMetric(m)}
                   className="rounded-2xl p-4 text-left"
                   style={{
-                    background: "#132c1f",
-                    border: "1px solid #1a3d2b",
+                    background: "#211d18",
+                    border: "1px solid #2f2a23",
                     cursor: hasInfo ? "pointer" : "default",
                   }}
                 >
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-2xl font-bold" style={{ color: "#eef3f0" }}>
+                    <span className="text-2xl font-bold" style={{ color: "#f1ebe2" }}>
                       {m.value}
                     </span>
-                    <span className="text-xs" style={{ color: "#a2bcaf" }}>
+                    <span className="text-xs" style={{ color: "#a0968a" }}>
                       {m.unit}
                     </span>
                   </div>
-                  <p className="text-xs mb-2" style={{ color: "#a2bcaf" }}>
+                  <p className="text-xs mb-2" style={{ color: "#a0968a" }}>
                     {m.label}
-                    {hasInfo && <span style={{ color: "#5c7568" }}> · tap for details</span>}
+                    {hasInfo && <span style={{ color: "#857c71" }}> · tap for details</span>}
                   </p>
                   <Sparkline values={m.recent} color={color} />
                 </button>
@@ -465,18 +465,18 @@ function HomeContent() {
         {rawSignals.length > 0 && (
           <div
             className="rounded-2xl p-4 mb-6"
-            style={{ background: "#0f1f17", border: "1px dashed #2a4d3a" }}
+            style={{ background: "#1b1712", border: "1px dashed #2a4d3a" }}
           >
-            <p className="text-xs mb-3" style={{ color: "#a2bcaf" }}>
+            <p className="text-xs mb-3" style={{ color: "#a0968a" }}>
               Raw patterns we&apos;re watching — not yet causally tested (needs 30+ days for that)
             </p>
             <div className="space-y-2">
               {rawSignals.map((s, i) => (
                 <div key={i} className="flex items-center justify-between text-sm">
-                  <span style={{ color: "#eef3f0" }}>{s.description}</span>
+                  <span style={{ color: "#f1ebe2" }}>{s.description}</span>
                   <span
                     className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-2"
-                    style={{ background: "rgba(201,168,76,0.1)", color: "#c9a84c" }}
+                    style={{ background: "rgba(224,164,88,0.1)", color: "#e0a458" }}
                   >
                     {s.strength_label} {s.direction === "positive" ? "+" : "−"}
                     {Math.abs(s.r)} (n={s.n})
@@ -491,30 +491,30 @@ function HomeContent() {
         <Link
           href="/journal"
           className="flex items-center gap-4 rounded-2xl p-5 mb-8"
-          style={{ background: "#c9a84c" }}
+          style={{ background: "#e0a458" }}
         >
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#0a1710" }}>
-            <PenLine size={20} color="#c9a84c" />
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#16130f" }}>
+            <PenLine size={20} color="#e0a458" />
           </div>
           <div className="flex-1">
-            <p className="font-semibold" style={{ color: "#0a1710" }}>
+            <p className="font-semibold" style={{ color: "#16130f" }}>
               Quick Entry
             </p>
             <p className="text-sm" style={{ color: "#2a2410" }}>
               Log a moment — it feeds straight into your insights
             </p>
           </div>
-          <span className="text-xl" style={{ color: "#0a1710" }}>→</span>
+          <span className="text-xl" style={{ color: "#16130f" }}>→</span>
         </Link>
 
         {/* Running on you */}
         {experiments.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold" style={{ color: "#eef3f0" }}>
+              <h3 className="font-semibold" style={{ color: "#f1ebe2" }}>
                 Running on you
               </h3>
-              <Link href="/insights" className="text-sm font-medium" style={{ color: "#c9a84c" }}>
+              <Link href="/insights" className="text-sm font-medium" style={{ color: "#e0a458" }}>
                 View all
               </Link>
             </div>
@@ -525,18 +525,18 @@ function HomeContent() {
                   <div
                     key={e.id}
                     className="rounded-2xl p-4"
-                    style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+                    style={{ background: "#211d18", border: "1px solid #2f2a23" }}
                   >
-                    <p className="font-medium mb-3" style={{ color: "#eef3f0" }}>
+                    <p className="font-medium mb-3" style={{ color: "#f1ebe2" }}>
                       {e.treatment_label} → {e.outcome_label}
                     </p>
-                    <div className="w-full rounded-full h-1.5 mb-2" style={{ background: "#1a3d2b" }}>
+                    <div className="w-full rounded-full h-1.5 mb-2" style={{ background: "#2f2a23" }}>
                       <div
                         className="h-1.5 rounded-full"
-                        style={{ width: `${pct}%`, background: "#c9a84c" }}
+                        style={{ width: `${pct}%`, background: "#e0a458" }}
                       />
                     </div>
-                    <div className="flex items-center justify-between text-xs" style={{ color: "#a2bcaf" }}>
+                    <div className="flex items-center justify-between text-xs" style={{ color: "#a0968a" }}>
                       <span>Day {e.current} of {e.required}</span>
                       <span>Gathering data</span>
                     </div>
@@ -564,8 +564,8 @@ export default function HomeDashboard() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a1710" }}>
-          <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
+        <div className="min-h-screen flex items-center justify-center" style={{ background: "#16130f" }}>
+          <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#e0a458", borderTopColor: "transparent" }} />
         </div>
       }
     >

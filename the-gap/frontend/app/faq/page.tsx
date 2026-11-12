@@ -86,14 +86,14 @@ export default function FaqPage() {
         <div className="mt-8 space-y-7">
           {FAQ.map((f) => (
             <section key={f.q}>
-              <h2 className="text-lg font-semibold" style={{ color: "#f2f6f8" }}>
+              <h2 className="text-lg font-semibold" style={{ color: "#f1ebe2" }}>
                 {f.q}
               </h2>
               <P>{f.a}</P>
             </section>
           ))}
         </div>
-        <p className="mt-8 text-xs leading-relaxed" style={{ color: "#6f7f8a" }}>
+        <p className="mt-8 text-xs leading-relaxed" style={{ color: "#857c71" }}>
           {TRADEMARK_NOTE}
         </p>
         <GetTheApp />

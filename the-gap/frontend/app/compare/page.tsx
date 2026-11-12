@@ -32,18 +32,18 @@ export default function ComparePage() {
         </div>
 
         <div className="mt-8 overflow-x-auto rounded-2xl" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
-          <table className="w-full text-sm" style={{ color: "#d3dde3" }}>
+          <table className="w-full text-sm" style={{ color: "#d8d0c4" }}>
             <thead>
               <tr style={{ background: "rgba(255,255,255,0.06)" }}>
-                <th className="text-left p-3 font-semibold" style={{ color: "#f2f6f8" }}></th>
-                <th className="text-left p-3 font-semibold" style={{ color: "#f2f6f8" }}>A wearable&apos;s own app</th>
-                <th className="text-left p-3 font-semibold" style={{ color: "#22d3ee" }}>The Gap</th>
+                <th className="text-left p-3 font-semibold" style={{ color: "#f1ebe2" }}></th>
+                <th className="text-left p-3 font-semibold" style={{ color: "#f1ebe2" }}>A wearable&apos;s own app</th>
+                <th className="text-left p-3 font-semibold" style={{ color: "#e0a458" }}>The Gap</th>
               </tr>
             </thead>
             <tbody>
               {ROWS.map((r) => (
                 <tr key={r.label} style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  <td className="p-3 align-top font-semibold" style={{ color: "#f2f6f8" }}>{r.label}</td>
+                  <td className="p-3 align-top font-semibold" style={{ color: "#f1ebe2" }}>{r.label}</td>
                   <td className="p-3 align-top">{r.wearable}</td>
                   <td className="p-3 align-top">{r.gap}</td>
                 </tr>
@@ -51,7 +51,7 @@ export default function ComparePage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs" style={{ color: "#6f7f8a" }}>
+        <p className="mt-3 text-xs" style={{ color: "#857c71" }}>
           The left column describes wearable apps in general. Features vary from app to app and change over time, so check your own app for what it offers.
         </p>
 

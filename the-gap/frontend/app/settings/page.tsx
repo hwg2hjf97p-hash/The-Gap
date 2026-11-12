@@ -104,24 +104,24 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a1710" }}>
+    <div className="min-h-screen" style={{ background: "#16130f" }}>
       <div className="max-w-lg mx-auto px-5 py-8">
         <div className="flex items-center gap-3 mb-8">
           <Link href="/results/live">
-            <ArrowLeft size={22} color="#a2bcaf" />
+            <ArrowLeft size={22} color="#a0968a" />
           </Link>
-          <h1 className="text-xl font-bold" style={{ color: "#eef3f0" }}>
+          <h1 className="text-xl font-bold" style={{ color: "#f1ebe2" }}>
             Settings
           </h1>
         </div>
 
         {/* Sync Devices */}
         <div className="mb-8">
-          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a0968a" }}>
             SYNC DEVICES
           </p>
-          <div className="rounded-2xl p-4" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
-            <p className="text-xs mb-2" style={{ color: "#a2bcaf" }}>
+          <div className="rounded-2xl p-4" style={{ background: "#211d18", border: "1px solid #2f2a23" }}>
+            <p className="text-xs mb-2" style={{ color: "#a0968a" }}>
               This device&apos;s ID — copy this into the mobile app&apos;s Settings to make it use this same account, instead of starting a separate one.
             </p>
             <div className="flex gap-2 mb-3">
@@ -129,7 +129,7 @@ export default function SettingsPage() {
                 value={userId}
                 readOnly
                 className="flex-1 px-3 py-2 rounded-lg bg-transparent outline-none text-xs font-mono"
-                style={{ color: "#eef3f0", border: "1px solid #1a3d2b" }}
+                style={{ color: "#f1ebe2", border: "1px solid #2f2a23" }}
               />
               <button
                 onClick={() => {
@@ -138,12 +138,12 @@ export default function SettingsPage() {
                   setTimeout(() => setCopied(false), 1500);
                 }}
                 className="px-4 py-2 rounded-lg text-sm font-semibold"
-                style={{ background: "#34d399", color: "#0a1710" }}
+                style={{ background: "#e0a458", color: "#16130f" }}
               >
                 {copied ? "Copied!" : "Copy"}
               </button>
             </div>
-            <p className="text-xs" style={{ color: "#5c7568" }}>
+            <p className="text-xs" style={{ color: "#857c71" }}>
               No real login system yet — this is a stopgap for keeping one identity across your devices. Anyone with this ID could access this account&apos;s data, so don&apos;t share it publicly.
             </p>
           </div>
@@ -151,11 +151,11 @@ export default function SettingsPage() {
 
         {/* Profile */}
         <div className="mb-8">
-          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a0968a" }}>
             PROFILE
           </p>
-          <div className="rounded-2xl p-4" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
-            <label className="text-xs mb-2 block" style={{ color: "#a2bcaf" }}>
+          <div className="rounded-2xl p-4" style={{ background: "#211d18", border: "1px solid #2f2a23" }}>
+            <label className="text-xs mb-2 block" style={{ color: "#a0968a" }}>
               What should we call you?
             </label>
             <div className="flex gap-2">
@@ -164,12 +164,12 @@ export default function SettingsPage() {
                 onChange={(e) => setNameInput(e.target.value)}
                 placeholder="Your name"
                 className="flex-1 px-3 py-2 rounded-lg bg-transparent outline-none text-sm"
-                style={{ color: "#eef3f0", border: "1px solid #1a3d2b" }}
+                style={{ color: "#f1ebe2", border: "1px solid #2f2a23" }}
               />
               <button
                 onClick={saveName}
                 className="px-4 py-2 rounded-lg text-sm font-semibold"
-                style={{ background: "#34d399", color: "#0a1710" }}
+                style={{ background: "#e0a458", color: "#16130f" }}
               >
                 Save
               </button>
@@ -179,7 +179,7 @@ export default function SettingsPage() {
 
         {/* Data sources */}
         <div className="mb-8">
-          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a0968a" }}>
             DATA SOURCES
           </p>
           <div className="space-y-3">
@@ -190,21 +190,21 @@ export default function SettingsPage() {
                   key={p.id}
                   className="rounded-2xl p-4 flex items-center gap-4"
                   style={{
-                    background: isConnected ? "#132c1f" : "#0f1f17",
-                    border: `1px solid ${isConnected ? "#34d399" : "#1a3d2b"}`,
+                    background: isConnected ? "#211d18" : "#1b1712",
+                    border: `1px solid ${isConnected ? "#e0a458" : "#2f2a23"}`,
                   }}
                 >
                   <div
                     className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: "#0a1710", border: `1px solid ${p.color}33` }}
+                    style={{ background: "#16130f", border: `1px solid ${p.color}33` }}
                   >
                     <p.Icon size={22} color={p.color} />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium" style={{ color: "#eef3f0" }}>
+                    <p className="font-medium" style={{ color: "#f1ebe2" }}>
                       {p.name}
                     </p>
-                    <p className="text-xs" style={{ color: isConnected ? "#34d399" : "#5c7568" }}>
+                    <p className="text-xs" style={{ color: isConnected ? "#e0a458" : "#857c71" }}>
                       {isConnected ? "Connected" : "Not connected"}
                     </p>
                   </div>
@@ -221,7 +221,7 @@ export default function SettingsPage() {
                     <button
                       onClick={() => handleConnect(p.id)}
                       className="text-xs px-3 py-2 rounded-lg font-semibold"
-                      style={{ background: "#34d399", color: "#0a1710" }}
+                      style={{ background: "#e0a458", color: "#16130f" }}
                     >
                       Connect
                     </button>
@@ -234,21 +234,21 @@ export default function SettingsPage() {
 
         {/* Data & Privacy */}
         <div className="mb-8">
-          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a0968a" }}>
             DATA & PRIVACY
           </p>
-          <div className="rounded-2xl overflow-hidden" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ background: "#211d18", border: "1px solid #2f2a23" }}>
             <button
               onClick={handleExportData}
               disabled={exporting}
               className="w-full flex items-center gap-3 p-4 text-left"
-              style={{ borderBottom: "1px solid #1a3d2b" }}
+              style={{ borderBottom: "1px solid #2f2a23" }}
             >
-              <Download size={18} color="#c9a84c" />
-              <span className="text-sm flex-1" style={{ color: "#eef3f0" }}>
+              <Download size={18} color="#e0a458" />
+              <span className="text-sm flex-1" style={{ color: "#f1ebe2" }}>
                 {exporting ? "Preparing your export…" : "Export my data"}
               </span>
-              <ChevronRight size={16} color="#5c7568" />
+              <ChevronRight size={16} color="#857c71" />
             </button>
             <button
               onClick={() => setShowDeleteConfirm(true)}
@@ -258,47 +258,47 @@ export default function SettingsPage() {
               <span className="text-sm flex-1" style={{ color: "#f87171" }}>
                 Delete account & data
               </span>
-              <ChevronRight size={16} color="#5c7568" />
+              <ChevronRight size={16} color="#857c71" />
             </button>
           </div>
         </div>
 
         {/* Legal */}
         <div className="mb-8">
-          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a0968a" }}>
             LEGAL
           </p>
-          <div className="rounded-2xl overflow-hidden" style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ background: "#211d18", border: "1px solid #2f2a23" }}>
             <a
               href="/privacy"
               className="flex items-center gap-3 p-4"
-              style={{ borderBottom: "1px solid #1a3d2b" }}
+              style={{ borderBottom: "1px solid #2f2a23" }}
             >
-              <span className="text-sm flex-1" style={{ color: "#eef3f0" }}>
+              <span className="text-sm flex-1" style={{ color: "#f1ebe2" }}>
                 Privacy Policy
               </span>
-              <ChevronRight size={16} color="#5c7568" />
+              <ChevronRight size={16} color="#857c71" />
             </a>
             <a href="/terms" className="flex items-center gap-3 p-4">
-              <span className="text-sm flex-1" style={{ color: "#eef3f0" }}>
+              <span className="text-sm flex-1" style={{ color: "#f1ebe2" }}>
                 Terms of Service
               </span>
-              <ChevronRight size={16} color="#5c7568" />
+              <ChevronRight size={16} color="#857c71" />
             </a>
           </div>
         </div>
 
         {/* About */}
         <div className="mb-8">
-          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs font-semibold tracking-wide mb-3" style={{ color: "#a0968a" }}>
             ABOUT
           </p>
           <div
             className="rounded-2xl p-4 flex items-center gap-3"
-            style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+            style={{ background: "#211d18", border: "1px solid #2f2a23" }}
           >
-            <Cpu size={18} color="#c9a84c" />
-            <p className="text-sm" style={{ color: "#a2bcaf" }}>
+            <Cpu size={18} color="#e0a458" />
+            <p className="text-sm" style={{ color: "#a0968a" }}>
               The Gap · Causal inference powered by EconML
             </p>
           </div>
@@ -313,7 +313,7 @@ export default function SettingsPage() {
           <LogOut size={18} />
           Sign out
         </button>
-        <p className="text-xs text-center mt-3" style={{ color: "#5c7568" }}>
+        <p className="text-xs text-center mt-3" style={{ color: "#857c71" }}>
           This clears your local identity on this device — your data on our
           servers isn&apos;t deleted.
         </p>
@@ -327,13 +327,13 @@ export default function SettingsPage() {
           >
             <div
               className="w-full max-w-sm rounded-2xl p-6"
-              style={{ background: "#132c1f", border: "1px solid #3d1a1a" }}
+              style={{ background: "#211d18", border: "1px solid #3d1a1a" }}
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold mb-2" style={{ color: "#eef3f0" }}>
+              <h3 className="text-lg font-bold mb-2" style={{ color: "#f1ebe2" }}>
                 Delete everything?
               </h3>
-              <p className="text-sm mb-6" style={{ color: "#a2bcaf" }}>
+              <p className="text-sm mb-6" style={{ color: "#a0968a" }}>
                 This permanently deletes all your connections, entries, and
                 insights from our servers. This can&apos;t be undone. It doesn&apos;t
                 revoke access on the provider&apos;s own side (e.g. Whoop) — do
@@ -343,7 +343,7 @@ export default function SettingsPage() {
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
                   className="flex-1 py-3 rounded-xl text-sm font-medium"
-                  style={{ background: "transparent", border: "1px solid #1a3d2b", color: "#a2bcaf" }}
+                  style={{ background: "transparent", border: "1px solid #2f2a23", color: "#a0968a" }}
                 >
                   Cancel
                 </button>
@@ -351,7 +351,7 @@ export default function SettingsPage() {
                   onClick={handleDeleteAccount}
                   disabled={deleting}
                   className="flex-1 py-3 rounded-xl text-sm font-semibold"
-                  style={{ background: "#f87171", color: "#0a1710" }}
+                  style={{ background: "#f87171", color: "#16130f" }}
                 >
                   {deleting ? "Deleting…" : "Delete everything"}
                 </button>

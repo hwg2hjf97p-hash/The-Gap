@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b1015",
+  themeColor: "#16130f",
 };
 
 export default function RootLayout({
@@ -36,7 +36,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en-AU">
-      <body className="min-h-screen" style={{ backgroundColor: "#0b1015" }}>
+      <body className="min-h-screen" style={{ backgroundColor: "#16130f" }}>
         <SiteBackdrop />
         <div className="relative z-10">
           <ChromeWrapper>{children}</ChromeWrapper>

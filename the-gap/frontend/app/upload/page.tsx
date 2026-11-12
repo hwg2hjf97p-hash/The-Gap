@@ -69,15 +69,15 @@ export default function UploadPage() {
   const isBusy = state === "uploading" || state === "processing";
 
   return (
-    <div className="min-h-screen px-4 py-16" style={{ background: "#0a1710" }}>
+    <div className="min-h-screen px-4 py-16" style={{ background: "#16130f" }}>
       <div className="max-w-lg mx-auto">
-        <p className="text-xs font-mono tracking-widest mb-3 text-center" style={{ color: "#c9a84c" }}>
+        <p className="text-xs font-mono tracking-widest mb-3 text-center" style={{ color: "#e0a458" }}>
           NO ACCOUNT NEEDED
         </p>
-        <h1 className="text-3xl font-bold text-center mb-3" style={{ color: "#eef3f0" }}>
+        <h1 className="text-3xl font-bold text-center mb-3" style={{ color: "#f1ebe2" }}>
           Analyse a data export
         </h1>
-        <p className="text-sm text-center mb-8" style={{ color: "#a2bcaf" }}>
+        <p className="text-sm text-center mb-8" style={{ color: "#a0968a" }}>
           One-off analysis of a file you already have — no connected account,
           nothing stored beyond this session unless you save the link.
         </p>
@@ -90,16 +90,16 @@ export default function UploadPage() {
               onClick={() => setDataSource(s.id)}
               className="flex-1 px-3 py-2 rounded-xl text-sm font-medium"
               style={{
-                background: dataSource === s.id ? "#34d399" : "#132c1f",
-                color: dataSource === s.id ? "#0a1710" : "#a2bcaf",
-                border: `1px solid ${dataSource === s.id ? "#34d399" : "#1a3d2b"}`,
+                background: dataSource === s.id ? "#e0a458" : "#211d18",
+                color: dataSource === s.id ? "#16130f" : "#a0968a",
+                border: `1px solid ${dataSource === s.id ? "#e0a458" : "#2f2a23"}`,
               }}
             >
               {s.label}
             </button>
           ))}
         </div>
-        <p className="text-xs text-center mb-6" style={{ color: "#5c7568" }}>
+        <p className="text-xs text-center mb-6" style={{ color: "#857c71" }}>
           {SOURCES.find((s) => s.id === dataSource)?.hint}
         </p>
 
@@ -114,8 +114,8 @@ export default function UploadPage() {
           onClick={() => fileInputRef.current?.click()}
           className="rounded-2xl p-8 text-center cursor-pointer mb-4"
           style={{
-            background: "#132c1f",
-            border: `2px dashed ${dragActive ? "#34d399" : "#1a3d2b"}`,
+            background: "#211d18",
+            border: `2px dashed ${dragActive ? "#e0a458" : "#2f2a23"}`,
           }}
         >
           <input
@@ -127,18 +127,18 @@ export default function UploadPage() {
           />
           {file ? (
             <>
-              <FileCheck2 size={28} color="#34d399" className="mx-auto mb-2" />
-              <p className="text-sm font-medium" style={{ color: "#eef3f0" }}>
+              <FileCheck2 size={28} color="#e0a458" className="mx-auto mb-2" />
+              <p className="text-sm font-medium" style={{ color: "#f1ebe2" }}>
                 {file.name}
               </p>
-              <p className="text-xs mt-1" style={{ color: "#a2bcaf" }}>
+              <p className="text-xs mt-1" style={{ color: "#a0968a" }}>
                 Tap to choose a different file
               </p>
             </>
           ) : (
             <>
-              <UploadCloud size={28} color="#a2bcaf" className="mx-auto mb-2" />
-              <p className="text-sm font-medium" style={{ color: "#eef3f0" }}>
+              <UploadCloud size={28} color="#a0968a" className="mx-auto mb-2" />
+              <p className="text-sm font-medium" style={{ color: "#f1ebe2" }}>
                 Drop your file here, or tap to browse
               </p>
             </>
@@ -149,7 +149,7 @@ export default function UploadPage() {
         <button
           onClick={() => calendarInputRef.current?.click()}
           className="w-full text-sm text-center mb-6"
-          style={{ color: "#c9a84c" }}
+          style={{ color: "#e0a458" }}
         >
           {calendarFile ? `Calendar: ${calendarFile.name} (tap to change)` : "+ Add a Google Calendar export (optional)"}
         </button>
@@ -171,7 +171,7 @@ export default function UploadPage() {
           onClick={handleAnalyse}
           disabled={!file || isBusy}
           className="w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-40"
-          style={{ background: "#34d399", color: "#0a1710" }}
+          style={{ background: "#e0a458", color: "#16130f" }}
         >
           {state === "uploading"
             ? `Uploading… ${progress}%`
@@ -180,9 +180,9 @@ export default function UploadPage() {
             : "Analyse my data →"}
         </button>
 
-        <p className="text-xs text-center mt-6" style={{ color: "#5c7568" }}>
+        <p className="text-xs text-center mt-6" style={{ color: "#857c71" }}>
           Prefer live, automatic tracking?{" "}
-          <a href="/settings" style={{ color: "#c9a84c" }}>
+          <a href="/settings" style={{ color: "#e0a458" }}>
             Connect a device instead →
           </a>
         </p>

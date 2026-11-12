@@ -57,7 +57,7 @@ type Stats = {
   seed: { running: boolean; current_topic: string; topics_total: number; topics_done: number; added: number; skipped: number; errors: string[] };
 };
 
-const colors = { bg: "#0b1015", panel: "#121a21", border: "rgba(255,255,255,0.1)", text: "#f2f6f8", muted: "#9aa8b2", accent: "#22d3ee", good: "#34e07a", bad: "#ff6b81" };
+const colors = { bg: "#16130f", panel: "#211d18", border: "rgba(255,255,255,0.1)", text: "#f1ebe2", muted: "#a0968a", accent: "#e0a458", good: "#34e07a", bad: "#ff6b81" };
 
 const box: React.CSSProperties = { background: colors.panel, border: `1px solid ${colors.border}`, borderRadius: 14, padding: 18, marginBottom: 16 };
 const input: React.CSSProperties = { width: "100%", background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit" };
@@ -278,7 +278,7 @@ export default function EvidenceReview() {
                 setStatus(s);
                 setOffset(0);
               }}
-              style={{ ...button, background: status === s ? "rgba(34,211,238,0.12)" : "transparent" }}
+              style={{ ...button, background: status === s ? "rgba(224,164,88,0.12)" : "transparent" }}
             >
               {s === "pending" ? "Waiting for review" : s === "approved" ? "Approved" : "Rejected"}
             </button>

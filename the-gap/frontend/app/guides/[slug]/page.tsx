@@ -55,7 +55,7 @@ export default function GuidePage({ params }: { params: { slug: string } }) {
         <div className="mt-6">
           <Eyebrow>Guide</Eyebrow>
           <H1>{guide.headline}</H1>
-          <p className="mt-3 text-xs" style={{ color: "#9aa8b2" }}>
+          <p className="mt-3 text-xs" style={{ color: "#a0968a" }}>
             By CausalMe · Written {new Date(guide.published).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}
           </p>
           <P>{guide.intro}</P>
@@ -74,11 +74,11 @@ export default function GuidePage({ params }: { params: { slug: string } }) {
         <Note>{DISCLAIMER}</Note>
 
         <H2>References</H2>
-        <ol className="mt-3 space-y-2 pl-5 list-decimal text-sm leading-relaxed" style={{ color: "#c3cfd6" }}>
+        <ol className="mt-3 space-y-2 pl-5 list-decimal text-sm leading-relaxed" style={{ color: "#cbc2b5" }}>
           {guide.references.map((r) => (
             <li key={r.url}>
               {r.text}{" "}
-              <a href={r.url} style={{ color: "#22d3ee", textDecoration: "underline" }} rel="noopener noreferrer">
+              <a href={r.url} style={{ color: "#e0a458", textDecoration: "underline" }} rel="noopener noreferrer">
                 Source
               </a>
             </li>
@@ -87,7 +87,7 @@ export default function GuidePage({ params }: { params: { slug: string } }) {
 
         <H2>See it in your own data</H2>
         <P>
-          The Gap tests which of your habits seem to move your sleep, HRV and recovery, and tells you how sure it is. <a href="/how-it-works" style={{ color: "#22d3ee", textDecoration: "underline" }}>How it works</a>.
+          The Gap tests which of your habits seem to move your sleep, HRV and recovery, and tells you how sure it is. <a href="/how-it-works" style={{ color: "#e0a458", textDecoration: "underline" }}>How it works</a>.
         </P>
         <GetTheApp />
       </Wrap>

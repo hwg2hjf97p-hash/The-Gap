@@ -34,16 +34,16 @@ export function HexGauge({
       <svg width={width} height={size} viewBox={`0 0 ${width} ${size}`} role="img" aria-label={`${label}: ${value} ${unit ?? ""}`.trim()}>
         <path d={d} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={stroke} strokeLinejoin="round" />
         <path d={d} fill="none" stroke={color} strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round" pathLength={1} strokeDasharray={`${p} 1`} />
-        <text x={cx} y={unit ? cy - 3 : cy} textAnchor="middle" dominantBaseline="central" fill="#f2f6f8" fontSize={size * 0.26} fontWeight={700}>
+        <text x={cx} y={unit ? cy - 3 : cy} textAnchor="middle" dominantBaseline="central" fill="#f1ebe2" fontSize={size * 0.26} fontWeight={700}>
           {value}
         </text>
         {unit && (
-          <text x={cx} y={cy + size * 0.17} textAnchor="middle" dominantBaseline="central" fill="#9aa8b2" fontSize={size * 0.11}>
+          <text x={cx} y={cy + size * 0.17} textAnchor="middle" dominantBaseline="central" fill="#a0968a" fontSize={size * 0.11}>
             {unit}
           </text>
         )}
       </svg>
-      <span className="mt-1.5 text-[11px] font-semibold" style={{ color: "#9aa8b2" }}>
+      <span className="mt-1.5 text-[11px] font-semibold" style={{ color: "#a0968a" }}>
         {label}
       </span>
     </div>

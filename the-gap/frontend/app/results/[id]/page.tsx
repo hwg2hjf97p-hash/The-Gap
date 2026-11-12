@@ -52,9 +52,9 @@ export default function ResultsPage() {
         <div className="text-center">
           <div
             className="w-10 h-10 border-2 rounded-full animate-spin mx-auto mb-4"
-            style={{ borderColor: "#34d399", borderTopColor: "transparent" }}
+            style={{ borderColor: "#e0a458", borderTopColor: "transparent" }}
           />
-          <p style={{ color: "#a2bcaf" }}>Loading your results…</p>
+          <p style={{ color: "#a0968a" }}>Loading your results…</p>
         </div>
       </div>
     );
@@ -64,16 +64,16 @@ export default function ResultsPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center">
         <div className="text-4xl mb-4">🔍</div>
-        <h2 className="text-xl font-semibold mb-2" style={{ color: "#eef3f0" }}>
+        <h2 className="text-xl font-semibold mb-2" style={{ color: "#f1ebe2" }}>
           Results not found
         </h2>
-        <p className="mb-6 max-w-sm" style={{ color: "#a2bcaf" }}>
+        <p className="mb-6 max-w-sm" style={{ color: "#a0968a" }}>
           {error || "These results may have expired or were opened on a different device."}
         </p>
         <button
           onClick={() => router.push("/")}
           className="px-6 py-3 rounded-xl font-medium text-sm"
-          style={{ background: "#34d399", color: "#0a1710" }}
+          style={{ background: "#e0a458", color: "#16130f" }}
         >
           Run a new analysis
         </button>
@@ -100,14 +100,14 @@ export default function ResultsPage() {
         <div className="text-center mb-12 animate-fade-in">
           <div
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono mb-4"
-            style={{ background: "#132c1f", color: "#34d399", border: "1px solid #1a3d2b" }}
+            style={{ background: "#211d18", color: "#e0a458", border: "1px solid #2f2a23" }}
           >
             ✦ {insights.length} verified causal pattern{insights.length !== 1 ? "s" : ""} found
           </div>
-          <h1 className="text-4xl font-bold tracking-tight mb-3" style={{ color: "#eef3f0" }}>
+          <h1 className="text-4xl font-bold tracking-tight mb-3" style={{ color: "#f1ebe2" }}>
             Your causal health insights
           </h1>
-          <p style={{ color: "#a2bcaf" }}>
+          <p style={{ color: "#a0968a" }}>
             From {data_summary.days} days of {sourceName} data —{" "}
             these are real cause-and-effect patterns, not correlations.
           </p>
@@ -130,12 +130,12 @@ export default function ResultsPage() {
         {fewResults && (
           <div
             className="mt-8 rounded-xl p-6"
-            style={{ background: "#132c1f", border: "1px solid #1a3d2b" }}
+            style={{ background: "#211d18", border: "1px solid #2f2a23" }}
           >
-            <p className="font-semibold mb-2" style={{ color: "#c9a84c" }}>
+            <p className="font-semibold mb-2" style={{ color: "#e0a458" }}>
               Why so few results?
             </p>
-            <p className="text-sm mb-4" style={{ color: "#a2bcaf" }}>
+            <p className="text-sm mb-4" style={{ color: "#a0968a" }}>
               The analysis needs a range of health metrics to find patterns. Your{" "}
               {sourceName} export only included some of them — so most hypotheses
               were skipped automatically.
@@ -143,10 +143,10 @@ export default function ResultsPage() {
 
             {data_summary.data_found && data_summary.data_found.length > 0 && (
               <div className="mb-3">
-                <p className="text-xs font-medium mb-1" style={{ color: "#34d399" }}>
+                <p className="text-xs font-medium mb-1" style={{ color: "#e0a458" }}>
                   ✓ Found in your data
                 </p>
-                <p className="text-xs" style={{ color: "#a2bcaf" }}>
+                <p className="text-xs" style={{ color: "#a0968a" }}>
                   {data_summary.data_found.join(" · ")}
                 </p>
               </div>
@@ -154,23 +154,23 @@ export default function ResultsPage() {
 
             {data_summary.data_missing && data_summary.data_missing.length > 0 && (
               <div className="mb-4">
-                <p className="text-xs font-medium mb-1" style={{ color: "#a2bcaf" }}>
+                <p className="text-xs font-medium mb-1" style={{ color: "#a0968a" }}>
                   ✗ Not in your export
                 </p>
-                <p className="text-xs" style={{ color: "#a2bcaf" }}>
+                <p className="text-xs" style={{ color: "#a0968a" }}>
                   {data_summary.data_missing.join(" · ")}
                 </p>
               </div>
             )}
 
-            <p className="text-sm font-medium" style={{ color: "#eef3f0" }}>
+            <p className="text-sm font-medium" style={{ color: "#f1ebe2" }}>
               Connect Whoop or Oura for HRV, deep sleep, and recovery score —
               these unlock the most powerful insights.
             </p>
             <button
               onClick={() => router.push("/connect")}
               className="mt-4 px-5 py-2 rounded-lg text-sm font-medium"
-              style={{ background: "#c9a84c", color: "#0a1710" }}
+              style={{ background: "#e0a458", color: "#16130f" }}
             >
               Connect a device →
             </button>
@@ -180,7 +180,7 @@ export default function ResultsPage() {
         {/* Share + CTA */}
         <div className="mt-12 text-center space-y-4">
           <ShareButton shareUrl={data.share_url} />
-          <p className="text-sm" style={{ color: "#a2bcaf" }}>
+          <p className="text-sm" style={{ color: "#a0968a" }}>
             Share your insights with anyone
           </p>
           <div className="pt-2">
@@ -191,9 +191,9 @@ export default function ResultsPage() {
               }}
               className="text-sm px-5 py-2 rounded-lg transition-colors"
               style={{
-                background: "#132c1f",
-                color: "#a2bcaf",
-                border: "1px solid #1a3d2b",
+                background: "#211d18",
+                color: "#a0968a",
+                border: "1px solid #2f2a23",
               }}
             >
               ← Analyse another export
@@ -204,9 +204,9 @@ export default function ResultsPage() {
         {/* Methodology note */}
         <div
           className="mt-16 rounded-xl p-6 text-sm"
-          style={{ background: "#132c1f", border: "1px solid #1a3d2b", color: "#a2bcaf" }}
+          style={{ background: "#211d18", border: "1px solid #2f2a23", color: "#a0968a" }}
         >
-          <p className="font-medium mb-2" style={{ color: "#eef3f0" }}>About these results</p>
+          <p className="font-medium mb-2" style={{ color: "#f1ebe2" }}>About these results</p>
           <p>
             The Gap uses Double Machine Learning (LinearDML) from Microsoft&apos;s EconML library —
             the same causal inference framework used by researchers at Microsoft, Uber, and Stanford.
@@ -216,7 +216,7 @@ export default function ResultsPage() {
               href="https://econml.azurewebsites.net"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "#c9a84c" }}
+              style={{ color: "#e0a458" }}
             >
               Learn more about EconML →
             </a>
@@ -225,7 +225,7 @@ export default function ResultsPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-xs" style={{ color: "#a2bcaf" }}>
+          <p className="text-xs" style={{ color: "#a0968a" }}>
             causalme.com · Built by Samuel Roberts
           </p>
         </div>

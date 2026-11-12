@@ -17,11 +17,11 @@ export default function BottomNav() {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around px-2 pt-3 pb-6"
-      style={{ background: "#0a1710", borderTop: "1px solid #1a3d2b" }}
+      style={{ background: "#16130f", borderTop: "1px solid #2f2a23" }}
     >
       {TABS.map(({ href, label, Icon }) => {
         const isActive = pathname === href || pathname?.startsWith(href + "/");
-        const color = isActive ? "#c9a84c" : "#5c7568";
+        const color = isActive ? "#e0a458" : "#857c71";
         return (
           <Link
             key={href}

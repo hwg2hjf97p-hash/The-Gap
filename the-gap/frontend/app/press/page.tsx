@@ -51,7 +51,7 @@ export default function PressPage() {
         <div className="mt-3 flex flex-wrap items-center gap-6">
           <a href="/garmin-logo-300.png" download>
             <img src="/garmin-logo-300.png" width={120} height={120} alt="The Gap logo, 300 by 300 pixels" style={{ borderRadius: 24 }} />
-            <span className="block mt-2 text-xs" style={{ color: "#22d3ee" }}>Download (300 × 300 PNG)</span>
+            <span className="block mt-2 text-xs" style={{ color: "#e0a458" }}>Download (300 × 300 PNG)</span>
           </a>
         </div>
         <P muted>Screenshots and a larger logo are available on request.</P>
@@ -61,7 +61,7 @@ export default function PressPage() {
           &quot;The Gap&quot; refers to the gap between correlation and cause. Please call it &quot;The Gap app by CausalMe&quot; or &quot;CausalMe&apos;s The Gap&quot; to avoid confusion with other businesses of a similar name.
         </P>
 
-        <p className="mt-8 text-xs leading-relaxed" style={{ color: "#6f7f8a" }}>
+        <p className="mt-8 text-xs leading-relaxed" style={{ color: "#857c71" }}>
           {TRADEMARK_NOTE}
         </p>
       </Wrap>

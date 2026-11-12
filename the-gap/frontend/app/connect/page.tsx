@@ -15,8 +15,8 @@ function RedirectContent() {
   }, [router, searchParams]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a1710" }}>
-      <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#34d399", borderTopColor: "transparent" }} />
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "#16130f" }}>
+      <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "#e0a458", borderTopColor: "transparent" }} />
     </div>
   );
 }

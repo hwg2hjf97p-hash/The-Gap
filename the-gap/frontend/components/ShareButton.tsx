@@ -32,9 +32,9 @@ export default function ShareButton({ shareUrl }: Props) {
       onClick={handleCopy}
       className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all duration-200"
       style={{
-        background: copied ? "#1a3d2b" : "#132c1f",
-        color: copied ? "#34d399" : "#eef3f0",
-        border: `1px solid ${copied ? "#34d399" : "#1a3d2b"}`,
+        background: copied ? "#2f2a23" : "#211d18",
+        color: copied ? "#e0a458" : "#f1ebe2",
+        border: `1px solid ${copied ? "#e0a458" : "#2f2a23"}`,
       }}
     >
       {copied ? (
