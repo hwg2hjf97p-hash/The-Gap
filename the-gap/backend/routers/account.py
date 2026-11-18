@@ -23,9 +23,12 @@ import os
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 from auth import get_current_user_id
+from utils import apple_signin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/account", tags=["account"])
@@ -97,14 +100,22 @@ async def export_my_data(user_id: str = Depends(get_current_user_id)) -> JSONRes
     return JSONResponse(content=export)
 
 
+class DeleteBody(BaseModel):
+    # A fresh one-time code from Sign in with Apple, got by the app when the person confirms the deletion. Used once to remove the link at Apple.
+    apple_authorization_code: Optional[str] = Field(default=None, max_length=2000)
+
+
 @router.delete("")
-async def delete_my_account(user_id: str = Depends(get_current_user_id)) -> JSONResponse:
+async def delete_my_account(body: Optional[DeleteBody] = None, user_id: str = Depends(get_current_user_id)) -> JSONResponse:
     """
     Delete every row this app has stored for this user, across all tables.
     Does not attempt to revoke the OAuth grant on each provider's own side —
     that requires the user to also disconnect via each provider's own
     account settings if they want to fully revoke access at the source.
     """
+    # Apple's rule 5.1.1(v): take The Gap off the person's Sign in with Apple list. Never stops the deletion.
+    apple_revoked = await apple_signin.revoke_with_code(body.apple_authorization_code if body else None)
+
     deleted: dict[str, str] = {}
     async with httpx.AsyncClient(timeout=20) as client:
         for table in USER_DATA_TABLES:
@@ -141,7 +152,7 @@ async def delete_my_account(user_id: str = Depends(get_current_user_id)) -> JSON
         logger.error("ACCOUNT_AUTH_DELETE_ERROR user=%s: %s", user_id[:8], exc)
 
     logger.info("ACCOUNT_DELETED user=%s auth_deleted=%s result=%s", user_id[:8], auth_deleted, deleted)
-    return JSONResponse(content={"deleted": True, "auth_deleted": auth_deleted, "tables": deleted})
+    return JSONResponse(content={"deleted": True, "auth_deleted": auth_deleted, "apple_revoked": apple_revoked, "tables": deleted})
 
 
 class ClaimRequest(BaseModel):

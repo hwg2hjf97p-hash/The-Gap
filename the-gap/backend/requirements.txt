@@ -10,3 +10,5 @@ lxml==5.2.2
 scipy==1.15.3
 tzdata==2025.2
 sentry-sdk==2.19.2
+PyJWT==2.9.0
+cryptography==43.0.3
