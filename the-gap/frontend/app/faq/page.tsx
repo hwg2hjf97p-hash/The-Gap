@@ -44,7 +44,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How much does it cost?",
-    a: `The Gap is free to download, with your first month free. After that it is ${SITE.priceMonthly} a month or ${SITE.priceYearly} a year in Australian dollars, as an auto-renewing subscription through the App Store. You can cancel any time in your Apple ID settings.`,
+    a: "The Gap is free to download, with a free week for new subscribers. The price is shown in the App Store before you subscribe, as an auto-renewing subscription through the App Store. You can cancel any time in your Apple ID settings.",
   },
   {
     q: "What data does The Gap collect, and is it sold?",

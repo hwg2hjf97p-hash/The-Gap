@@ -97,7 +97,7 @@ export function GetTheApp({ compact = false }: { compact?: boolean }) {
           Download on the App Store
         </a>
         <p className="mt-3 text-sm" style={{ color: "#a0968a" }}>
-          Free to download. First month free, then {SITE.priceMonthly} a month or {SITE.priceYearly} a year. Cancel any time.
+          Free to download, with a free week for new subscribers. Cancel any time.
         </p>
       </div>
     );

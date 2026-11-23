@@ -6,7 +6,7 @@ import { APP_LIVE, DISCLAIMER, SITE, TRADEMARK_NOTE, WORKS_WITH } from "../lib/s
 export const metadata: Metadata = {
   title: { absolute: "The Gap: find what really affects your sleep and recovery | The Gap app by CausalMe" },
   description:
-    "The Gap is an iPhone app that uses your own data from Apple Health, Apple Watch, Whoop, Oura and more to show what seems to affect your sleep, HRV and recovery. First month free.",
+    "The Gap is an iPhone app that uses your own data from Apple Health, Apple Watch, Whoop, Oura and more to show what seems to affect your sleep, HRV and recovery. Free week for new subscribers.",
   alternates: { canonical: "/" },
 };
 
@@ -32,7 +32,7 @@ export default function Home() {
     inLanguage: "en-AU",
     url: SITE.url,
     publisher: { "@type": "Organization", name: "CausalMe", url: SITE.url },
-    offers: { "@type": "Offer", price: "0", priceCurrency: SITE.currency, description: `Free to download. First month free, then ${SITE.priceMonthly} a month or ${SITE.priceYearly} a year (auto-renewing subscription, cancel any time).` },
+    offers: { "@type": "Offer", price: "0", priceCurrency: SITE.currency, description: "Free to download, with a free week for new subscribers. The price is shown in the App Store before you subscribe (auto-renewing subscription, cancel any time)." },
     ...(APP_LIVE ? { downloadUrl: SITE.appStoreUrl, installUrl: SITE.appStoreUrl } : {}),
   };
   const org = {
@@ -128,7 +128,7 @@ export default function Home() {
         <Wrap>
           <H2>Price</H2>
           <P>
-            Free to download, with <strong style={{ color: "#f1ebe2" }}>your first month free</strong>. After that it&apos;s {SITE.priceMonthly} a month or {SITE.priceYearly} a year (Australian dollars), as an auto-renewing subscription through the App Store. You can cancel any time in your Apple ID settings.
+            Free to download, with <strong style={{ color: "#f1ebe2" }}>a free week</strong> for new subscribers. The price is shown in the App Store before you subscribe, as an auto-renewing subscription. You can cancel any time in your Apple ID settings.
           </P>
           <Note>
             Questions? Read the <a href="/faq" style={{ color: "#e0a458", textDecoration: "underline" }}>FAQ</a>, see <a href="/compare" style={{ color: "#e0a458", textDecoration: "underline" }}>how The Gap compares with your wearable&apos;s own app</a>, or browse the <a href="/guides" style={{ color: "#e0a458", textDecoration: "underline" }}>guides</a>.
