@@ -6,7 +6,7 @@ python-dotenv==1.0.1
 statsmodels==0.14.5
 scikit-learn==1.5.2
 econml==0.15.1
-lxml==5.2.2
+lxml==6.1.0
 scipy==1.15.3
 tzdata==2025.2
 sentry-sdk==2.19.2
