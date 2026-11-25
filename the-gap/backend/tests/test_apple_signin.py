@@ -1,11 +1,13 @@
 import asyncio
 
-import jwt
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
 
-from utils import apple_signin
+# The quick CI job installs only a few packages; these tests run wherever PyJWT and cryptography are installed (the full requirements).
+jwt = pytest.importorskip("jwt")
+serialization = pytest.importorskip("cryptography.hazmat.primitives.serialization")
+ec = pytest.importorskip("cryptography.hazmat.primitives.asymmetric.ec")
+
+from utils import apple_signin  # noqa: E402
 
 
 def _pem() -> str:
